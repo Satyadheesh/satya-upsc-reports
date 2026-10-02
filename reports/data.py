@@ -111,6 +111,13 @@ class Window:
                                       "FROM upsc_translations WHERE article_id IN ({ph})", ids):
                 ptrs = [{**q, "text": clean_hi(q.get("text"))} for q in _arr(r[3]) if isinstance(q, dict) and clean_hi(q.get("text"))]
                 self.hi_note[r[0]] = {"why": clean_hi(r[1]), "fact": clean_hi(r[2]), "pointers": ptrs, "mains": clean_hi(r[4])}
+            try:  # the note's own Hindi headline, for notes whose news article has none (Hindi service)
+                for r in in_chunks(trans, "SELECT article_id, title_hi FROM upsc_translations "
+                                          "WHERE article_id IN ({ph}) AND title_hi IS NOT NULL", ids):
+                    if clean_hi(r[1]) and r[0] not in self.hi_title:
+                        self.hi_title[r[0]] = clean_hi(r[1])
+            except Exception as ex:
+                print(f"Note Hindi headlines not available: {type(ex).__name__}")
             self.hi_kit = {}
             try:  # Hindi study kit (written by the Hindi service); absent until it has run
                 for r in in_chunks(trans, "SELECT article_id, short_title_hi, takeaway_hi, brief_lead_hi, brief_text_hi, facts_hi, mcq_hi "

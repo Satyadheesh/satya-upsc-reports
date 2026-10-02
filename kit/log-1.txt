@@ -1,11 +1,10 @@
-Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
 llama_kv_cache_iswa: using full-size SWA cache (ref: https://github.com/ggml-org/llama.cpp/pull/13194#issuecomment-2868343055)
 llama_kv_cache: the V embeddings have different sizes across layers and FA is not enabled - padding V cache to 2048
 llama_kv_cache: the V embeddings have different sizes across layers and FA is not enabled - padding V cache to 2048
 4/4 notes loaded; loading model
-model ready in 31s
-129411: ok (1 try, 198s) Kerala High Court orders Travancore Devaswom Board to improve pilgrim infrastructure
-128988: ok (1 try, 158s) Karnataka faces 32% rainfall deficit with Bengaluru South at 87% shortage
-129334: ok (1 try, 192s) IMD reports 2026 as lowest monsoon in a decade due to El Nino
-129344: ok (1 try, 166s) ECI directs special drive to re-enroll voters after 13.3 crore names deleted
-done: 4 ok, 0 failed, 745s
+model ready in 6s
+129533: ok (1 try, 170s) Chhattisgarh and Odisha CMs meet Amit Shah to resolve Mahanadi water dispute
+129332: ok (1 try, 157s) British East India Company defeated Maratha army to seize Delhi in 1803
+129535: ok (1 try, 148s) PNGRB launches National PNG Drive 3.0 to enroll 50 lakh domestic-piped gas connections
+129441: ok (2 tries, 240s) Supreme Court orders blacklisting of vehicles with ₹49,194.05 crore in unpaid fines
+done: 4 ok, 0 failed, 722s

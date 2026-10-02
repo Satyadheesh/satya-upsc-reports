@@ -1,11 +1,10 @@
-Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
 llama_kv_cache_iswa: using full-size SWA cache (ref: https://github.com/ggml-org/llama.cpp/pull/13194#issuecomment-2868343055)
 llama_kv_cache: the V embeddings have different sizes across layers and FA is not enabled - padding V cache to 2048
 llama_kv_cache: the V embeddings have different sizes across layers and FA is not enabled - padding V cache to 2048
 4/4 notes loaded; loading model
-model ready in 46s
-129382: ok (1 try, 220s) SpaceX launches first Black woman to lead crew to orbit in record flight
-129364: ok (1 try, 189s) Kerala hospitals face drug shortages as KMSCL owes pharma firms over ₹2,200 crore
-128807: ok (1 try, 156s) Madras High Court orders status report on removing caste names from roads
-129328: ok (1 try, 195s) Karnataka approves Sustainable Data Centre Policy to reach 1GW capacity by 2031
-done: 4 ok, 0 failed, 807s
+model ready in 10s
+129582: ok (1 try, 258s) Survey records 65 distinct vultures in Wayanad Wildlife Sanctuary
+129514: ok (1 try, 215s) Telangana Government to release ₹2,500 crore in pending DA instalments
+128988: ok (1 try, 191s) Karnataka faces -32% rainfall deficit with Bengaluru South at -87%
+129501: ok (2 tries, 327s) Union and Andhra Pradesh launch ₹1-lakh-crore Global Horticulture Hub
+done: 4 ok, 0 failed, 1000s

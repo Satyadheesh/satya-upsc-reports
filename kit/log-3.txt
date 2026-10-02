@@ -1,11 +1,10 @@
-Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
 llama_kv_cache_iswa: using full-size SWA cache (ref: https://github.com/ggml-org/llama.cpp/pull/13194#issuecomment-2868343055)
 llama_kv_cache: the V embeddings have different sizes across layers and FA is not enabled - padding V cache to 2048
 llama_kv_cache: the V embeddings have different sizes across layers and FA is not enabled - padding V cache to 2048
 4/4 notes loaded; loading model
-model ready in 29s
-129268: ok (1 try, 238s) Gandak River breaches and Shitalpur dam flood five Bihar districts
-129363: ok (1 try, 158s) SEBI study reveals 87.7% of individual equity derivative traders incurred net losses
-129347: ok (1 try, 160s) EC directs 20 states to re-enroll voters excluded during name removal
-128547: ok (1 try, 153s) Karnataka faces 32% rainfall deficit with Bengaluru South seeing 87% drop
-done: 4 ok, 0 failed, 738s
+model ready in 8s
+129419: ok (2 tries, 252s) India identifies 28 strategic places and geographical features on official map
+129541: ok (2 tries, 219s) CCMB scientists develop India-specific Severity Scores for pediatric patients
+129461: ok (1 try, 138s) Tamil Nadu launches Vettri Payanam for free bus travel for women and transgender persons
+::warning::128807: failed after 3 tries (272s): too easy: the answer is in the headline; test a supporting fact instead
+done: 3 ok, 1 failed, 889s

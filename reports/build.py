@@ -70,6 +70,22 @@ def label(p, lang, edition):
     return f"UPSC {kind} {'BRIEF' if edition == 'brief' else 'DETAILED NOTES'}{' (HINDI)' if lang == 'hi' else ''} · {p['key']}"
 
 
+def refresh_site():
+    """Tell the site new PDFs exist (refreshes only its report-file list; 20-min cooldown on the site)."""
+    secret = os.environ.get("REVALIDATE_SECRET")
+    if not secret:
+        print("::notice::REVALIDATE_SECRET not set; the site picks up new PDFs on its next refresh")
+        return
+    import urllib.parse
+    import urllib.request
+    url = "https://satyadheesh.in/api/revalidate?" + urllib.parse.urlencode({"tag": "upsc-reports", "secret": secret})
+    try:
+        with urllib.request.urlopen(urllib.request.Request(url, method="POST", headers={"User-Agent": "satya-reports"}), timeout=60) as r:
+            print(f"site refresh: {r.read().decode()[:200]}")
+    except Exception as ex:
+        print(f"::warning::site refresh failed: {type(ex).__name__}")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--scope", default="recent", choices=["recent", "nightly", "all"])
@@ -157,6 +173,8 @@ def main():
                 print(f"::warning::{key} failed: {type(ex).__name__}: {ex}")
         browser.close()
     print(f"done: {built} built, {failed} failed")
+    if built and not out:
+        refresh_site()
     if failed and not built:
         sys.exit(1)
 

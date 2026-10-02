@@ -23,7 +23,7 @@ from . import render
 from .data import select, Window
 from .periods import periods_for, parse
 
-REPORT_VERSION = 3          # bump when layout or selection changes: every PDF is rebuilt
+REPORT_VERSION = 4          # bump when layout or selection changes: every PDF is rebuilt
 HI_READY = 0.8              # Hindi edition only once this share of the notes is translated
 CHUNK = 400 * 1024
 HERE = pathlib.Path(__file__).parent

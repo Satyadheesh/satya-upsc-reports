@@ -13,7 +13,7 @@ from common.db import close_all, in_chunks, main_db, upsc_db
 
 from .model import MODEL_NAME, Model, download
 from .prompt import PROMPT_VERSION, SYSTEM, mcq_type, schema, user_prompt
-from .validate import Invalid, validate
+from .validate import Invalid, giveaway, validate
 from .verify import check
 
 TRIES = 3
@@ -117,7 +117,13 @@ def main():
             continue
         t = time.time()
         if existing.get(aid):
-            problem = check(model, note, existing[aid])
+            problem = None
+            if existing[aid].get("statements"):
+                try:
+                    giveaway(existing[aid]["statements"])
+                except Invalid as ex:
+                    problem = str(ex)
+            problem = problem or check(model, note, existing[aid])
             if not problem:
                 up.execute("UPDATE upsc_kit SET prompt_version = ?, updated_at = ? WHERE article_id = ?",
                            [PROMPT_VERSION, int(time.time()), aid])

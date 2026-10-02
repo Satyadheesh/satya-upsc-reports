@@ -196,6 +196,17 @@ def _label(subset):
     return f"{', '.join(s[:-1])} and {s[-1]}"
 
 
+def giveaway(statements):
+    """Two statements that are the same sentence with one detail changed give the answer away
+    (a student just picks the one that matches what they remember). Each statement must test its own fact."""
+    ws = [words(s) for s in statements]
+    for i in range(len(ws)):
+        for j in range(i + 1, len(ws)):
+            small = min(len(ws[i]), len(ws[j])) or 1
+            if len(ws[i] & ws[j]) / small >= 0.7:
+                raise Invalid(f"statements {i + 1} and {j + 1} are near-copies; each statement must test a different fact")
+
+
 def _mcq_statements(m, src, article_id):
     stem = need(m.get("stem"), "stem", 15, 200)
     if not stem.endswith(":"):
@@ -214,6 +225,7 @@ def _mcq_statements(m, src, article_id):
         raise Invalid("at least one statement must be true")
     if len({_norm(t) for t, _, _ in items}) < len(items):
         raise Invalid("statements repeat")
+    giveaway([t for t, _, _ in items])
     for t, ok, _ in items:
         if ok:
             check_numbers(t, src, "a true statement")

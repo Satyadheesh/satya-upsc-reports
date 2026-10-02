@@ -92,7 +92,8 @@ def main():
     cap_hi = None
     if hi_pdf:
         chosen_hi = select(p, en_items, w.period(p, "hi"))[0][:5]
-        cap_hi = caption(p, hi_meta["items"], [(it["title"], it["paper"]) for it in chosen_hi], hi=True)
+        cap_hi = caption(p, hi_meta["items"], [(((it.get("kit_hi") or {}).get("short_title") or it["title"]), it["paper"])
+                                                for it in chosen_hi], hi=True)
     polls = quiz_polls(upsc, p)
     quiz_intro = ("<b>Quick quiz</b> — " + ("5 questions from yesterday's news." if p["kind"] == "daily"
                                               else "questions from this week's news.") + " Answers show after you vote.")

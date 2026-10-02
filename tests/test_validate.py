@@ -67,6 +67,14 @@ class T(unittest.TestCase):
         answers = {validate(raw, NOTE, aid, "statements")["mcq"]["answer"] for aid in range(1, 30)}
         self.assertEqual(answers, {0, 1})  # "1 only" or "2 only" depending on the shuffle
 
+    def test_giveaway_pair_rejected(self):
+        sts = [{"text": "The state reported a 90% placement rate for its skill development programs.", "true": False, "why": "It is 76%"},
+               {"text": "The state reported a 76% placement rate for its skill development programs.", "true": True, "why": ""},
+               {"text": "NPCI provides state-wise UPI transaction data.", "true": True, "why": ""}]
+        note = {**NOTE, "fact_box": NOTE["fact_box"] + " The state reported a 76% placement rate for its skill development programs."}
+        with self.assertRaises(Invalid):
+            validate({**STATEMENTS, "mcq": {**STATEMENTS["mcq"], "statements": sts}}, note, 1, "statements")
+
     def test_false_statement_needs_why(self):
         sts = [dict(s) for s in STATEMENTS["mcq"]["statements"]]
         sts[2]["why"] = ""

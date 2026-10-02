@@ -133,8 +133,8 @@ ul.rem li::before { content: ''; position: absolute; left: .4mm; top: 1.75mm; wi
 
 /* ── In brief ───────────────────────────────────────── */
 .brief { columns: 2; column-gap: 6mm; }
-.brief .grp { break-inside: avoid-column; margin-bottom: 3mm; }
-.brief .grp > .chip { margin-bottom: 1.4mm; }
+.brief .grp { margin-bottom: 3mm; }  /* long groups may run over columns/pages; single lines never split */
+.brief .grp > .chip { margin-bottom: 1.4mm; break-after: avoid; }
 .brief ul { list-style: none; margin: 0; padding: 0; }
 .brief li { font-size: 8.6pt; line-height: 1.4; padding: 1.1mm 0; border-bottom: 1px dotted var(--rule2); break-inside: avoid; }
 .brief li b { font-weight: 700; }

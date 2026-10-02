@@ -239,13 +239,49 @@ def doc(lang, title, body):
 
 # ---------------------------------------------------------------- Brief
 
+_PROPER = re.compile(r"\b(?:[A-Z]{3,}|[A-Z][a-z]{4,})\b")
+_COMMON = {"India", "Indian", "Supreme", "Court", "Union", "Government", "Minister", "State", "States", "National",
+           "Centre", "Central", "President", "Prime", "Chief", "Ministry", "Department", "Report", "Bill", "Delhi",
+           "Commission", "Council", "Board", "Authority", "Policy", "Scheme", "World", "Global", "International"}
+
+
+def _salient(it):
+    t = it.get("title_en") or it["title"]
+    return {w for w in _PROPER.findall(t) if w not in _COMMON}
+
+
+def pick_cards(items, n, kind):
+    """Key stories: best first, but never two cards on the same story (e.g. two BRICS-summit reports), and
+    in weekly/monthly digests no subject takes more than about a third of the cards."""
+    cap = n if kind == "daily" else max(2, round(n * 0.34))
+    out, per_subject = [], {}
+    for it in items:
+        if len(out) == n:
+            break
+        if per_subject.get(it["subject"], 0) >= cap:
+            continue
+        s = _salient(it)
+        if any(c["paper"] == it["paper"] and (s & _salient(c)) for c in out):
+            continue  # same story told twice
+        out.append(it)
+        per_subject[it["subject"]] = per_subject.get(it["subject"], 0) + 1
+    for it in items:  # top up if the rules left gaps
+        if len(out) == n:
+            break
+        if it not in out:
+            out.append(it)
+    return out
+
+
 def brief(p, items, total, lang):
     """items: the chosen notes, best first. Returns (html, n_items)."""
     t, hi = T[lang], lang == "hi"
     n_top, n_cards, n_lines, n_mcq, n_mains = SIZE[p["kind"]]
     kit = (lambda it: kit_of(it, lang))
-    top, cards = items[:n_top], items[:n_cards]
-    rest = items[n_cards:n_cards + n_lines]
+    cards = pick_cards(items, n_cards, p["kind"])
+    top = cards[:n_top]
+    chosen_ids = {it["id"] for it in cards}
+    rest = [it for it in items if it["id"] not in chosen_ids][:n_lines]
     mcqs = [kit_of(it, lang)["mcq"] for it in items if kit_of(it, lang) and kit_of(it, lang).get("mcq")][:n_mcq]
     mains = [it for it in items if it.get("mains")][:n_mains]
     mins = round(len(cards) * 1 + len(rest) * 0.15 + len(mcqs) * 1 + 2)
@@ -394,7 +430,7 @@ def detailed(p, items, total, lang):
         return (f'<article class="dnote"><div class="top"><div class="chips"><span class="chip ex" style="border-color:transparent;background:var(--cream2)">'
                 f'{e(node_name(it["subject"], it["node"]))}</span>{exam_chips(it["exam"])}{mergedc}</div>'
                 f'<div class="src">{src} · satyadheesh.in/news/{it["id"]}</div></div>'
-                f'<h4>{e(it["title"])}</h4><p class="why"><b>{e(t["why_d"])}</b>{e(it["why"])}</p><dl class="facts">{dl}</dl>{mq}</article>')
+                f'<h4>{e((kit_of(it, lang) or {}).get("short_title") or it["title"])}</h4><p class="why"><b>{e(t["why_d"])}</b>{e(it["why"])}</p><dl class="facts">{dl}</dl>{mq}</article>')
 
     body = ""
     for paper in ("GS1", "GS2", "GS3", "GS4"):

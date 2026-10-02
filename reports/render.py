@@ -82,7 +82,7 @@ T = {
         ptot="{n} नोट्स"),
 }
 SIZE = {  # per edition kind: top, cards, in-brief lines, mcqs, mains
-    "daily": (5, 8, 30, 5, 1), "weekly": (6, 10, 40, 8, 2), "monthly": (6, 12, 60, 10, 3)}
+    "daily": (5, 8, 24, 5, 1), "weekly": (6, 10, 36, 8, 2), "monthly": (6, 12, 54, 10, 3)}
 
 
 def e(s):
@@ -327,7 +327,7 @@ def brief(p, items, total, lang):
         for it in items:
             for f in ((kit(it) or {}).get("facts") or []):
                 name, desc = split_fact(f["text"])
-                if f["label"] == "Place" and name and name.lower() not in seen and len(places) < 6:
+                if f["label"] == "Place" and name and name.lower() not in seen and len(places) < 5:
                     seen.add(name.lower())
                     places.append(f'<tr><td>{e(name)}</td><td>{e(clip(desc, 140))}</td></tr>')
         pl = (f'<div class="places"><div class="kicker">{e(t["k_places"])}</div><h2 class="sec" style="font-size:13pt;margin:.4mm 0 1.6mm">'

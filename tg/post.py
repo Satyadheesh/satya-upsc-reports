@@ -59,6 +59,9 @@ def main():
     tag = "test:" if args.test else ""
     print(f"{args.kind} report {p['key']} ({label(p)}), posting at {time.strftime('%H:%M:%S', time.gmtime(target + 19800))} IST"
           + (" [dry run]" if args.dry_run else ""))
+    if args.kind == "weekly" and not (args.now or args.dry_run) and time.gmtime(target + 19800).tm_wday != 6:
+        print("::warning::the weekly report is posted on Sunday only (week not finished); nothing posted")
+        return
     if time.time() > target + LATE_LIMIT and not args.now:
         print(f"::warning::more than {LATE_LIMIT // 3600} h past {args.at} IST; not posting a stale morning report")
         return

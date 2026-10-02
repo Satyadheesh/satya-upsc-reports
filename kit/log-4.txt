@@ -1,0 +1,11 @@
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+llama_kv_cache_iswa: using full-size SWA cache (ref: https://github.com/ggml-org/llama.cpp/pull/13194#issuecomment-2868343055)
+llama_kv_cache: the V embeddings have different sizes across layers and FA is not enabled - padding V cache to 2048
+llama_kv_cache: the V embeddings have different sizes across layers and FA is not enabled - padding V cache to 2048
+4/4 notes loaded; loading model
+model ready in 30s
+129373: ok (1 try, 195s) Putin acknowledges PM Modi's mediation ideas for Ukraine conflict
+128948: ok (1 try, 142s) IMD projects normal Northeast monsoon despite 20% Southwest monsoon deficit
+129331: ok (1 try, 145s) SEBI data reveals 87.7% of individual equity derivatives traders lost money in FY26
+129337: ok (1 try, 172s) Tamil Nadu launches Vettri Payanam Thittam to expand free bus travel for women
+done: 4 ok, 0 failed, 684s

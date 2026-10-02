@@ -1,0 +1,11 @@
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+llama_kv_cache_iswa: using full-size SWA cache (ref: https://github.com/ggml-org/llama.cpp/pull/13194#issuecomment-2868343055)
+llama_kv_cache: the V embeddings have different sizes across layers and FA is not enabled - padding V cache to 2048
+llama_kv_cache: the V embeddings have different sizes across layers and FA is not enabled - padding V cache to 2048
+4/4 notes loaded; loading model
+model ready in 28s
+129332: ok (1 try, 229s) British East India Company defeated Maratha army to seize Delhi in 1803
+129367: ok (1 try, 137s) Gursaran Prasad Talwar pioneered leprosy and birth control vaccines
+129358: ok (1 try, 138s) Andhra Pradesh directs SEEDAP to target 1 lakh youth for annual employment
+128765: ok (1 try, 147s) Union Ministry of Tourism approves ₹93.94 crore to rejuvenate Maharaja Ajj Sarovar
+done: 4 ok, 0 failed, 679s

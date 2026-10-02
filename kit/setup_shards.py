@@ -13,6 +13,8 @@ import time
 
 from common.db import close_all, upsc_db
 
+from .prompt import PROMPT_VERSION
+
 SHARDS = int(os.environ.get("SHARDS") or 5)
 BATCH = int(os.environ.get("BATCH") or 120)
 LOOKBACK_DAYS = int(os.environ.get("LOOKBACK_DAYS") or 30)
@@ -69,17 +71,20 @@ def main():
     full = FULL or meta(c, "backfill_done") != "1" or time.gmtime(now).tm_hour == 21
     since = now - (LOOKBACK_DAYS if full else RECENT_DAYS) * 86400
     rows = c.execute(
-        "SELECT a.article_id, a.updated_at, k.status, k.attempts, k.note_updated_at "
+        "SELECT a.article_id, a.updated_at, k.status, k.attempts, k.note_updated_at, k.prompt_version "
         "FROM upsc_articles a INDEXED BY idx_upsc_pub LEFT JOIN upsc_kit k ON k.article_id = a.article_id "
         "WHERE a.published_at >= ? ORDER BY a.published_at DESC", [since]).rows
-    todo = []
-    for aid, upd, status, attempts, made_from in rows:
+    todo, recheck = [], []
+    for aid, upd, status, attempts, made_from, pv in rows:
         if status is None:
             todo.append(aid)
         elif status == "done" and (made_from or 0) < (upd or 0):
             todo.append(aid)
         elif status == "failed" and (attempts or 0) < MAX_ATTEMPTS:
             todo.append(aid)
+        elif status == "done" and pv != PROMPT_VERSION:
+            recheck.append(aid)  # made before the current checks: verify (cheap), remake only if it fails
+    todo += recheck
     if full and not todo:
         meta(c, "backfill_done", "1")
     batch = todo[:BATCH]

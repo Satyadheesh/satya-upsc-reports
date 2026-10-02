@@ -14,6 +14,7 @@ from common.db import close_all, in_chunks, main_db, upsc_db
 from .model import MODEL_NAME, Model, download
 from .prompt import PROMPT_VERSION, SYSTEM, mcq_type, schema, user_prompt
 from .validate import Invalid, validate
+from .verify import check
 
 TRIES = 3
 DEADLINE = int(os.environ.get("SHARD_DEADLINE_SEC") or 3000)
@@ -39,11 +40,16 @@ def load_notes(ids, preview=False):
         if aid in notes:
             notes[aid]["title"] = (reph or "").strip() or None
             notes[aid]["original_title"] = (orig or "").strip() or None
-    prior = {}
+    prior, existing = {}, {}
     if notes and not preview:  # in preview the table may not exist yet (migrate is skipped)
-        prior = {r[0]: r[1] for r in in_chunks(up, "SELECT article_id, attempts FROM upsc_kit WHERE article_id IN ({ph}) "
-                                                    "AND status = 'failed'", ids)}
-    return up, notes, prior
+        for aid, status, attempts, pv, mcq, made_from in in_chunks(
+                up, "SELECT article_id, status, attempts, prompt_version, mcq, note_updated_at FROM upsc_kit "
+                    "WHERE article_id IN ({ph})", ids):
+            if status == "failed":
+                prior[aid] = attempts
+            elif status == "done" and pv != PROMPT_VERSION and (made_from or 0) >= (notes.get(aid, {}).get("updated_at") or 0):
+                existing[aid] = _json(mcq, None)  # older kit, note unchanged: only needs the new check
+    return up, notes, prior, existing
 
 
 def make_kit(model, note):
@@ -52,7 +58,11 @@ def make_kit(model, note):
     for i in range(TRIES):
         try:
             raw = model.json(SYSTEM, user_prompt(note, kind, feedback), schema(kind), temperature=0.2 if i == 0 else 0.5)
-            return validate(raw, note, note["article_id"], kind), i + 1, None
+            kit = validate(raw, note, note["article_id"], kind)
+            problem = check(model, note, kit["mcq"])  # second check: solve it blind against the note
+            if problem:
+                raise Invalid(problem)
+            return kit, i + 1, None
         except (Invalid, ValueError) as e:
             err = str(e)[:200]
             feedback = err
@@ -88,7 +98,7 @@ def main():
         print("nothing to do")
         return
     t0 = time.time()
-    up, notes, prior = load_notes(ids, preview=bool(args.preview))
+    up, notes, prior, existing = load_notes(ids, preview=bool(args.preview))
     print(f"{len(notes)}/{len(ids)} notes loaded; loading model")
     model = Model(download())
     print(f"model ready in {time.time() - t0:.0f}s")
@@ -106,6 +116,15 @@ def main():
             print(f"{aid}: note not found, skipped")
             continue
         t = time.time()
+        if existing.get(aid):
+            problem = check(model, note, existing[aid])
+            if not problem:
+                up.execute("UPDATE upsc_kit SET prompt_version = ?, updated_at = ? WHERE article_id = ?",
+                           [PROMPT_VERSION, int(time.time()), aid])
+                ok += 1
+                print(f"{aid}: existing kit passed the check ({time.time() - t:.0f}s)")
+                continue
+            print(f"{aid}: existing kit failed the check ({problem}); remaking it")
         kit, tries, err = make_kit(model, note)
         secs = time.time() - t
         if out:

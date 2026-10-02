@@ -5,7 +5,7 @@ from .validate import FACT_LABELS
 
 SUBJECTS = {k: v[1] for k, v in SYLLABUS.items()}
 
-PROMPT_VERSION = "kit-v2"
+PROMPT_VERSION = "kit-v3"  # v3: every MCQ is solved blind against the note before saving (kit/verify.py)
 
 SYSTEM = """You turn one UPSC current-affairs note into a compact study kit for Civil Services aspirants.
 Use ONLY what the note says. Never add numbers, names, dates or claims that are not in the note.

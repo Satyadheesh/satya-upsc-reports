@@ -26,6 +26,9 @@ though through thus till under until upon very was were what when where whether 
 with within without would yet your yours india indian india's new said says year years also including""".split())
 JUNK_FACT = re.compile(r"\b(?:is|serves as|was)\s+(?:the\s+)?(?:current\s+)?(?:prime minister|president|chief minister|"
                        r"finance minister|external affairs minister|union minister|minister)\s+of\s+india\b", re.I)
+TRIVIA_FACT = re.compile(
+    r"(?:^|[—:-]\s*)(?:the\s+)?(?:current\s+)?(?:president|prime minister|chief minister|governor|minister|secretary-general)"
+    r"\s+of\b|^\S[^—:]{0,40}[—:]\s*located in\b|\bdate of the (?:court )?(?:order|meeting|announcement)\b", re.I)
 BANNED_OPTION = re.compile(r"\b(all|none) of the above\b", re.I)
 MD = re.compile(r"(\*\*|__|`|^#+\s*)")
 
@@ -129,6 +132,8 @@ def _facts(raw, src):
         text = clean(f.get("text"))
         if not 8 <= len(text) <= 170 or JUNK_FACT.search(text):
             continue
+        if len(text) <= 80 and TRIVIA_FACT.search(text):
+            continue  # "X — President of Russia", "Madras High Court — located in Chennai"
         if ungrounded(text, src.nums) or overlap(text, src.words) < 0.5:
             continue  # drop facts the note does not support
         ws = words(text)
@@ -145,7 +150,7 @@ def _rng(article_id):
     return random.Random(int(hashlib.sha1(str(article_id).encode()).hexdigest()[:8], 16))
 
 
-def _mcq_single(m, src, article_id):
+def _mcq_single(m, src, article_id, titles=()):
     q = need(m.get("question"), "question", 15, 220)
     if not q.endswith(("?", ":")):
         q += "?"
@@ -166,6 +171,14 @@ def _mcq_single(m, src, article_id):
     check_numbers(correct, src, "correct answer")
     if overlap(correct, src.words) < 0.5:
         raise Invalid("correct answer is not supported by the note")
+    nc = _norm(correct)
+    if len(nc) >= 3 and any(nc in _norm(t) for t in titles if t):
+        raise Invalid("too easy: the answer is in the headline; test a supporting fact instead")
+    note_text = f" {_norm(src.text)} "
+    for d in ds:
+        nd = _norm(d)
+        if re.search(r"[a-z]", nd) and len(nd) >= 4 and f" {nd} " in note_text:
+            raise Invalid(f"distractor '{d}' is also in the note, so it may be correct; use clearly wrong options")
     rng = _rng(article_id)
     order = list(range(4))
     rng.shuffle(order)
@@ -190,35 +203,45 @@ def _mcq_statements(m, src, article_id):
     sts = [s for s in (m.get("statements") or []) if isinstance(s, dict) and clean(s.get("text"))]
     if len(sts) not in (2, 3):
         raise Invalid("need 2 or 3 statements")
-    texts = [need(s.get("text"), "statement", 15, 200) for s in sts]
-    truth = [s.get("true") is True for s in sts]
-    if not any(truth):
+    items = []
+    for s in sts:
+        ok = s.get("true") is True
+        why = clean(s.get("why"))
+        if not ok and len(why) < 10:
+            raise Invalid("each false statement needs a 'why' saying what the note actually says")
+        items.append((need(s.get("text"), "statement", 15, 200), ok, why[:200]))
+    if not any(ok for _, ok, _ in items):
         raise Invalid("at least one statement must be true")
-    if all(truth) and len(sts) == 2:
-        pass  # "Both 1 and 2" is a valid answer
-    if len({_norm(t) for t in texts}) < len(texts):
+    if len({_norm(t) for t, _, _ in items}) < len(items):
         raise Invalid("statements repeat")
-    for t, ok in zip(texts, truth):
+    for t, ok, _ in items:
         if ok:
             check_numbers(t, src, "a true statement")
             if overlap(t, src.words) < 0.5:
                 raise Invalid("a true statement is not supported by the note")
         elif overlap(t, src.words) < 0.25:
             raise Invalid("a false statement is off-topic")
-    correct = tuple(i for i, ok in enumerate(truth) if ok)
+    rng = _rng(article_id)
+    rng.shuffle(items)  # the model tends to put true statements first
+    texts = [t for t, _, _ in items]
+    correct = tuple(i for i, (_, ok, _) in enumerate(items) if ok)
     if len(texts) == 2:
         options = ["1 only", "2 only", "Both 1 and 2", "Neither 1 nor 2"]
         answer = {(0,): 0, (1,): 1, (0, 1): 2}[correct]
     else:
         subsets = [c for r in (1, 2, 3) for c in itertools.combinations(range(3), r)]
-        others = [s for s in subsets if s != correct]
-        pick = _rng(article_id).sample(others, 3) + [correct]
-        pick.sort(key=lambda s: (len(s), s))  # UPSC order: singles, pairs, all three
-        options = [_label(s) for s in pick]
+        others = [x for x in subsets if x != correct]
+        pick = rng.sample(others, 3) + [correct]
+        pick.sort(key=lambda x: (len(x), x))  # UPSC order: singles, pairs, all three
+        options = [_label(x) for x in pick]
         answer = pick.index(correct)
+    wrong = [f"Statement {i + 1} is incorrect: {why.rstrip('.')}." for i, (_, ok, why) in enumerate(items) if not ok]
+    right = [str(i + 1) for i in correct]
+    lead = (f"Statement {right[0]} is correct." if len(right) == 1 else
+            f"Statements {', '.join(right[:-1])} and {right[-1]} are correct.")
     return {"type": "statements", "question": stem, "statements": texts,
             "ask": "Which of the statements given above is/are correct?", "options": options, "answer": answer,
-            "explanation": need(m.get("explanation"), "explanation", 20, 260)}
+            "explanation": " ".join([lead] + wrong)}
 
 
 def validate(raw, note, article_id, mcq_type):
@@ -235,6 +258,8 @@ def validate(raw, note, article_id, mcq_type):
     check_numbers(f"{lead} {btext}", src, "brief")
     facts = _facts(raw.get("facts"), src)
     m = raw.get("mcq") or {}
-    mcq = _mcq_statements(m, src, article_id) if mcq_type == "statements" else _mcq_single(m, src, article_id)
+    titles = (title, note.get("title"), note.get("original_title"))
+    mcq = (_mcq_statements(m, src, article_id) if mcq_type == "statements"
+           else _mcq_single(m, src, article_id, titles))
     return {"short_title": title, "takeaway": takeaway, "brief_lead": lead, "brief_text": btext,
             "facts": facts, "mcq": mcq}

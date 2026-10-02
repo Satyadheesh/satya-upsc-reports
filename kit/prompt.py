@@ -5,7 +5,7 @@ from .validate import FACT_LABELS
 
 SUBJECTS = {k: v[1] for k, v in SYLLABUS.items()}
 
-PROMPT_VERSION = "kit-v1"
+PROMPT_VERSION = "kit-v2"
 
 SYSTEM = """You turn one UPSC current-affairs note into a compact study kit for Civil Services aspirants.
 Use ONLY what the note says. Never add numbers, names, dates or claims that are not in the note.
@@ -26,15 +26,19 @@ Return JSON with:
 Plain English, Indian conventions (lakh, crore, ₹). No markdown."""
 
 MCQ_SINGLE = """MCQ format: single answer. mcq = {question, correct, distractors, explanation}.
+Test a supporting fact a student must remember (which body, which law or scheme, which place, which figure),
+NOT the headline itself: if the answer is the main actor in the headline the question is too easy.
 question ends with "?" or ":". correct = the right answer, short (a name, number, place or phrase).
-distractors = exactly 3 plausible but wrong answers of the same kind (other bodies, other states, other numbers).
-The question must not contain the answer. explanation = one sentence on why the answer is right, from the note."""
+distractors = exactly 3 wrong answers of the same kind (other bodies, other states, other numbers) that do NOT
+appear in the note, so there is no doubt they are wrong. The question must not contain the answer.
+explanation = one sentence on why the answer is right, from the note."""
 
-MCQ_STATEMENTS = """MCQ format: statements. mcq = {stem, statements, explanation}.
+MCQ_STATEMENTS = """MCQ format: statements. mcq = {stem, statements}.
 stem like "With reference to <topic>, consider the following statements:".
-statements = 2 or 3 items {text, true}. Each text is one sentence. At least one must be true and at least one false.
-A false statement changes one detail of a fact in the note (a wrong number, body, place or year) so that the note
-clearly contradicts it. explanation = one sentence saying which statements are correct and what is wrong in the false one."""
+statements = 3 items (2 only if the note is thin) {text, true, why}. Each text is one sentence on a different fact.
+Make exactly {n_true} of them true. A false statement changes one detail of a fact in the note (a wrong number, body,
+place, year or relationship) so that the note clearly contradicts it. why = for a false statement, what the note
+actually says (one short sentence); for a true one, leave it empty."""
 
 _FACTS = {"type": "array", "minItems": 2, "maxItems": 5, "items": {
     "type": "object", "properties": {"label": {"type": "string", "enum": FACT_LABELS}, "text": {"type": "string"}},
@@ -54,16 +58,21 @@ SCHEMA_SINGLE = {"type": "object", "properties": {**_BASE, "mcq": {
 SCHEMA_STATEMENTS = {"type": "object", "properties": {**_BASE, "mcq": {
     "type": "object", "properties": {"stem": {"type": "string"},
                                      "statements": {"type": "array", "minItems": 2, "maxItems": 3, "items": {
-                                         "type": "object", "properties": {"text": {"type": "string"}, "true": {"type": "boolean"}},
-                                         "required": ["text", "true"]}},
-                                     "explanation": {"type": "string"}},
-    "required": ["stem", "statements", "explanation"]}},
+                                         "type": "object", "properties": {"text": {"type": "string"}, "true": {"type": "boolean"},
+                                                                          "why": {"type": "string"}},
+                                         "required": ["text", "true", "why"]}}},
+    "required": ["stem", "statements"]}},
     "required": ["short_title", "takeaway", "brief", "facts", "mcq"]}
 
 
 def mcq_type(article_id):
     """Alternate formats so a report gets a mix of both."""
     return "statements" if int(article_id) % 2 == 0 else "single"
+
+
+def n_true(article_id):
+    """How many of 3 statements should be true, varied so the answer is not always the same shape."""
+    return (1, 2, 2, 3)[(int(article_id) // 2) % 4]
 
 
 def user_prompt(note, kind, feedback=None):
@@ -78,7 +87,7 @@ def user_prompt(note, kind, feedback=None):
         f"Mains question: {note.get('mains_question')}" if note.get("mains_question") else "",
         f"Keywords: {', '.join(note.get('keywords') or [])}" if note.get("keywords") else "",
         "",
-        MCQ_STATEMENTS if kind == "statements" else MCQ_SINGLE,
+        MCQ_STATEMENTS.replace("{n_true}", str(n_true(note["article_id"]))) if kind == "statements" else MCQ_SINGLE,
     ]
     if feedback:
         parts.append(f"\nYour previous answer was rejected: {feedback}. Write it again and fix that.")

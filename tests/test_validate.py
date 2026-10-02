@@ -20,21 +20,21 @@ BASE = {
               {"label": "Person", "text": "Nirmala Sitharaman is the Finance Minister of India"},
               {"label": "Figure", "text": "MDR capped at ₹500 per transaction"}],
 }
-SINGLE = {**BASE, "mcq": {"question": "From 15 October 2026, a Merchant Discount Rate on UPI applies to payments above:",
-                          "correct": "₹2,000", "distractors": ["₹500", "₹5,000", "₹10,000"],
-                          "explanation": "The notification applies the 0.4% MDR to P2M UPI payments above ₹2,000."}}
+SINGLE = {**BASE, "mcq": {"question": "For UPI payments of ₹75,000 and above, the new MDR is capped per transaction at:",
+                          "correct": "₹300", "distractors": ["₹100", "₹500", "₹1,000"],
+                          "explanation": "The MDR is capped at ₹300 per transaction for payments of ₹75,000 and above."}}
 STATEMENTS = {**BASE, "mcq": {"stem": "With reference to the new MDR on UPI payments, consider the following statements",
-                              "statements": [{"text": "The 0.4% MDR applies to person-to-merchant payments above ₹2,000.", "true": True},
-                                             {"text": "The MDR is capped at ₹300 per transaction for payments of ₹75,000 and above.", "true": True},
-                                             {"text": "The MDR also applies to person-to-person UPI transfers.", "true": False}],
-                              "explanation": "Statements 1 and 2 are correct; the charge applies only to merchant payments."}}
+                              "statements": [{"text": "The 0.4% MDR applies to person-to-merchant payments above ₹2,000.", "true": True, "why": ""},
+                                             {"text": "The MDR is capped at ₹300 per transaction for payments of ₹75,000 and above.", "true": True, "why": ""},
+                                             {"text": "The MDR also applies to person-to-person UPI transfers.", "true": False,
+                                              "why": "The MDR applies only to person-to-merchant payments"}]}}
 
 
 class T(unittest.TestCase):
     def test_single(self):
         k = validate(SINGLE, NOTE, 128866, "single")
         m = k["mcq"]
-        self.assertEqual(m["options"][m["answer"]], "₹2,000")
+        self.assertEqual(m["options"][m["answer"]], "₹300")
         self.assertEqual(len(set(m["options"])), 4)
         self.assertEqual(k["brief_lead"], "UPI charge:")
 
@@ -45,16 +45,52 @@ class T(unittest.TestCase):
         self.assertNotIn("₹500", texts)
         self.assertEqual(len(k["facts"]), 2)
 
+    def _true_labels(self, m):
+        return [str(i + 1) for i, t in enumerate(m["statements"]) if "person-to-person" not in t]
+
     def test_statements_answer_built_from_flags(self):
-        m = validate(STATEMENTS, NOTE, 128866, "statements")["mcq"]
-        self.assertEqual(m["options"][m["answer"]], "1 and 2 only")
-        self.assertEqual(len(m["options"]), 4)
+        for aid in range(1, 30):
+            m = validate(STATEMENTS, NOTE, aid, "statements")["mcq"]
+            want = self._true_labels(m)
+            self.assertEqual(m["options"][m["answer"]], f"{want[0]} and {want[1]} only")
+            self.assertEqual(len(m["options"]), 4)
+            self.assertIn("is incorrect: The MDR applies only", m["explanation"])
+            self.assertTrue(m["explanation"].startswith(f"Statements {want[0]} and {want[1]} are correct"))
         self.assertTrue(m["question"].endswith(":"))
+
+    def test_statement_order_varies(self):
+        firsts = {validate(STATEMENTS, NOTE, aid, "statements")["mcq"]["statements"][0] for aid in range(1, 30)}
+        self.assertEqual(len(firsts), 3)
 
     def test_two_statements(self):
         raw = {**STATEMENTS, "mcq": {**STATEMENTS["mcq"], "statements": STATEMENTS["mcq"]["statements"][1:]}}
-        m = validate(raw, NOTE, 128866, "statements")["mcq"]
-        self.assertEqual(m["options"][m["answer"]], "1 only")
+        answers = {validate(raw, NOTE, aid, "statements")["mcq"]["answer"] for aid in range(1, 30)}
+        self.assertEqual(answers, {0, 1})  # "1 only" or "2 only" depending on the shuffle
+
+    def test_false_statement_needs_why(self):
+        sts = [dict(s) for s in STATEMENTS["mcq"]["statements"]]
+        sts[2]["why"] = ""
+        with self.assertRaises(Invalid):
+            validate({**STATEMENTS, "mcq": {**STATEMENTS["mcq"], "statements": sts}}, NOTE, 1, "statements")
+
+    def test_answer_in_headline_rejected(self):
+        bad = {**SINGLE, "mcq": {**SINGLE["mcq"], "question": "Which body runs UPI?", "correct": "NPCI",
+                                 "distractors": ["SEBI", "IRDAI", "PFRDA"]}}
+        validate(bad, NOTE, 1, "single")  # NPCI is not in the headline: fine
+        with self.assertRaises(Invalid):
+            validate({**bad, "short_title": "NPCI's UPI to carry a 0.4% MDR above ₹2,000"}, NOTE, 1, "single")
+
+    def test_distractor_in_note_rejected(self):
+        bad = {**SINGLE, "mcq": {**SINGLE["mcq"], "question": "Which body provides state-wise UPI data?", "correct": "NPCI",
+                                 "distractors": ["Ministry of Finance", "SEBI", "IRDAI"]}}
+        with self.assertRaises(Invalid):
+            validate(bad, NOTE, 1, "single")
+
+    def test_trivia_facts_dropped(self):
+        raw = {**SINGLE, "facts": SINGLE["facts"] + [{"label": "Person", "text": "Mark Rutte — President of the NATO Council"},
+                                                     {"label": "Place", "text": "NPCI — located in Mumbai"}]}
+        texts = " ".join(f["text"] for f in validate(raw, NOTE, 1, "single")["facts"])
+        self.assertNotIn("President of", texts)
 
     def test_ungrounded_title_number(self):
         with self.assertRaises(Invalid):
@@ -67,7 +103,7 @@ class T(unittest.TestCase):
             validate({**SINGLE, "short_title": "UPI MDR at 0.4%; e-challan dues of ₹48,000 crore"}, note, 1, "single")
 
     def test_duplicate_options(self):
-        bad = {**SINGLE, "mcq": {**SINGLE["mcq"], "distractors": ["₹500", "₹500", "₹10,000"]}}
+        bad = {**SINGLE, "mcq": {**SINGLE["mcq"], "distractors": ["₹500", "₹500", "₹1,000"]}}
         with self.assertRaises(Invalid):
             validate(bad, NOTE, 1, "single")
 

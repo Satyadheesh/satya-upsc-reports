@@ -4,9 +4,9 @@ name: Report PDFs (Brief + Detailed)
 # (keys like daily:2026-10-01:en:brief). Hourly: today and yesterday. Nightly (02:50 IST): last 8 days,
 # this and last week, this and last month. Only reports whose content changed are re-printed.
 on:
-  # schedule: enabled after the preview is reviewed
-  #   - cron: '50 * * * *'     # hourly: today + yesterday
-  #   - cron: '20 21 * * *'    # 02:50 IST: nightly scope
+  schedule:
+    - cron: '50 * * * *'     # hourly: today + yesterday
+    - cron: '20 21 * * *'    # 02:50 IST: nightly scope
   workflow_dispatch:
     inputs:
       scope:

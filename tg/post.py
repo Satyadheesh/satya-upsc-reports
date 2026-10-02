@@ -15,7 +15,7 @@ import time
 
 from common.db import close_all, main_db, translation_db, upsc_db
 
-from .content import caption, headlines, quiz_polls, read_pdf, top_notes
+from .content import caption, headlines, quiz_polls, read_report, top_notes
 from .periods import file_key, file_name, label, period_for, target_ts
 from .telegram import Bot
 
@@ -69,15 +69,15 @@ def main():
         return
 
     # The English report must exist; wait for it (the nightly rebuild runs at 02:41 IST).
-    en_pdf, en_meta = read_pdf(upsc, file_key(p, "en"))
+    en_pdf, en_meta, en_ed = read_report(upsc, file_key(p, "en"))
     while en_pdf is None and time.time() < target + READY_WAIT and not args.dry_run:
         print("English report not stored yet; checking again in 5 min", flush=True)
         time.sleep(300)
-        en_pdf, en_meta = read_pdf(upsc, file_key(p, "en"))
+        en_pdf, en_meta, en_ed = read_report(upsc, file_key(p, "en"))
     if en_pdf is None:
         print(f"::error::no stored English PDF for {file_key(p, 'en')} — nothing posted")
         sys.exit(1)
-    hi_pdf, hi_meta = read_pdf(upsc, file_key(p, "hi"))
+    hi_pdf, hi_meta, hi_ed = read_report(upsc, file_key(p, "hi"))
     if hi_pdf is None:
         print(f"::warning::Hindi PDF for {p['key']} not ready (under 80% translated); posting English only")
 
@@ -101,11 +101,11 @@ def main():
     sleep_until(target, f"for {args.at} IST")
     bot = Bot()
     if not posted(upsc, keys["en"]):
-        m = bot.document(chat, en_pdf, file_name(p, "en"), cap_en)
+        m = bot.document(chat, en_pdf, file_name(p, "en", en_ed), cap_en)
         mark(upsc, keys["en"], chat, m["message_id"])
         print(f"posted English PDF at {time.strftime('%H:%M:%S', time.gmtime(time.time() + 19800))} IST")
     if hi_pdf and not posted(upsc, keys["hi"]):
-        m = bot.document(chat, hi_pdf, file_name(p, "hi"), cap_hi)
+        m = bot.document(chat, hi_pdf, file_name(p, "hi", hi_ed), cap_hi)
         mark(upsc, keys["hi"], chat, m["message_id"])
         print("posted Hindi PDF")
     if polls and not posted(upsc, keys["quiz"]):

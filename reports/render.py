@@ -34,7 +34,7 @@ T = {
     "en": dict(
         brief="UPSC {kind} Brief", detailed="UPSC {kind} Detailed Notes", daily="Daily", weekly="Weekly", monthly="Monthly",
         vol_brief="Vol. I · {kind} Brief", vol_detailed="Vol. I · Detailed Notes", ca="Current Affairs",
-        read="Reading time", min="min", key="Key stories", inbrief="In brief", quiz="MCQs + Mains", notes="Notes",
+        read="Reading time", min="min", key="Key stories", inbrief="In brief", quiz="Mains", notes="Notes",
         merged="Stories merged", mix="Paper mix",
         k_top="01 — {when} in 2 minutes", today="Today", week="The week", month="The month",
         top="The {n} stories you can’t skip", matters="Why it matters:",
@@ -88,7 +88,10 @@ def e(s):
 
 def clip(s, n):
     s = " ".join(str(s or "").split())
-    return s if len(s) <= n else s[: n - 1].rstrip(" ,;:") + "…"
+    if len(s) <= n:
+        return s
+    cut = s.rfind(" ", 0, n - 1)
+    return s[: cut if cut > n * 0.6 else n - 1].rstrip(" ,;:") + "…"
 
 
 def first_sentence(s, n=150):
@@ -238,7 +241,10 @@ def brief(p, items, total, lang):
     mins = round(len(cards) * 1 + len(rest) * 0.15 + len(mcqs) * 1 + 2)
 
     cells = [(f"{mins} {t['min']}", t["read"]), (str(len(cards)), t["key"]), (str(len(rest)), t["inbrief"])]
-    cells.append((f"{len(mcqs)} + {len(mains)}" if mcqs else str(len(mains)), "MCQs + Mains" if mcqs else t["quiz"]))
+    if mcqs:
+        cells.append((f"{len(mcqs)} + {len(mains)}", "MCQs + Mains"))
+    elif mains:
+        cells.append((str(len(mains)), "मेन्स प्रश्न" if hi else ("Mains question" if len(mains) == 1 else "Mains questions")))
     when = {"daily": t["today"], "weekly": t["week"], "monthly": t["month"]}[p["kind"]]
 
     def short_title(it):

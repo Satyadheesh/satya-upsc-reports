@@ -21,6 +21,15 @@ def clean_title(t):
     return t[:-1] if t.endswith(".") else t
 
 
+def read_report(upsc, period_key_base):
+    """Prefer the redesigned Brief (…:brief); fall back to the old full report while the Brief isn't stored."""
+    pdf, meta = read_pdf(upsc, period_key_base + ":brief")
+    if pdf is not None:
+        return pdf, meta, "brief"
+    pdf, meta = read_pdf(upsc, period_key_base)
+    return pdf, meta, "full"
+
+
 def read_pdf(upsc, key):
     """The PDF the report builder stored, or None (Hindi is only stored once >= 80% translated)."""
     meta = upsc.execute("SELECT chunks, items, updated_at FROM upsc_reports WHERE key = ?", [key]).rows

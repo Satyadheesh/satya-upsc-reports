@@ -57,9 +57,10 @@ def file_key(p, lang):
     return f"{p['kind']}:{p['key']}:{lang}"
 
 
-def file_name(p, lang):
+def file_name(p, lang, edition="full"):
     k = "Daily" if p["kind"] == "daily" else "Weekly"
-    return f"SatyaDheesh-UPSC-{k}-Current-Affairs-{p['key']}{'-Hindi' if lang == 'hi' else ''}.pdf"
+    ed = "-Brief" if edition == "brief" else ""
+    return f"SatyaDheesh-UPSC-{k}{ed}-Current-Affairs-{p['key']}{'-Hindi' if lang == 'hi' else ''}.pdf"
 
 
 def page_url(p, hi=False):

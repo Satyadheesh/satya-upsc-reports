@@ -28,7 +28,7 @@ def _json(s, default):
         return default
 
 
-def load_notes(ids):
+def load_notes(ids, preview=False):
     up, mn = upsc_db(), main_db()
     notes = {}
     for r in in_chunks(up, f"SELECT {COLS} FROM upsc_articles WHERE article_id IN ({{ph}})", ids):
@@ -39,8 +39,10 @@ def load_notes(ids):
         if aid in notes:
             notes[aid]["title"] = (reph or "").strip() or None
             notes[aid]["original_title"] = (orig or "").strip() or None
-    prior = {r[0]: r[1] for r in in_chunks(up, "SELECT article_id, attempts FROM upsc_kit WHERE article_id IN ({ph}) "
-                                                "AND status = 'failed'", ids)} if notes else {}
+    prior = {}
+    if notes and not preview:  # in preview the table may not exist yet (migrate is skipped)
+        prior = {r[0]: r[1] for r in in_chunks(up, "SELECT article_id, attempts FROM upsc_kit WHERE article_id IN ({ph}) "
+                                                    "AND status = 'failed'", ids)}
     return up, notes, prior
 
 
@@ -86,7 +88,7 @@ def main():
         print("nothing to do")
         return
     t0 = time.time()
-    up, notes, prior = load_notes(ids)
+    up, notes, prior = load_notes(ids, preview=bool(args.preview))
     print(f"{len(notes)}/{len(ids)} notes loaded; loading model")
     model = Model(download())
     print(f"model ready in {time.time() - t0:.0f}s")

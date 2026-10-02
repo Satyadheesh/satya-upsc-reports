@@ -99,8 +99,11 @@ jobs:
         env:
           SHARD_DEADLINE_SEC: '3300'
           SHARD_NAME: ${{ strategy.job-index }}
-        run: python -m kit.run --ids "${{ matrix.shard }}" ${{ env.PREVIEW_N != '0' && '--preview out' || '' }}
-      - if: ${{ env.PREVIEW_N != '0' }}
+        run: |
+          mkdir -p out
+          set -o pipefail
+          python -m kit.run --ids "${{ matrix.shard }}" ${{ env.PREVIEW_N != '0' && '--preview out' || '' }} 2>&1 | tee "out/log-${{ strategy.job-index }}.txt"
+      - if: ${{ always() && env.PREVIEW_N != '0' }}
         uses: actions/upload-artifact@v4
         with:
           name: kits-${{ strategy.job-index }}
@@ -118,7 +121,7 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           path: prev
-      - run: python -m kit.preview_md prev /tmp/preview.md && cat /tmp/preview.md >> "$GITHUB_STEP_SUMMARY"
+      - run: mkdir -p prev && python -m kit.preview_md prev /tmp/preview.md && cat /tmp/preview.md >> "$GITHUB_STEP_SUMMARY"
       - name: Push to the previews branch
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -129,7 +132,7 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
           if git fetch -q --depth 1 origin previews; then git checkout -q -b previews FETCH_HEAD; else git checkout -q --orphan previews; fi
-          mkdir -p kit && cp /tmp/preview.md kit/README.md && find "$GITHUB_WORKSPACE/prev" -name '*.jsonl' -exec cp {} kit/ \;
+          mkdir -p kit && cp /tmp/preview.md kit/README.md && find "$GITHUB_WORKSPACE/prev" \( -name '*.jsonl' -o -name 'log-*.txt' \) -exec cp {} kit/ \;
           git add -A && git commit -qm "study kit preview ${GITHUB_RUN_ID}" && git push -q origin HEAD:previews
 
   chain:

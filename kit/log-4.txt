@@ -2,9 +2,9 @@ llama_kv_cache_iswa: using full-size SWA cache (ref: https://github.com/ggml-org
 llama_kv_cache: the V embeddings have different sizes across layers and FA is not enabled - padding V cache to 2048
 llama_kv_cache: the V embeddings have different sizes across layers and FA is not enabled - padding V cache to 2048
 4/4 notes loaded; loading model
-model ready in 7s
-129532: ok (1 try, 149s) Global Alliance formed in Bengaluru to tackle diabetic foot cases
-129268: ok (1 try, 125s) Gandak River breaches and Shitalpur dam flood five Bihar districts
-129530: ok (1 try, 125s) Tamil Nadu launches first booth-less toll plaza using FASTag and ANPR
-129425: ok (1 try, 110s) Kerala High Court rules against mandatory DNA tests for undisputed paternity
-done: 4 ok, 0 failed, 515s
+model ready in 9s
+129532: ok (1 try, 300s) Global Alliance formed in Bengaluru to tackle diabetic foot cases
+129268: ok (1 try, 313s) Gandak River breaches and Shitalpur dam flood five Bihar districts
+129664: ok (1 try, 326s) Andhra Pradesh CM announces ₹2.3 lakh crore for rural development and horticulture
+129441: ok (3 tries, 485s) Supreme Court orders blacklisting of vehicles with ₹49,194.05 crore in unpaid fines
+done: 4 ok, 0 failed, 1434s

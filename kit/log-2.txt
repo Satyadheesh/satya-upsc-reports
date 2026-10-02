@@ -2,9 +2,9 @@ llama_kv_cache_iswa: using full-size SWA cache (ref: https://github.com/ggml-org
 llama_kv_cache: the V embeddings have different sizes across layers and FA is not enabled - padding V cache to 2048
 llama_kv_cache: the V embeddings have different sizes across layers and FA is not enabled - padding V cache to 2048
 4/4 notes loaded; loading model
-model ready in 10s
-129582: ok (1 try, 258s) Survey records 65 distinct vultures in Wayanad Wildlife Sanctuary
-129514: ok (1 try, 215s) Telangana Government to release ₹2,500 crore in pending DA instalments
-128988: ok (1 try, 191s) Karnataka faces -32% rainfall deficit with Bengaluru South at -87%
-129501: ok (2 tries, 327s) Union and Andhra Pradesh launch ₹1-lakh-crore Global Horticulture Hub
-done: 4 ok, 0 failed, 1000s
+model ready in 9s
+129698: ok (1 try, 284s) Railway Board approves first Vande Bharat Sleeper for South India to Mumbai
+129514: ok (1 try, 304s) Telangana Government to release ₹2,500 crore in pending DA instalments
+128988: ok (1 try, 286s) Karnataka faces significant rainfall deficit due to El Niño
+129660: ok (1 try, 297s) Andhra Pradesh launches ₹1 lakh crore Global Horticulture Hub project
+done: 4 ok, 0 failed, 1179s

@@ -2,9 +2,9 @@ llama_kv_cache_iswa: using full-size SWA cache (ref: https://github.com/ggml-org
 llama_kv_cache: the V embeddings have different sizes across layers and FA is not enabled - padding V cache to 2048
 llama_kv_cache: the V embeddings have different sizes across layers and FA is not enabled - padding V cache to 2048
 4/4 notes loaded; loading model
-model ready in 6s
-129533: ok (1 try, 170s) Chhattisgarh and Odisha CMs meet Amit Shah to resolve Mahanadi water dispute
-129332: ok (1 try, 157s) British East India Company defeated Maratha army to seize Delhi in 1803
-129535: ok (1 try, 148s) PNGRB launches National PNG Drive 3.0 to enroll 50 lakh domestic-piped gas connections
-129441: ok (2 tries, 240s) Supreme Court orders blacklisting of vehicles with ₹49,194.05 crore in unpaid fines
-done: 4 ok, 0 failed, 722s
+model ready in 8s
+129533: ok (1 try, 256s) Chhattisgarh and Odisha CMs meet Amit Shah to resolve Mahanadi water dispute
+129332: ok (1 try, 307s) British East India Company seized Delhi from Marathas in 1803
+129670: ok (1 try, 291s) Telangana announces ₹52,000 crore infrastructure package for Hyderabad
+129448: ok (1 try, 302s) World food prices hit four-year high due to logistics and El Nino
+done: 4 ok, 0 failed, 1164s

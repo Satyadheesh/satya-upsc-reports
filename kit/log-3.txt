@@ -2,9 +2,9 @@ llama_kv_cache_iswa: using full-size SWA cache (ref: https://github.com/ggml-org
 llama_kv_cache: the V embeddings have different sizes across layers and FA is not enabled - padding V cache to 2048
 llama_kv_cache: the V embeddings have different sizes across layers and FA is not enabled - padding V cache to 2048
 4/4 notes loaded; loading model
-model ready in 8s
-129419: ok (2 tries, 252s) India identifies 28 strategic places and geographical features on official map
-129541: ok (2 tries, 219s) CCMB scientists develop India-specific Severity Scores for pediatric patients
-129461: ok (1 try, 138s) Tamil Nadu launches Vettri Payanam for free bus travel for women and transgender persons
-::warning::128807: failed after 3 tries (272s): too easy: the answer is in the headline; test a supporting fact instead
-done: 3 ok, 1 failed, 889s
+model ready in 9s
+129419: ok (2 tries, 350s) India identifies 28 strategic places and geographical features on official map
+129676: ok (1 try, 302s) CURE Act 2026 shifts Hyderabad property tax to Capital Value System
+129461: ok (1 try, 267s) Tamil Nadu launches Vettri Payanam for free bus travel for women and transgender persons
+128807: ok (1 try, 227s) Madras High Court orders status report on removing caste names from Tamil Nadu roads
+done: 4 ok, 0 failed, 1154s

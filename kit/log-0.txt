@@ -2,9 +2,9 @@ llama_kv_cache_iswa: using full-size SWA cache (ref: https://github.com/ggml-org
 llama_kv_cache: the V embeddings have different sizes across layers and FA is not enabled - padding V cache to 2048
 llama_kv_cache: the V embeddings have different sizes across layers and FA is not enabled - padding V cache to 2048
 4/4 notes loaded; loading model
-model ready in 8s
-129424: ok (1 try, 230s) Mahatma Gandhi's leadership in Non-Cooperation and Dandi March movements highlighted
-129549: ok (3 tries, 366s) Union Minister and Reliance Industries launch Rayalaseema Rising project
-129509: ok (1 try, 165s) Kerala announces separate housing scheme for SC/ST to bypass Life Mission delays
-128948: ok (1 try, 170s) IMD projects normal Northeast monsoon despite 20% Southwest monsoon deficit
-done: 4 ok, 0 failed, 939s
+model ready in 7s
+129424: ok (1 try, 341s) Mahatma Gandhi's leadership in Non-Cooperation and Dandi March movements highlighted
+129694: ok (1 try, 349s) Idukki administration clears natural passages to mitigate human-wildlife conflicts
+129509: ok (1 try, 292s) Kerala announces separate housing scheme for SC/ST to bypass Life Mission delays
+128948: ok (1 try, 338s) IMD projects normal Northeast monsoon despite 20% Southwest monsoon deficit
+done: 4 ok, 0 failed, 1328s

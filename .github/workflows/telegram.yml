@@ -57,7 +57,8 @@ jobs:
           fi
           AT=$([ "$KIND" = weekly ] && echo 07:00 || echo 05:00)
           case "$MODE" in
-            dry-run) python -m tg.post --kind "$KIND" --dry-run ;;
+            dry-run) python -m tg.post --kind "$KIND" --dry-run | tee /tmp/dry.txt
+                     echo "::notice title=Dry run::$(sed -e ':a' -e 'N' -e '$!ba' -e 's/%/%25/g' -e 's/\n/%0A/g' /tmp/dry.txt)" ;;
             test)    python -m tg.post --kind "$KIND" --now --test ;;
             now)     python -m tg.post --kind "$KIND" --now ;;
             *)       python -m tg.post --kind "$KIND" --at "$AT" ;;

@@ -1,8 +1,9 @@
 name: Telegram channel posts
 
 # Daily report at 05:00 IST (yesterday's news) and weekly report on Sunday at 07:00 IST.
-# GitHub often starts scheduled jobs late, so each post has two starts ~40 and ~10 min early;
-# the script waits for the exact minute, and telegram_posts makes sure nothing is posted twice.
+# Primary start: cron-job.org calls workflow_dispatch (mode=scheduled) ~20 min early, which starts
+# within a minute. The GitHub crons below are only a backup (GitHub often starts them late).
+# The script waits for the exact minute, and telegram_posts makes sure nothing is posted twice.
 on:
   schedule:
     - cron: '50 22 * * *'   # 04:20 IST daily  (primary)
@@ -16,9 +17,9 @@ on:
         options: [daily, weekly]
         default: daily
       mode:
-        description: 'dry-run = print only; check-setup = verify bot + channel; test = post now to TELEGRAM_TEST_CHAT_ID; now = post now to the channel'
+        description: 'dry-run = print only; check-setup = verify bot + channel; test = post now to TELEGRAM_TEST_CHAT_ID; now = post now to the channel; scheduled = wait for 05:00 / 07:00 IST, then post (cron-job.org)'
         type: choice
-        options: [dry-run, check-setup, test, now]
+        options: [dry-run, check-setup, test, now, scheduled]
         default: dry-run
 
 concurrency:

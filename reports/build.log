@@ -1,0 +1,11 @@
+317 notes in window (2 periods) loaded in 3.6s
+8 reports to build
+  daily:2026-10-01:en:brief: 60 notes, 5 pages, 177 KB, 0.6s
+  daily:2026-10-01:en:detailed: 60 notes, 22 pages, 479 KB, 0.6s
+  daily:2026-10-01:hi:brief: 59 notes, 5 pages, 185 KB, 0.6s
+  daily:2026-10-01:hi:detailed: 59 notes, 19 pages, 397 KB, 0.7s
+  weekly:2026-W40:en:brief: 50 notes, 6 pages, 200 KB, 0.6s
+  weekly:2026-W40:en:detailed: 50 notes, 17 pages, 428 KB, 0.6s
+  weekly:2026-W40:hi:brief: 50 notes, 6 pages, 208 KB, 0.6s
+  weekly:2026-W40:hi:detailed: 50 notes, 16 pages, 378 KB, 0.7s
+done: 8 built, 0 failed

@@ -63,6 +63,7 @@ jobs:
           BATCH: ${{ github.event.inputs.batch || '120' }}
           FULL: ${{ github.event.inputs.full || 'false' }}
           SHARDS: '5'
+          RECENT_DAYS: '1'   # hourly scan: last 24 h (rewritten older notes are caught by the nightly full scan)
         run: python -m kit.setup_shards
 
   kit:

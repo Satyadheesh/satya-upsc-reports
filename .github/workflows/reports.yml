@@ -1,11 +1,11 @@
 name: Report PDFs (Brief + Detailed)
 
 # Builds the redesigned UPSC report PDFs from the notes + study kit and stores them in the UPSC DB
-# (keys like daily:2026-10-01:en:brief). Hourly: today and yesterday. Nightly (02:50 IST): last 8 days,
+# (keys like daily:2026-10-01:en:brief). Every 2 hours: today and yesterday. Nightly (02:50 IST): last 8 days,
 # this and last week, this and last month. Only reports whose content changed are re-printed.
 on:
   schedule:
-    - cron: '50 * * * *'     # hourly: today + yesterday
+    - cron: '50 */2 * * *'   # every 2 hours: today + yesterday
     - cron: '20 21 * * *'    # 02:50 IST: nightly scope
   workflow_dispatch:
     inputs:

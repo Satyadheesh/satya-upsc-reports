@@ -111,7 +111,11 @@ def main():
     t0 = time.time()
     w = Window(upsc, main, start, min(end, int(time.time()) + 86400), trans)
     print(f"{len(w.rows)} notes in window ({len(periods)} periods) loaded in {time.time() - t0:.1f}s")
-    stored = {r[0]: r[1] for r in upsc.execute("SELECT key, hash FROM upsc_reports").rows} if not args.preview else {}
+    stored = {}
+    if not args.preview:  # only this run's keys (the table holds every report ever built)
+        want = [f"{p['kind']}:{p['key']}:{lang}:{ed}" for p in periods for lang in ("en", "hi") for ed in ("brief", "detailed")]
+        from common.db import in_chunks
+        stored = {r[0]: r[1] for r in in_chunks(upsc, "SELECT key, hash FROM upsc_reports WHERE key IN ({ph})", want)}
 
     jobs = []
     for p in periods:

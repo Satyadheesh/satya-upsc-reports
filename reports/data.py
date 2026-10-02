@@ -246,7 +246,7 @@ def hindi_title(it):
     if DEVANAGARI.search(it["title"]) or not DEVANAGARI.search(it["why"]):
         return it["title"]
     w = it["why"].strip()
-    m = re.search(r"[।.!?]", w)
+    m = re.search(r"[।!?]|\.(?=\s|$)", w)  # not the dot inside 87.7%
     if m and 20 < m.start() <= 120:
         return w[:m.start()]
     if len(w) <= 110:

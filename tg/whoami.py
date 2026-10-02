@@ -16,11 +16,17 @@ def main():
             print(f"TELEGRAM_CHAT_ID points to: {c.get('type')} '{c.get('title') or c.get('username')}' (id {c.get('id')})")
             if c.get("type") != "channel":
                 print("::warning::TELEGRAM_CHAT_ID is not a channel")
-            m = bot.call("getChatMember", {"chat_id": c["id"], "user_id": me["id"]}, tries=1)
-            can = m.get("status") == "administrator" and m.get("can_post_messages", False)
-            print(f"Bot status in it: {m.get('status')}; can post: {can}")
+            try:
+                m = bot.call("getChatMember", {"chat_id": c["id"], "user_id": me["id"]}, tries=1)
+                can = m.get("status") == "administrator" and m.get("can_post_messages", False)
+                print(f"Bot status in it: {m.get('status')}; can post: {can}")
+            except TelegramError:
+                can = False  # Telegram hides the member list from bots that are not admins
+                print("Bot is not an admin of this channel")
             if not can:
                 print("::warning::make the bot an admin of the channel with 'Post messages' allowed")
+            else:
+                print("All set: the bot can post in the channel.")
         except TelegramError as e:
             print(f"::warning::TELEGRAM_CHAT_ID ({chat!r}) is not usable: {e}. "
                   "Use the channel's @username (with @) or its -100… id, not the bot's name.")

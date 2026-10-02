@@ -16,8 +16,8 @@ on:
         description: 'Scan the whole 30-day window, not just the last 3 days'
         type: boolean
         default: false
-  # schedule: enabled after the preview is reviewed
-  #   - cron: '5 * * * *'
+  schedule:
+    - cron: '5 * * * *'   # hourly; while there is backlog each run also re-dispatches itself
 
 concurrency:
   group: study-kit

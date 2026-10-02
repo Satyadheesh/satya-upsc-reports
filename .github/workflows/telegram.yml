@@ -52,6 +52,9 @@ jobs:
         run: python migrate.py
       - name: Post
         run: |
+          if [ "$MODE" = scheduled ] && { [ -z "$TELEGRAM_BOT_TOKEN" ] || [ -z "$TELEGRAM_CHAT_ID" ]; }; then
+            echo "::notice::TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID not set yet — skipping"; exit 0
+          fi
           AT=$([ "$KIND" = weekly ] && echo 07:00 || echo 05:00)
           case "$MODE" in
             dry-run) python -m tg.post --kind "$KIND" --dry-run ;;

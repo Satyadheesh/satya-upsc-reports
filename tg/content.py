@@ -30,6 +30,20 @@ def read_report(upsc, period_key_base):
     return pdf, meta, "full"
 
 
+def read_editions(upsc, period_key_base):
+    """[(pdf, edition), ...] for Brief then Detailed (the old single PDF stands in for Detailed), and the meta
+    of the first one; ([], None) if nothing is stored (Hindi is only stored once >= 80% translated)."""
+    out, meta = [], None
+    for edition, keys in (("brief", [":brief"]), ("detailed", [":detailed", ""])):
+        for k in keys:
+            pdf, m = read_pdf(upsc, period_key_base + k)
+            if pdf is not None:
+                out.append((pdf, edition))
+                meta = meta or m
+                break
+    return out, meta
+
+
 def read_pdf(upsc, key):
     """The PDF the report builder stored, or None (Hindi is only stored once >= 80% translated)."""
     meta = upsc.execute("SELECT chunks, items, updated_at FROM upsc_reports WHERE key = ?", [key]).rows
@@ -72,9 +86,12 @@ def headlines(main, trans, notes, n=5, hi=False):
     return out
 
 
-def caption(period, items, heads, hi=False):
+def caption(period, items, heads, hi=False, both=False):
     head = f"<b>{esc(title(period, hi))}</b>\n"
-    head += (f"<i>सत्याधीश · {items} नोट्स</i>\n\n" if hi else f"<i>SatyaDheesh · {items} notes</i>\n\n")
+    head += (f"<i>सत्याधीश · {items} नोट्स</i>\n" if hi else f"<i>SatyaDheesh · {items} notes</i>\n")
+    if both:
+        head += ("सार (जल्दी दोहराव) + विस्तृत नोट्स (तथ्य, प्रश्न)\n" if hi else "Brief (quick revision) + Detailed notes (facts, questions)\n")
+    head += "\n"
     foot = (f"\n<a href=\"{page_url(period, True)}\">ऑनलाइन पढ़ें</a> · <a href=\"https://satyadheesh.in/upsc/reports?lang=hi\">सभी रिपोर्ट</a>"
             if hi else
             f"\n<a href=\"{page_url(period)}\">Read online</a> · <a href=\"https://satyadheesh.in/upsc/reports\">All reports</a>")

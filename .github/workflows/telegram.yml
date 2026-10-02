@@ -10,6 +10,9 @@ on:
     - cron: '20 23 * * *'   # 04:50 IST daily  (backup)
     - cron: '50 0 * * 0'    # 06:20 IST Sunday (weekly, primary)
     - cron: '20 1 * * 0'    # 06:50 IST Sunday (weekly, backup)
+    - cron: '0 2 * * *'     # 07:30 IST daily catch-up (posts only what is missing, e.g. a late Hindi PDF)
+    - cron: '0 4 * * *'     # 09:30 IST daily catch-up
+    - cron: '30 3 * * 0'    # 09:00 IST Sunday weekly catch-up
   workflow_dispatch:
     inputs:
       kind:
@@ -30,6 +33,9 @@ jobs:
   post:
     runs-on: ubuntu-latest
     timeout-minutes: 150
+    permissions:
+      contents: read
+      actions: write        # post.py asks reports.yml to rebuild the period's PDFs just before posting
     env:
       KIND: ${{ github.event.inputs.kind || (endsWith(github.event.schedule, '* * 0') && 'weekly' || 'daily') }}
       MODE: ${{ github.event.inputs.mode || 'scheduled' }}
@@ -42,6 +48,7 @@ jobs:
       TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
       TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
       TELEGRAM_TEST_CHAT_ID: ${{ secrets.TELEGRAM_TEST_CHAT_ID }}
+      GITHUB_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

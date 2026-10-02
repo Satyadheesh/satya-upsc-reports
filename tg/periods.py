@@ -59,7 +59,7 @@ def file_key(p, lang):
 
 def file_name(p, lang, edition="full"):
     k = "Daily" if p["kind"] == "daily" else "Weekly"
-    ed = "-Brief" if edition == "brief" else ""
+    ed = {"brief": "-Brief", "detailed": "-Detailed"}.get(edition, "")
     return f"SatyaDheesh-UPSC-{k}{ed}-Current-Affairs-{p['key']}{'-Hindi' if lang == 'hi' else ''}.pdf"
 
 

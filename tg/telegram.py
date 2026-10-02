@@ -1,4 +1,4 @@
-"""Minimal Telegram Bot API client (sendMessage, sendDocument, sendPoll). The token is never logged."""
+"""Minimal Telegram Bot API client (sendMessage, sendDocument, sendMediaGroup, sendPoll). The token is never logged."""
 import json
 import os
 import time
@@ -46,6 +46,24 @@ class Bot:
     def document(self, chat, pdf_bytes, filename, caption_html):
         return self.call("sendDocument", {"chat_id": chat, "caption": caption_html, "parse_mode": "HTML"},
                          files={"document": (filename, pdf_bytes, "application/pdf")})
+
+    def documents(self, chat, docs, caption_html):
+        """Several PDFs as one album (caption under the last one). docs = [(bytes, filename), ...].
+        Returns the first message. A single PDF, or an album Telegram refuses, goes as separate documents."""
+        if len(docs) == 1:
+            return self.document(chat, docs[0][0], docs[0][1], caption_html)
+        media = [{"type": "document", "media": f"attach://f{i}"} for i in range(len(docs))]
+        media[-1].update({"caption": caption_html, "parse_mode": "HTML"})
+        files = {f"f{i}": (name, data, "application/pdf") for i, (data, name) in enumerate(docs)}
+        try:
+            return self.call("sendMediaGroup", {"chat_id": chat, "media": json.dumps(media)}, files=files)[0]
+        except TelegramError as e:
+            print(f"album refused ({e}); sending separately")
+            first = None
+            for i, (data, name) in enumerate(docs):
+                m = self.document(chat, data, name, caption_html if i == len(docs) - 1 else "")
+                first = first or m
+            return first
 
     def quiz(self, chat, question, options, correct, explanation):
         return self.call("sendPoll", {"chat_id": chat, "question": question, "type": "quiz", "is_anonymous": "true",

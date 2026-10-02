@@ -40,5 +40,5 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
           if git fetch -q --depth 1 origin previews; then git checkout -q -b previews FETCH_HEAD; else git checkout -q --orphan previews; fi
-          mkdir -p diag && cp /tmp/diag.md diag/latest.md
+          mkdir -p diag && cp /tmp/diag.md diag/latest.md && cp /tmp/diag_out/* diag/ 2>/dev/null || true
           git add -A && git commit -qm "diag ${GITHUB_RUN_ID}" && git push -q origin HEAD:previews

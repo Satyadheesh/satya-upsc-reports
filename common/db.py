@@ -1,12 +1,11 @@
 """Turso/libsql clients. libsql_client's sync client runs a background thread: always close_all()."""
 import os
 
-import libsql_client
-
 _clients = []
 
 
 def _client(url_env, token_env):
+    import libsql_client  # imported here so pure-logic modules and tests don't need it
     url = os.environ.get(url_env)
     if not url:
         raise SystemExit(f"Missing secret {url_env}")

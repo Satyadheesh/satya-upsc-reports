@@ -25,3 +25,11 @@ CREATE TABLE IF NOT EXISTS kit_meta (
   key   TEXT PRIMARY KEY,
   value TEXT
 );
+
+-- Telegram channel posts (one row per post part, so a rerun never double-posts).
+CREATE TABLE IF NOT EXISTS telegram_posts (
+  key        TEXT PRIMARY KEY,   -- e.g. daily:2026-10-01:en, daily:2026-10-01:hi, daily:2026-10-01:quiz
+  chat       TEXT NOT NULL,
+  message_id INTEGER,
+  posted_at  INTEGER NOT NULL
+);

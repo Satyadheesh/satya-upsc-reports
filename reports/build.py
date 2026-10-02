@@ -56,9 +56,10 @@ def store(c, key, p, lang, h, items, pdf):
 
 
 def content_hash(p, lang, edition, items):
+    kit = (lambda i: (i.get("kit_hi") if lang == "hi" else i.get("kit")) or {})
     sig = [[i["id"], i["title"], i["why"], i["fact_box"], i["pointers"], i["mains"], i["related"], i["paper"], i["subject"],
-            (i.get("kit") or {}).get("short_title"), (i.get("kit") or {}).get("takeaway"),
-            (i.get("kit") or {}).get("facts"), (i.get("kit") or {}).get("mcq")] for i in items]
+            kit(i).get("short_title"), kit(i).get("takeaway"), kit(i).get("brief_text"), kit(i).get("facts"), kit(i).get("mcq")]
+           for i in items]
     raw = json.dumps({"v": REPORT_VERSION, "k": p["kind"], "p": p["key"], "l": lang, "e": edition, "n": sig},
                      ensure_ascii=False, sort_keys=True, default=str)
     return hashlib.sha256(raw.encode()).hexdigest()[:24]

@@ -103,7 +103,7 @@ class Window:
         ev_ids = sorted({r[2] for r in self.rows if r[2] is not None})
         self.events = {r[0]: {"slug": r[1], "title": r[2]} for r in in_chunks(
             main, "SELECT id, slug, title FROM events WHERE id IN ({ph}) AND slug IS NOT NULL AND title IS NOT NULL", ev_ids)}
-        self.hi_title, self.hi_note = {}, {}
+        self.hi_title, self.hi_note, self.hi_kit = {}, {}, {}
         if trans is not None and ids:
             self.hi_title = {r[0]: clean_hi(r[1]) for r in in_chunks(
                 trans, "SELECT article_id, rephrased_title_hi FROM translations WHERE article_id IN ({ph})", ids) if r[1]}
@@ -111,6 +111,14 @@ class Window:
                                       "FROM upsc_translations WHERE article_id IN ({ph})", ids):
                 ptrs = [{**q, "text": clean_hi(q.get("text"))} for q in _arr(r[3]) if isinstance(q, dict) and clean_hi(q.get("text"))]
                 self.hi_note[r[0]] = {"why": clean_hi(r[1]), "fact": clean_hi(r[2]), "pointers": ptrs, "mains": clean_hi(r[4])}
+            self.hi_kit = {}
+            try:  # Hindi study kit (written by the Hindi service); absent until it has run
+                for r in in_chunks(trans, "SELECT article_id, short_title_hi, takeaway_hi, brief_lead_hi, brief_text_hi, facts_hi, mcq_hi "
+                                          "FROM upsc_kit_translations WHERE article_id IN ({ph})", ids):
+                    self.hi_kit[r[0]] = {"short_title": clean_hi(r[1]), "takeaway": clean_hi(r[2]), "brief_lead": clean_hi(r[3]),
+                                         "brief_text": clean_hi(r[4]), "facts": _arr(r[5]), "mcq": _obj(r[6])}
+            except Exception as ex:
+                print(f"Hindi study kit not available: {type(ex).__name__}")
 
     def day(self, day_start, lang="en"):
         """One IST day's notes, best first, de-duplicated like the site's day lists."""
@@ -165,6 +173,7 @@ def hydrate(rows, w, lang="en"):
             "keywords": [k for k in _arr(kws) if isinstance(k, str)],
             "source": a[4], "url": a[3], "event": w.events.get(ev), "event_id": ev, "related": 0,
             "hi": bool(h.get("why")),
+            "kit_hi": w.hi_kit.get(aid) if hi else None,
             "kit": ({"short_title": ktitle, "takeaway": ktake, "brief_lead": klead, "brief_text": ktext,
                      "facts": _arr(kfacts), "mcq": _obj(kmcq)} if kstatus == "done" else None),
         }
@@ -272,5 +281,5 @@ def select(period, en_items, hi_items=None):
     for en in chosen:
         h = hi_by_id.get(en["id"])
         if h and h["hi"]:
-            out.append({**h, "title": hindi_title(h), "related": en["related"], "kit": en["kit"]})
+            out.append({**h, "title": hindi_title(h), "related": en["related"], "kit": en["kit"], "kit_hi": h.get("kit_hi")})
     return out, total, (len(out) / len(chosen) if chosen else 0.0)

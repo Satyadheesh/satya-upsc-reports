@@ -26,6 +26,9 @@ POINTER = {"constitution": ("Constitution", "संविधान"), "act_bill"
            "institution": ("Body", "संस्था"), "report_index": ("Report", "रिपोर्ट"), "place": ("Place", "स्थान"),
            "species_environment": ("Environment", "पर्यावरण"), "sci_tech": ("S&T", "विज्ञान"),
            "international_org": ("Intl. org", "अंत. संगठन"), "person_post": ("Post", "पद"), "data_fact": ("Fact", "तथ्य")}
+FACT_LABEL_HI = {"Body": "संस्था", "Case": "मामला", "Act": "अधिनियम", "Scheme": "योजना", "Place": "स्थान", "Person": "व्यक्ति",
+                 "Figure": "आँकड़ा", "Date": "तिथि", "Report": "रिपोर्ट", "Concept": "अवधारणा", "Event": "घटना",
+                 "Index": "सूचकांक", "Mission": "मिशन"}
 MONTHS_HI = ["जनवरी", "फ़रवरी", "मार्च", "अप्रैल", "मई", "जून", "जुलाई", "अगस्त", "सितंबर", "अक्टूबर", "नवंबर", "दिसंबर"]
 DAYS_HI = ["सोमवार", "मंगलवार", "बुधवार", "गुरुवार", "शुक्रवार", "शनिवार", "रविवार"]
 SUBJ_ORDER = list(SYLLABUS)
@@ -215,10 +218,17 @@ def mains_block(items, lang):
     return "".join(out)
 
 
+def kit_of(it, lang):
+    """The study kit in the report's language (Hindi kit comes from the Hindi service), or None."""
+    k = it.get("kit_hi") if lang == "hi" else it.get("kit")
+    return k if k and k.get("short_title") else None
+
+
 def kit_facts(it, lang, n=3):
-    """Facts to remember: study-kit facts (English) or the note's own pointers."""
-    if lang == "en" and it.get("kit") and it["kit"].get("facts"):
-        return [f["text"] for f in it["kit"]["facts"][:n]]
+    """Facts to remember: study-kit facts or the note's own pointers."""
+    k = kit_of(it, lang)
+    if k and k.get("facts"):
+        return [f["text"] for f in k["facts"][:n]]
     return [p["text"] for p in it["pointers"][:n]]
 
 
@@ -233,10 +243,10 @@ def brief(p, items, total, lang):
     """items: the chosen notes, best first. Returns (html, n_items)."""
     t, hi = T[lang], lang == "hi"
     n_top, n_cards, n_lines, n_mcq, n_mains = SIZE[p["kind"]]
-    kit = (lambda it: it.get("kit") if not hi else None)
+    kit = (lambda it: kit_of(it, lang))
     top, cards = items[:n_top], items[:n_cards]
     rest = items[n_cards:n_cards + n_lines]
-    mcqs = [it["kit"]["mcq"] for it in items if not hi and it.get("kit") and it["kit"].get("mcq")][:n_mcq]
+    mcqs = [kit_of(it, lang)["mcq"] for it in items if kit_of(it, lang) and kit_of(it, lang).get("mcq")][:n_mcq]
     mains = [it for it in items if it.get("mains")][:n_mains]
     mins = round(len(cards) * 1 + len(rest) * 0.15 + len(mcqs) * 1 + 2)
 
@@ -274,7 +284,7 @@ def brief(p, items, total, lang):
         num = (f'<div class="box cream"><div class="kicker">{e(t["number"])}</div><div class="bignum">{e(figures[0][0])}</div>'
                f'<p>{e(clip(figures[0][1], 150))}</p></div>') if figures else ""
         st = (f'<div class="box line"><div class="kicker">{e(t["static"])}</div><h4>{e(static[0])}</h4>'
-              f'<p>{e(clip(static[1], 120))} <i>In the news: {e(short_title(static[2]))}.</i></p></div>') if static else ""
+              f'<p>{e(clip(static[1], 120))} <i>{"ख़बर में" if hi else "In the news"}: {e(short_title(static[2]))}.</i></p></div>') if static else ""
         boxes = f'<div class="duo" style="grid-template-columns:{"1fr 1.25fr" if num and st else "1fr"}">{num}{st}</div>'
     elif p["kind"] != "daily" and len(figures) >= 3:
         tiles = "".join(f'<div class="tile"><div class="v">{e(v)}</div><div class="c">{e(clip(c, 90))}</div></div>' for v, c, _ in figures[:4])
@@ -342,7 +352,7 @@ def brief(p, items, total, lang):
 def detailed(p, items, total, lang):
     t, hi = T[lang], lang == "hi"
     merged = sum(it["related"] for it in items)
-    mcqs = [it["kit"]["mcq"] for it in items if not hi and it.get("kit") and it["kit"].get("mcq")][:10]
+    mcqs = [kit_of(it, lang)["mcq"] for it in items if kit_of(it, lang) and kit_of(it, lang).get("mcq")][:10]
     groups = {}
     for it in items:
         groups.setdefault(it["paper"], {}).setdefault(it["subject"], []).append(it)
@@ -367,8 +377,9 @@ def detailed(p, items, total, lang):
              + f'<div class="box line"><div class="kicker">{e(t["short_k"])}</div><p style="margin-top:0">{t["short"]}</p></div></div>')
 
     def note(it):
-        if not hi and it.get("kit") and it["kit"].get("facts"):
-            facts = [(f["label"], f["text"]) for f in it["kit"]["facts"]]
+        k = kit_of(it, lang)
+        if k and k.get("facts"):
+            facts = [((FACT_LABEL_HI.get(f["label"], f["label"]) if hi else f["label"]), f["text"]) for f in k["facts"]]
         else:
             facts = [(POINTER.get(x.get("type"), ("Fact", "तथ्य"))[1 if hi else 0], x["text"]) for x in it["pointers"][:5]]
             if it["fact_box"] and len(facts) < 2:

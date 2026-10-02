@@ -23,6 +23,11 @@ def main_db():
     return _client("SATYA_DB_URL", "SATYA_DB_TOKEN")
 
 
+def translation_db():
+    """Hindi translations (read-only here): translations, upsc_translations, event_translations."""
+    return _client("SATYA_TRANSLATION_DB_URL", "SATYA_TRANSLATION_DB_TOKEN")
+
+
 def close_all():
     for c in _clients:
         try:

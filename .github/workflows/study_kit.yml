@@ -28,6 +28,9 @@ env:
   SATYA_DB_TOKEN: ${{ secrets.SATYA_DB_TOKEN }}
   SATYA_UPSC_DB_URL: ${{ secrets.SATYA_UPSC_DB_URL }}
   SATYA_UPSC_DB_TOKEN: ${{ secrets.SATYA_UPSC_DB_TOKEN }}
+  SATYA_TRANSLATION_DB_URL: ${{ secrets.SATYA_TRANSLATION_DB_URL }}
+  SATYA_TRANSLATION_DB_TOKEN: ${{ secrets.SATYA_TRANSLATION_DB_TOKEN }}
+  REVALIDATE_SECRET: ${{ secrets.REVALIDATE_SECRET }}
   KIT_MODEL_REPO: unsloth/gemma-4-12b-it-GGUF
   KIT_MODEL_FILE: gemma-4-12b-it-Q4_K_M.gguf
   PREVIEW_N: ${{ github.event.inputs.preview || '0' }}
@@ -49,7 +52,7 @@ jobs:
         run: python -m unittest discover -s tests -t .
       - name: Check secrets
         run: |
-          for s in SATYA_DB_URL SATYA_DB_TOKEN SATYA_UPSC_DB_URL SATYA_UPSC_DB_TOKEN; do
+          for s in SATYA_DB_URL SATYA_DB_TOKEN SATYA_UPSC_DB_URL SATYA_UPSC_DB_TOKEN SATYA_TRANSLATION_DB_URL SATYA_TRANSLATION_DB_TOKEN REVALIDATE_SECRET; do
             [ -n "${!s}" ] || { echo "::error::Secret $s is not set in this repo (Settings → Secrets → Actions)"; exit 1; }
           done
       - name: Migrate schema (idempotent; skipped in preview)

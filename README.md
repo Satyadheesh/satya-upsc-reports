@@ -9,8 +9,12 @@ Everything behind SatyaDheesh's UPSC study material that is built *from* the UPS
 | `reports/` — Report builder | Brief + Detailed PDFs (daily / weekly / monthly, English + Hindi), rendered from this repo's templates, stored in `upsc_reports` for the site to serve. | next |
 
 ## Secrets (Settings → Secrets → Actions)
-`SATYA_UPSC_DB_URL`, `SATYA_UPSC_DB_TOKEN`, `SATYA_DB_URL`, `SATYA_DB_TOKEN` — same values as in satya-upsc-service.
-The main DB is only read (article titles).
+| Secret | Copy from | Used for |
+|---|---|---|
+| `SATYA_UPSC_DB_URL`, `SATYA_UPSC_DB_TOKEN` | satya-upsc-service | notes in; kits and PDFs out |
+| `SATYA_DB_URL`, `SATYA_DB_TOKEN` | satya-upsc-service | article titles and sources (read only) |
+| `SATYA_TRANSLATION_DB_URL`, `SATYA_TRANSLATION_DB_TOKEN` | SatyaDheesh-Hindi/Hindi | Hindi headlines and notes for Hindi reports (read only) |
+| `REVALIDATE_SECRET` | SatyaDheesh-Hindi/Hindi (same as the site's) | refresh the site's report pages after new PDFs |
 
 ## Study kit
 - `kit/setup_shards.py` picks notes that need a kit (new, changed since their kit, or failed < 3 times) and splits them over 5 runners.

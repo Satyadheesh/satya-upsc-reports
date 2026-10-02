@@ -49,14 +49,22 @@ def parse(kind, key):
 
 
 def periods_for(scope, now):
-    """recent (hourly): today and yesterday only (cheap on DB reads).
-    nightly: last 8 days, this + last week, this + last month. all: 60 days, 9 weeks, 3 months."""
+    """recent (every 2 h): today and yesterday only (cheap on DB reads).
+    nightly: last 8 days, this + last week; monthly reports only on Sundays (this month) and on the
+    1st/2nd (the month that just ended), because a month of notes is the most expensive read.
+    all: 60 days, 9 weeks, 3 months."""
     today = ist_date(now)
     days = {"recent": 2, "nightly": 8, "all": 60}[scope]
     weeks = {"recent": 0, "nightly": 2, "all": 9}[scope]
     months = {"recent": 0, "nightly": 2, "all": 3}[scope]
     out = [daily(today - dt.timedelta(days=i)) for i in range(days)]
     out += [weekly(today - dt.timedelta(weeks=i)) for i in range(weeks)]
+    if scope == "nightly":
+        if today.weekday() == 6:
+            out.append(monthly(today))
+        if today.day <= 2:
+            out.append(monthly(today.replace(day=1) - dt.timedelta(days=1)))
+        return out
     m = today
     for _ in range(months):
         out.append(monthly(m))

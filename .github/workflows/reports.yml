@@ -1,0 +1,84 @@
+name: Report PDFs (Brief + Detailed)
+
+# Builds the redesigned UPSC report PDFs from the notes + study kit and stores them in the UPSC DB
+# (keys like daily:2026-10-01:en:brief). Hourly: today and yesterday. Nightly (02:50 IST): last 8 days,
+# this and last week, this and last month. Only reports whose content changed are re-printed.
+on:
+  schedule:
+    - cron: '50 * * * *'     # hourly: today + yesterday
+    - cron: '20 21 * * *'    # 02:50 IST: nightly scope
+  workflow_dispatch:
+    inputs:
+      scope:
+        type: choice
+        options: [recent, nightly, all]
+        default: recent
+      period:
+        description: "Specific periods instead of a scope, e.g. 'daily:2026-10-01 weekly:2026-W40'"
+        default: ''
+      only:
+        description: "Only keys containing this text (e.g. ':brief', 'weekly:')"
+        default: ''
+      force:
+        type: boolean
+        default: false
+      preview:
+        description: 'Preview: render to the previews branch, store nothing'
+        type: boolean
+        default: false
+
+concurrency:
+  group: report-pdfs
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: write
+    env:
+      SATYA_DB_URL: ${{ secrets.SATYA_DB_URL }}
+      SATYA_DB_TOKEN: ${{ secrets.SATYA_DB_TOKEN }}
+      SATYA_UPSC_DB_URL: ${{ secrets.SATYA_UPSC_DB_URL }}
+      SATYA_UPSC_DB_TOKEN: ${{ secrets.SATYA_UPSC_DB_TOKEN }}
+      SATYA_TRANSLATION_DB_URL: ${{ secrets.SATYA_TRANSLATION_DB_URL }}
+      SATYA_TRANSLATION_DB_TOKEN: ${{ secrets.SATYA_TRANSLATION_DB_TOKEN }}
+      PREVIEW: ${{ github.event.inputs.preview || 'false' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: pw-chromium-${{ runner.os }}-v1
+      - name: Install
+        run: |
+          pip install libsql-client playwright qrcode
+          python -m playwright install --with-deps chromium
+          [ "$PREVIEW" = true ] && sudo apt-get install -y -q poppler-utils >/dev/null || true
+      - name: Build
+        run: |
+          SCOPE="${{ github.event.inputs.scope }}"
+          [ -z "$SCOPE" ] && SCOPE=$([ "${{ github.event.schedule }}" = '20 21 * * *' ] && echo nightly || echo recent)
+          python -m reports.build --scope "$SCOPE" \
+            ${{ github.event.inputs.period != '' && format('--period "{0}"', github.event.inputs.period) || '' }} \
+            --only "${{ github.event.inputs.only }}" \
+            ${{ github.event.inputs.force == 'true' && '--force' || '' }} \
+            ${{ github.event.inputs.preview == 'true' && '--preview out' || '' }} 2>&1 | tee build.log
+      - name: Publish preview
+        if: ${{ always() && env.PREVIEW == 'true' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+          mkdir -p out && cp build.log out/ || true
+          rm -rf /tmp/wt && mkdir /tmp/wt && cd /tmp/wt && git init -q
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          if git fetch -q --depth 1 origin previews; then git checkout -q -b previews FETCH_HEAD; else git checkout -q --orphan previews; fi
+          rm -rf reports && mkdir -p reports && cp "$GITHUB_WORKSPACE"/out/* reports/ 2>/dev/null || true
+          git add -A && git commit -qm "report preview ${GITHUB_RUN_ID}" && git push -q origin HEAD:previews

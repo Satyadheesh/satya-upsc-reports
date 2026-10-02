@@ -15,7 +15,9 @@ import time
 
 from common.db import close_all, main_db, translation_db, upsc_db
 
-from .content import caption, headlines, quiz_polls, read_report, top_notes
+from reports.data import Window, select
+
+from .content import caption, quiz_polls, read_report
 from .periods import file_key, file_name, label, period_for, target_ts
 from .telegram import Bot
 
@@ -81,17 +83,24 @@ def main():
     if hi_pdf is None:
         print(f"::warning::Hindi PDF for {p['key']} not ready (under 80% translated); posting English only")
 
-    notes = top_notes(upsc, p)
-    cap_en = caption(p, en_meta["items"], headlines(main, trans, notes), hi=False)
-    cap_hi = caption(p, hi_meta["items"], headlines(main, trans, notes, hi=True), hi=True) if hi_pdf else None
+    # Top stories = the report's own top stories (same selection as the PDF)
+    w = Window(upsc, main, p["start"], p["end"], trans)
+    en_items = w.period(p, "en")
+    chosen_en = select(p, en_items)[0][:5]
+    heads_en = [(((it.get("kit") or {}).get("short_title") or it["title"]), it["paper"]) for it in chosen_en]
+    cap_en = caption(p, en_meta["items"], heads_en, hi=False)
+    cap_hi = None
+    if hi_pdf:
+        chosen_hi = select(p, en_items, w.period(p, "hi"))[0][:5]
+        cap_hi = caption(p, hi_meta["items"], [(it["title"], it["paper"]) for it in chosen_hi], hi=True)
     polls = quiz_polls(upsc, p)
     quiz_intro = ("<b>Quick quiz</b> — " + ("5 questions from yesterday's news." if p["kind"] == "daily"
                                               else "questions from this week's news.") + " Answers show after you vote.")
 
     if args.dry_run:
-        print(f"\n--- English PDF ({len(en_pdf) // 1024} KB, {file_name(p, 'en')})\n{cap_en}")
+        print(f"\n--- English PDF ({len(en_pdf) // 1024} KB, {file_name(p, 'en', en_ed)})\n{cap_en}")
         if cap_hi:
-            print(f"\n--- Hindi PDF ({len(hi_pdf) // 1024} KB, {file_name(p, 'hi')})\n{cap_hi}")
+            print(f"\n--- Hindi PDF ({len(hi_pdf) // 1024} KB, {file_name(p, 'hi', hi_ed)})\n{cap_hi}")
         print(f"\n--- {len(polls)} quiz polls")
         for q in polls:
             print(f"\nQ: {q['question']}\n" + "\n".join(f"  {'*' if i == q['correct'] else ' '} {o}" for i, o in enumerate(q["options"]))

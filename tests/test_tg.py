@@ -19,6 +19,16 @@ class T(unittest.TestCase):
         self.assertEqual(ist_date(p["start"]), dt.date(2026, 9, 28))
         self.assertEqual(file_key(p, "hi"), "weekly:2026-W40:hi")
 
+    def test_monthly_is_last_month(self):
+        nov1 = int(dt.datetime(2026, 10, 31, 23, 0, tzinfo=dt.timezone.utc).timestamp())  # 1 Nov 04:30 IST
+        p = period_for("monthly", nov1)
+        self.assertEqual(p["key"], "2026-10")
+        self.assertEqual(ist_date(p["start"]), dt.date(2026, 10, 1))
+        self.assertEqual(ist_date(p["end"]), dt.date(2026, 11, 1))
+        self.assertEqual(file_key(p, "en"), "monthly:2026-10:en")
+        jan1 = int(dt.datetime(2026, 12, 31, 23, 0, tzinfo=dt.timezone.utc).timestamp())
+        self.assertEqual(period_for("monthly", jan1)["key"], "2026-12")
+
     def test_target_is_exact_ist_minute(self):
         t = target_ts(MON_0420_IST, "05:00")
         self.assertEqual(dt.datetime.fromtimestamp(t, dt.timezone.utc), dt.datetime(2026, 10, 4, 23, 30, tzinfo=dt.timezone.utc))

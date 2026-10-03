@@ -21,8 +21,15 @@ def target_ts(now, hhmm):
 
 
 def period_for(kind, now):
-    """daily: yesterday (complete by 5 AM). weekly: the current ISO week (Mon–Sat done by Sunday morning)."""
+    """daily: yesterday (complete by 5 AM). weekly: the current ISO week (Mon–Sat done by Sunday morning).
+    monthly: the month that just ended (posted on the 1st)."""
     today = ist_date(now)
+    if kind == "monthly":
+        last = today.replace(day=1) - dt.timedelta(days=1)
+        first = last.replace(day=1)
+        start = ist_midnight(first)
+        return {"kind": kind, "key": first.strftime("%Y-%m"), "start": start, "end": ist_midnight(today.replace(day=1)),
+                "first": first, "last": last}
     if kind == "daily":
         d = today - dt.timedelta(days=1)
         start = ist_midnight(d)
@@ -41,6 +48,9 @@ def _d(d, hi, short=False):
 
 
 def label(p, hi=False):
+    if p["kind"] == "monthly":
+        f = p["first"]
+        return f"{MONTHS_HI[f.month - 1]} {f.year}" if hi else f"{f.strftime('%B')} {f.year}"
     if p["kind"] == "daily":
         return f"{_d(p['first'], hi)} {p['first'].year}"
     a, b = _d(p["first"], hi, short=True), f"{_d(p['last'], hi, short=True)} {p['last'].year}"
@@ -49,8 +59,10 @@ def label(p, hi=False):
 
 def title(p, hi=False):
     if hi:
-        return f"यूपीएससी {'साप्ताहिक ' if p['kind'] == 'weekly' else ''}करेंट अफेयर्स — {label(p, True)}"
-    return f"UPSC {'Weekly ' if p['kind'] == 'weekly' else ''}Current Affairs — {label(p)}"
+        k = {"weekly": "साप्ताहिक ", "monthly": "मासिक "}.get(p["kind"], "")
+        return f"यूपीएससी {k}करेंट अफेयर्स — {label(p, True)}"
+    k = {"weekly": "Weekly ", "monthly": "Monthly "}.get(p["kind"], "")
+    return f"UPSC {k}Current Affairs — {label(p)}"
 
 
 def file_key(p, lang):
@@ -58,12 +70,12 @@ def file_key(p, lang):
 
 
 def file_name(p, lang, edition="full"):
-    k = "Daily" if p["kind"] == "daily" else "Weekly"
+    k = {"daily": "Daily", "weekly": "Weekly", "monthly": "Monthly"}[p["kind"]]
     ed = {"brief": "-Brief", "detailed": "-Detailed"}.get(edition, "")
     return f"SatyaDheesh-UPSC-{k}{ed}-Current-Affairs-{p['key']}{'-Hindi' if lang == 'hi' else ''}.pdf"
 
 
 def page_url(p, hi=False):
-    base = (f"https://satyadheesh.in/upsc/current-affairs/{p['key']}" if p["kind"] == "daily"
-            else f"https://satyadheesh.in/upsc/current-affairs/week/{p['key']}")
+    sub = {"daily": "", "weekly": "week/", "monthly": "month/"}[p["kind"]]
+    base = f"https://satyadheesh.in/upsc/current-affairs/{sub}{p['key']}"
     return base + ("?lang=hi" if hi else "")

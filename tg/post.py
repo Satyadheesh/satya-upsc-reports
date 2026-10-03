@@ -1,7 +1,8 @@
-"""Post the daily / weekly UPSC report to the Telegram channel at an exact IST time.
+"""Post the daily / weekly / monthly UPSC report to the Telegram channel at an exact IST time.
 
   python -m tg.post --kind daily  --at 05:00     (yesterday's report)
   python -m tg.post --kind weekly --at 07:00     (this week's report, Sunday morning)
+  python -m tg.post --kind monthly --at 08:00    (last month's report, on the 1st)
 
 cron-job.org starts the workflow ~20 min early (GitHub crons are the backup). This script first asks the
 report builder to rebuild this period (so the PDFs carry the latest notes and Hindi corrections), waits for
@@ -70,7 +71,7 @@ def sleep_until(ts, why):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--kind", choices=["daily", "weekly"], required=True)
+    ap.add_argument("--kind", choices=["daily", "weekly", "monthly"], required=True)
     ap.add_argument("--at", default="05:00", help="IST time to post, HH:MM")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--now", action="store_true", help="don't wait for the posting time")
@@ -88,6 +89,9 @@ def main():
           + (" [dry run]" if args.dry_run else ""))
     if args.kind == "weekly" and not (args.now or args.dry_run) and time.gmtime(target + 19800).tm_wday != 6:
         print("::warning::the weekly report is posted on Sunday only (week not finished); nothing posted")
+        return
+    if args.kind == "monthly" and not (args.now or args.dry_run) and time.gmtime(target + 19800).tm_mday != 1:
+        print("::warning::the monthly report is posted on the 1st only; nothing posted")
         return
     if time.time() > target + LATE_LIMIT and not args.now:
         print(f"::warning::more than {LATE_LIMIT // 3600} h past {args.at} IST; not posting a stale morning report")
@@ -132,8 +136,10 @@ def main():
                                              for it in chosen_hi], hi=True, both=len(hi_pdfs) > 1)
     cap_hi = hindi_caption(w) if hi_pdfs else None
     polls = quiz_polls(upsc, p)
-    quiz_intro = ("<b>Quick quiz</b> — " + ("5 questions from yesterday's news." if p["kind"] == "daily"
-                                              else "questions from this week's news.") + " Answers show after you vote.")
+    quiz_intro = ("<b>Quick quiz</b> — " + {"daily": "5 questions from yesterday's news.",
+                                             "weekly": "questions from this week's news.",
+                                             "monthly": "questions from last month's news."}[p["kind"]]
+                  + " Answers show after you vote.")
 
     if args.dry_run:
         for lang, pdfs, cap in (("en", en_pdfs, cap_en), ("hi", hi_pdfs, cap_hi)):

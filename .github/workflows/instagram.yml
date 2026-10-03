@@ -56,14 +56,16 @@ jobs:
       - name: Migrate schema (idempotent)
         run: python migrate.py
       - name: Post
+        shell: bash
         run: |
+          set -o pipefail
           if [ "$MODE" != dry-run ] && [ -z "$IG_TOKEN" ]; then
             echo "::notice::IG_TOKEN not set yet — skipping"; exit 0
           fi
           case "$MODE" in
-            dry-run)     python -m ig.post --dry-run --langs "$LANGS" | tee /tmp/out.txt ;;
-            check-setup) python -m ig.post --check-setup | tee /tmp/out.txt ;;
-            now)         python -m ig.post --now --langs "$LANGS" | tee /tmp/out.txt ;;
-            *)           python -m ig.post --at 19:00 --langs "$LANGS" | tee /tmp/out.txt ;;
-          esac
-          echo "::notice title=Instagram $MODE::$(tail -c 3000 /tmp/out.txt | sed -e ':a' -e 'N' -e '$!ba' -e 's/%/%25/g' -e 's/\n/%0A/g')"
+            dry-run)     python -m ig.post --dry-run --langs "$LANGS" 2>&1 | tee /tmp/out.txt ;;
+            check-setup) python -m ig.post --check-setup 2>&1 | tee /tmp/out.txt ;;
+            now)         python -m ig.post --now --langs "$LANGS" 2>&1 | tee /tmp/out.txt ;;
+            *)           python -m ig.post --at 19:00 --langs "$LANGS" 2>&1 | tee /tmp/out.txt ;;
+          esac || { echo "::error title=Instagram $MODE failed::$(tail -c 2500 /tmp/out.txt | sed -e ':a' -e 'N' -e '$!ba' -e 's/%/%25/g' -e 's/\n/%0A/g')"; exit 1; }
+          echo "::notice title=Instagram $MODE::$(tail -c 2500 /tmp/out.txt | sed -e ':a' -e 'N' -e '$!ba' -e 's/%/%25/g' -e 's/\n/%0A/g')"

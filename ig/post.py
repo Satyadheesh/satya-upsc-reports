@@ -177,6 +177,8 @@ def main():
     if args.check_setup:
         ig = IG(current_token(upsc))
         print(f"Instagram account: @{ig.username} (id {ig.user_id}); token OK; API {os.environ.get('IG_API_VERSION', 'v23.0')}")
+        for m in ig.get(f"{ig.user_id}/media", fields="timestamp,media_type,permalink", limit=3).get("data", []):
+            print(f"  recent: {m.get('timestamp')} {m.get('media_type')} {m.get('permalink')}")
         return
 
     start = time.time()
@@ -236,8 +238,12 @@ def main():
         if left > 0:
             print(f"waiting {left / 60:.1f} min for {args.at} IST", flush=True)
             time.sleep(left)
-        media_id, link = ig.carousel(urls, cap)
+        media_id = ig.carousel(urls, cap)
         upsc.execute("INSERT OR REPLACE INTO ig_posts (key, media_id, posted_at) VALUES (?, ?, ?)", [keys[lang], media_id, int(time.time())])
+        try:
+            link = ig.get(media_id, fields="permalink").get("permalink")
+        except Exception as ex:
+            link = f"media {media_id} (permalink lookup failed: {ex})"
         print(f"posted {lang} carousel at {time.strftime('%H:%M:%S', time.gmtime(time.time() + 19800))} IST: {link}")
         print(f"::notice title=Instagram {lang}::{link}")
 

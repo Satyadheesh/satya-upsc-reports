@@ -55,9 +55,7 @@ class IG:
             self.wait(c)
         cid = self.post(f"{self.user_id}/media", media_type="CAROUSEL", children=",".join(children), caption=caption)["id"]
         self.wait(cid)
-        media_id = self.post(f"{self.user_id}/media_publish", creation_id=cid)["id"]
-        link = self.get(media_id, fields="permalink").get("permalink")
-        return media_id, link
+        return self.post(f"{self.user_id}/media_publish", creation_id=cid)["id"]
 
     def wait(self, cid, limit=300):
         t0 = time.time()

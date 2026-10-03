@@ -10,6 +10,7 @@ import qrcode.image.svg
 from common.syllabus import SYLLABUS
 
 SITE = "https://satyadheesh.in"
+TELEGRAM = "https://t.me/satyadheesh"
 GAVEL = ('<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg"><rect x="1" y="1" width="62" height="62" rx="13" fill="#f8f6f2" stroke="#120f0b" stroke-width="2"/>'
          '<g transform="rotate(-38 32 30)"><rect x="17" y="18" width="16" height="24" rx="4" fill="#bf4a07"/><rect x="17" y="24" width="16" height="3" fill="#8f3a08"/>'
          '<rect x="33" y="27.5" width="16" height="6" rx="3" fill="#bf4a07"/></g><rect x="15" y="49" width="34" height="4" rx="2" fill="#a39c92"/></svg>')
@@ -49,7 +50,8 @@ T = {
         k_test="04 — Test yourself", test="{n} questions, {n} minutes", test_aside="Answers at the bottom, upside down",
         k_mains="Mains practice", mains1="Write one answer today", mains_n="Mains questions to practise",
         answers="ANSWERS", ask="Which of the statements given above is/are correct?",
-        cta1="Read it in <i>Hindi</i>, or get tomorrow’s brief", cta2="Free · no sign-up · new edition every morning, weekly review every Sunday.",
+        cta1="Get it every morning on <i>Telegram</i>", cta2="Daily PDF + quiz at 5 AM · weekly review every Sunday · English and Hindi · free, no sign-up.",
+        qr_tg="Telegram", qr_site="Website",
         disc="Notes are generated from SatyaDheesh’s news feed and mapped to the UPSC CSE syllabus. Verify facts with the original report or PIB before using them in an answer.",
         inside_b="<span><b>p.2</b> Key stories</span><span><b>»</b> In brief + places</span><span><b>»</b> Test yourself</span><span style=\"margin-left:auto\">P = Prelims · M = Mains</span>",
         contents="Contents", contents_h="Every note, grouped by paper", how_k="How each note reads",
@@ -72,7 +74,8 @@ T = {
         k_test="04 — अभ्यास", test="{n} प्रश्न", test_aside="उत्तर नीचे उल्टे लिखे हैं",
         k_mains="मेन्स अभ्यास", mains1="आज एक उत्तर लिखें", mains_n="अभ्यास के लिए मेन्स प्रश्न",
         answers="उत्तर", ask="ऊपर दिए गए कथनों में से कौन-सा/से सही है/हैं?",
-        cta1="<i>English</i> में पढ़ें, या कल का सार पाएँ", cta2="मुफ़्त · बिना साइन-अप · हर सुबह नया अंक, हर रविवार साप्ताहिक।",
+        cta1="हर सुबह <i>टेलीग्राम</i> पर पाएँ", cta2="रोज़ सुबह 5 बजे पीडीएफ + क्विज़ · हर रविवार साप्ताहिक · हिंदी और अंग्रेज़ी · मुफ़्त, बिना साइन-अप।",
+        qr_tg="टेलीग्राम", qr_site="वेबसाइट",
         disc="नोट्स सत्याधीश के समाचार फ़ीड से स्वचालित रूप से बनाए जाते हैं और यूपीएससी सीएसई पाठ्यक्रम से जुड़े हैं। उत्तर में उपयोग से पहले तथ्यों का मूल रिपोर्ट या पीआईबी से मिलान करें।",
         inside_b="<span><b>पृ.2</b> मुख्य ख़बरें</span><span><b>»</b> संक्षेप में</span><span><b>»</b> अभ्यास</span><span style=\"margin-left:auto\">P = प्रीलिम्स · M = मेन्स</span>",
         contents="विषय सूची", contents_h="सभी नोट्स, पेपर के अनुसार", how_k="हर नोट में",
@@ -186,10 +189,13 @@ def sec_head(kicker, title, aside=""):
 
 
 def cta(lang):
+    """Closing box: Telegram channel first (where the daily PDF goes), the reports page second."""
     t = T[lang]
-    url = f"{SITE}/upsc/reports" + ("" if lang == "hi" else "?lang=hi")
-    return (f'<div class="cta">{qr_svg(url)}<div><div class="t1">{t["cta1"]}</div><div class="t2">{e(t["cta2"])}</div>'
-            f'<div class="t3">satyadheesh.in/upsc/reports</div></div></div><p class="disc">{e(t["disc"])}</p>')
+    site = f"{SITE}/upsc/reports" + ("?lang=hi" if lang == "hi" else "")
+    qrs = (f'<div class="qrs"><figure>{qr_svg(TELEGRAM)}<figcaption>{e(t["qr_tg"])}</figcaption></figure>'
+           f'<figure>{qr_svg(site)}<figcaption>{e(t["qr_site"])}</figcaption></figure></div>')
+    return (f'<div class="cta">{qrs}<div><div class="t1">{t["cta1"]}</div><div class="t2">{e(t["cta2"])}</div>'
+            f'<div class="t3">t.me/satyadheesh · satyadheesh.in/upsc/reports</div></div></div><p class="disc">{e(t["disc"])}</p>')
 
 
 def mcq_block(qs, lang):

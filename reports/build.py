@@ -23,13 +23,13 @@ from . import render
 from .data import select, Window
 from .periods import periods_for, parse
 
-REPORT_VERSION = 4          # bump when layout or selection changes: every PDF is rebuilt
+REPORT_VERSION = 5          # bump when layout or selection changes: every PDF is rebuilt
 HI_READY = 0.8              # Hindi edition only once this share of the notes is translated
 CHUNK = 400 * 1024
 HERE = pathlib.Path(__file__).parent
 FOOTER = ('<div style="width:100%;font:7px Helvetica,Arial,sans-serif;color:#857d75;padding:0 12mm;display:flex;'
           'justify-content:space-between;letter-spacing:.08em"><span><b style="color:#120f0b;letter-spacing:.18em">SATYADHEESH</b>'
-          '&nbsp;&nbsp;·&nbsp;&nbsp;{label}</span><span>satyadheesh.in/upsc&nbsp;&nbsp;·&nbsp;&nbsp;'
+          '&nbsp;&nbsp;·&nbsp;&nbsp;{label}</span><span>satyadheesh.in/upsc&nbsp;&nbsp;·&nbsp;&nbsp;<b style="color:#229ED9">t.me/satyadheesh</b>&nbsp;&nbsp;·&nbsp;&nbsp;'
           '<span class="pageNumber"></span> / <span class="totalPages"></span></span></div>')
 
 

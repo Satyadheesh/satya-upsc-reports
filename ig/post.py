@@ -26,7 +26,7 @@ from tg.periods import DAY, ist_date, ist_midnight, target_ts
 
 from .caption import caption
 from .graph import IG, current_token
-from .slides import fact_pairs, slides_html
+from .slides import FIT_JS, fact_pairs, slides_html
 
 HERE = pathlib.Path(__file__).resolve().parent
 REPORTS = HERE.parent / "reports"          # fonts live here
@@ -73,7 +73,8 @@ def pick(p, w):
     return top, [hi_items[i["id"]] for i in top if i["id"] in hi_items and hi_items[i["id"]].get("hi")]
 
 
-META = re.compile(r"^(?:the|this) (?:note|article|news) (?:states|says|mentions|notes|reports) that\s+|^according to the (?:note|article),?\s+", re.I)
+META = re.compile(r"^(?:the|this) (?:note|article|news) (?:states|says|mentions|notes|reports) that\s+|^according to the (?:note|article),?\s+|"
+                  r"^(?:नोट|लेख) के अनुसार,?\s*", re.I)
 
 
 def _no_meta(t):
@@ -105,6 +106,7 @@ def render(day, stories, quiz, lang, folder):
         pg.goto(page_file.as_uri(), wait_until="load")
         pg.evaluate("document.fonts.ready")
         pg.wait_for_timeout(300)
+        pg.evaluate(FIT_JS)
         for k in range(n):
             f = folder / f"{k + 1:02d}.jpg"
             pg.locator("section.s").nth(k).screenshot(path=str(f), type="jpeg", quality=92)

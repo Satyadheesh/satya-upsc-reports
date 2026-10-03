@@ -92,6 +92,7 @@ ol.st { padding-left: 48px; margin: 0 0 26px; font-size: 38px; line-height: 1.38
 .s.long .opts { gap: 16px; }
 .s.long .opt { font-size: 34px; padding: 16px 24px; }
 .s.long .expl { font-size: 32px; }
+.c { display: flex; flex-direction: column; flex: 1; min-height: 0; overflow: visible; }
 .dark { background: var(--ink); color: var(--cream); }
 .dark .word, .dark .date { color: var(--cream); }
 .dark .sub { color: #d9d2c8; }
@@ -130,16 +131,16 @@ def slides_html(day, stories, quiz, lang):
     out, i = [], 1
     top = "".join(f'<li><span class="n">{k}</span><span>{e(s["title"])}<span class="p">{e(s["paper"])} · '
                   f'{e(subject_name(s["subject"], hi))}</span></span></li>' for k, s in enumerate(stories, 1))
-    out.append(f'<section class="s"><div class="stripe"></div>{_brand()}<div style="margin-top:56px" class="kicker">{e(t["kicker"])}</div>'
+    out.append(f'<section class="s"><div class="stripe"></div><div class="c">{_brand()}<div style="margin-top:56px" class="kicker">{e(t["kicker"])}</div>'
                f'<div class="date">{e(_date(day, hi))}</div><div class="sub">{e(t["today"])}</div><ol class="top">{top}</ol>'
-               f'<div class="swipe">{e(t["swipe"])}</div>{_foot(t, i, n)}</section>')
+               f'<div class="swipe">{e(t["swipe"])}</div></div>{_foot(t, i, n)}</section>')
     for k, s in enumerate(stories, 1):
         i += 1
         facts = "".join(f'<li>{"<b>" + e(lab) + ":</b> " if lab else ""}{e(txt)}</li>' for lab, txt in s["facts"][:3])
-        out.append(f'<section class="s"><div class="stripe"></div><div class="top-row">{_chip(s, hi)}<span class="count">{k}/{len(stories)}</span></div>'
+        out.append(f'<section class="s"><div class="stripe"></div><div class="c"><div class="top-row">{_chip(s, hi)}<span class="count">{k}/{len(stories)}</span></div>'
                    f'<h1>{e(s["title"])}</h1><div class="lbl">{e(t["why"])}</div><div class="why">{e(s["why"])}</div>'
                    + (f'<div class="lbl">{e(t["remember"])}</div><ul class="rem">{facts}</ul>' if facts else "")
-                   + f'{_foot(t, i, n)}</section>')
+                   + f'</div>{_foot(t, i, n)}</section>')
     if quiz:
         st = ("<ol class='st'>" + "".join(f"<li>{e(x)}</li>" for x in quiz["statements"]) + "</ol>"
               f'<div class="ask">{e(t["ask"])}</div>') if quiz.get("statements") else ""
@@ -150,12 +151,12 @@ def slides_html(day, stories, quiz, lang):
             tail = (f'<div class="expl"><b>{e(t["answer"])}: ({"abcd"[quiz["answer"]]})</b> {e(quiz["explanation"])}</div>' if reveal
                     else f'<div class="hint">{e(t["quiz_hint"])}  →</div>')
             long = " long" if quiz.get("statements") or len(quiz["question"]) > 160 or max(len(o) for o in quiz["options"]) > 60 else ""
-            out.append(f'<section class="s{long}"><div class="stripe"></div><div class="kicker">{e(t["quiz"] if not reveal else t["answer"])}</div>'
-                       f'<div class="q">{e(quiz["question"])}</div>{st}<div class="opts">{opts}</div>{tail}{_foot(t, i, n)}</section>')
+            out.append(f'<section class="s{long}"><div class="stripe"></div><div class="c"><div class="kicker">{e(t["quiz"] if not reveal else t["answer"])}</div>'
+                       f'<div class="q">{e(quiz["question"])}</div>{st}<div class="opts">{opts}</div>{tail}</div>{_foot(t, i, n)}</section>')
     i += 1
-    out.append(f'<section class="s dark"><div class="stripe"></div>{_brand()}<div class="date" style="margin-top:70px;font-size:76px">{e(t["cta1"])}</div>'
+    out.append(f'<section class="s dark"><div class="stripe"></div><div class="c">{_brand()}<div class="date" style="margin-top:70px;font-size:76px">{e(t["cta1"])}</div>'
                f'<div class="sub">{e(t["cta2"])}</div>{qr_svg(TELEGRAM)}<div class="tg">{e(t["cta3"])}</div>'
-               f'<div class="save">{e(t["cta4"])}</div>{_foot(t, i, n)}</section>')
+               f'<div class="save">{e(t["cta4"])}</div></div>{_foot(t, i, n)}</section>')
     return (f'<!doctype html><html lang="{lang}"><head><meta charset="utf-8"><style>{CSS}</style></head>'
             f'<body>{"".join(out)}</body></html>'), n
 
@@ -166,3 +167,20 @@ def fact_pairs(facts, pointers, hi):
         return [((FACT_LABEL_HI.get(f.get("label"), f.get("label")) if hi else f.get("label")), f.get("text"))
                 for f in facts if f.get("text")]
     return [((POINTER.get(p.get("type"), (None, None))[1 if hi else 0]), p.get("text")) for p in pointers if p.get("text")]
+
+
+# Run in the page before screenshots: a slide whose text doesn't fit loses its last 'remember' lines (keeping 2),
+# then shrinks a little at a time; text is never cut off.
+FIT_JS = """() => {
+  for (const c of document.querySelectorAll('section.s .c')) {
+    let z = 1;
+    const limit = c.getBoundingClientRect().bottom;
+    const over = () => Math.max(...[...c.children].map(x => x.getBoundingClientRect().bottom)) > limit + 1;
+    while (over()) {
+      const li = c.querySelectorAll('ul.rem li');
+      if (li.length > 2) { li[li.length - 1].remove(); continue; }
+      if (z <= 0.7) break;
+      z -= 0.04; c.style.zoom = z;
+    }
+  }
+}"""

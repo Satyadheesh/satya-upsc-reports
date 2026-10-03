@@ -32,5 +32,21 @@ try:
             print("     " + " | ".join(f"({'abcd'[i]}) {o}{' *' if i == m['answer'] else ''}" for i, o in enumerate(m["options"])))
     except Exception as e:
         print(f"upsc_kit_translations: not created yet ({type(e).__name__})")
+    print("\n== UPSC note Hindi headlines (upsc_articles.title_hi_state, last 120 days)")
+    try:
+        for st, n in up.execute("SELECT title_hi_state, COUNT(*) FROM upsc_articles WHERE published_at >= ? "
+                                "GROUP BY title_hi_state", [now - 120 * 86400]).rows:
+            print(f"  state {st}: {n}")
+        n = tr.execute("SELECT COUNT(*) FROM upsc_translations WHERE title_hi IS NOT NULL").rows[0][0]
+        print(f"  upsc_translations.title_hi filled: {n}")
+        for aid, t in tr.execute("SELECT article_id, title_hi FROM upsc_translations WHERE title_hi IS NOT NULL "
+                                 "ORDER BY translated_at DESC LIMIT 5").rows:
+            print(f"  - {aid}: {t}")
+    except Exception as e:
+        print(f"  not set up yet ({type(e).__name__}: {str(e)[:80]})")
+    print("\n== Telegram posts (last 2 days)")
+    for k, mid, at in up.execute("SELECT key, message_id, posted_at FROM telegram_posts WHERE posted_at >= ? ORDER BY posted_at",
+                                 [now - 2 * 86400]).rows:
+        print(f"  {time.strftime('%d %b %H:%M', time.gmtime(at + 19800))} IST  {k}  (msg {mid})")
 finally:
     close_all()

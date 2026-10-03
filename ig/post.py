@@ -93,9 +93,9 @@ def quiz_of(stories):
     return None
 
 
-def render(day, stories, quiz, lang, folder):
+def render(day, stories, quiz, lang, folder, is_today=True):
     from playwright.sync_api import sync_playwright
-    html, n = slides_html(day, stories, quiz, lang)
+    html, n = slides_html(day, stories, quiz, lang, is_today)
     folder.mkdir(parents=True, exist_ok=True)
     page_file = REPORTS / f"_ig_{lang}.html"   # next to reports/fonts so the bundled fonts load
     page_file.write_text(html, encoding="utf-8")
@@ -218,8 +218,9 @@ def main():
     for lang, (st, q) in posts.items():
         if not args.dry_run and posted(upsc, keys[lang]):
             continue
-        files = render(p["first"], st, q, lang, OUT / p["key"] / lang)
-        cap = caption(p["first"], st, bool(q), lang)
+        is_today = p["first"] == ist_date(time.time())
+        files = render(p["first"], st, q, lang, OUT / p["key"] / lang, is_today)
+        cap = caption(p["first"], st, bool(q), lang, is_today)
         (OUT / p["key"] / lang / "caption.txt").write_text(cap, encoding="utf-8")
         rendered[lang] = (files, cap)
         print(f"\n--- {lang}: {len(files)} slides, caption {len(cap)} chars\n{cap}")

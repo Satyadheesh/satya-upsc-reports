@@ -10,12 +10,12 @@ W, H = 1080, 1350
 TELEGRAM = "https://t.me/satyadheesh"
 
 L = {
-    "en": dict(kicker="UPSC CURRENT AFFAIRS", today="Today’s 5 for UPSC", swipe="Swipe for the notes  →",
+    "en": dict(kicker="UPSC CURRENT AFFAIRS", today="Today’s 5 for UPSC", day5="The day’s 5 for UPSC", swipe="Swipe for the notes  →",
                why="Why it matters", remember="Remember", quiz="Quick quiz", quiz_hint="Answer on the next slide",
                answer="Answer", ask="Which of the statements given above is/are correct?",
                cta1="Get the full PDF every morning", cta2="Brief + Detailed notes in English and Hindi, with a quiz, at 5 AM.",
                cta3="Telegram  @satyadheesh", cta4="Save this post for revision", site="satyadheesh.in/upsc"),
-    "hi": dict(kicker="यूपीएससी करेंट अफेयर्स", today="आज की 5 ज़रूरी ख़बरें", swipe="नोट्स के लिए स्वाइप करें  →",
+    "hi": dict(kicker="यूपीएससी करेंट अफेयर्स", today="आज की 5 ज़रूरी ख़बरें", day5="दिन की 5 ज़रूरी ख़बरें", swipe="नोट्स के लिए स्वाइप करें  →",
                why="क्यों ज़रूरी", remember="याद रखें", quiz="क्विज़", quiz_hint="उत्तर अगली स्लाइड पर",
                answer="उत्तर", ask="ऊपर दिए गए कथनों में से कौन-सा/से सही है/हैं?",
                cta1="पूरी पीडीएफ हर सुबह पाएँ", cta2="सार + विस्तृत नोट्स, हिंदी और अंग्रेज़ी में, क्विज़ के साथ, सुबह 5 बजे।",
@@ -123,7 +123,7 @@ def _chip(story, hi):
     return f'<span class="chip {story["paper"].lower()}">{e(story["paper"])} · {e(subject_name(story["subject"], hi))}</span>'
 
 
-def slides_html(day, stories, quiz, lang):
+def slides_html(day, stories, quiz, lang, is_today=True):
     """day: date; stories: up to 5 dicts {title, why, facts:[(label, text)], paper, subject};
     quiz: {question, statements|None, options, answer, explanation} or None."""
     t, hi = L[lang], lang == "hi"
@@ -132,7 +132,7 @@ def slides_html(day, stories, quiz, lang):
     top = "".join(f'<li><span class="n">{k}</span><span>{e(s["title"])}<span class="p">{e(s["paper"])} · '
                   f'{e(subject_name(s["subject"], hi))}</span></span></li>' for k, s in enumerate(stories, 1))
     out.append(f'<section class="s"><div class="stripe"></div><div class="c">{_brand()}<div style="margin-top:56px" class="kicker">{e(t["kicker"])}</div>'
-               f'<div class="date">{e(_date(day, hi))}</div><div class="sub">{e(t["today"])}</div><ol class="top">{top}</ol>'
+               f'<div class="date">{e(_date(day, hi))}</div><div class="sub">{e(t["today"] if is_today else t["day5"])}</div><ol class="top">{top}</ol>'
                f'<div class="swipe">{e(t["swipe"])}</div></div>{_foot(t, i, n)}</section>')
     for k, s in enumerate(stories, 1):
         i += 1

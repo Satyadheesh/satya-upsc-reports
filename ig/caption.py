@@ -28,10 +28,10 @@ def _short(s, n):
     return s[:k] + " …"
 
 
-def caption(day, stories, has_quiz, lang):
+def caption(day, stories, has_quiz, lang, is_today=True):
     hi = lang == "hi"
-    head = (f"आज की 5 ज़रूरी ख़बरें — यूपीएससी करेंट अफेयर्स | {_date(day, True)}" if hi
-            else f"Today’s 5 for UPSC — current affairs, {_date(day, False)}")
+    head = ((f"{'आज' if is_today else 'दिन'} की 5 ज़रूरी ख़बरें — यूपीएससी करेंट अफेयर्स | {_date(day, True)}") if hi
+            else f"{'Today’s' if is_today else 'The day’s'} 5 for UPSC — current affairs, {_date(day, False)}")
     lines = [head, ""]
     for k, s in enumerate(stories, 1):
         lines.append(f"{k}. {s['title']} ({s['paper']})")

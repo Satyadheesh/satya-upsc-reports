@@ -33,3 +33,17 @@ CREATE TABLE IF NOT EXISTS telegram_posts (
   message_id INTEGER,
   posted_at  INTEGER NOT NULL
 );
+
+-- Instagram carousel posts (one row per post, so a rerun never double-posts).
+CREATE TABLE IF NOT EXISTS ig_posts (
+  key        TEXT PRIMARY KEY,   -- e.g. ig:daily:2026-10-03:en
+  media_id   TEXT,
+  posted_at  INTEGER NOT NULL
+);
+
+-- Instagram long-lived token, refreshed by the poster (valid 60 days; refreshed weekly). Seeded from the IG_TOKEN secret.
+CREATE TABLE IF NOT EXISTS ig_auth (
+  k            TEXT PRIMARY KEY,
+  token        TEXT NOT NULL,
+  refreshed_at INTEGER NOT NULL
+);

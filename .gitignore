@@ -3,3 +3,4 @@ models/
 out/
 prev/
 *.pyc
+ig_out/

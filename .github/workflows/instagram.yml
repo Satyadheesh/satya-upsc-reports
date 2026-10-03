@@ -1,0 +1,69 @@
+name: Instagram carousel
+
+# Today's top 5 UPSC stories as a carousel at 19:00 IST: English, then Hindi (when 4 of the 5 are translated).
+# Primary start: cron-job.org calls workflow_dispatch (mode=scheduled) ~20 min early. GitHub crons are the backup,
+# plus a 21:00 IST catch-up that posts only what is missing (usually a late Hindi carousel).
+on:
+  schedule:
+    - cron: '10 13 * * *'   # 18:40 IST backup start
+    - cron: '30 15 * * *'   # 21:00 IST catch-up
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'dry-run = render slides + captions to the previews branch; check-setup = verify the token; now = post now; scheduled = wait for 19:00 IST, then post (cron-job.org)'
+        type: choice
+        options: [dry-run, check-setup, now, scheduled]
+        default: dry-run
+      langs:
+        description: 'Languages'
+        default: 'en,hi'
+
+concurrency:
+  group: instagram
+  cancel-in-progress: false
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: write     # slides go to the public ig-media branch (Instagram fetches images by URL)
+    env:
+      MODE: ${{ github.event.inputs.mode || 'scheduled' }}
+      LANGS: ${{ github.event.inputs.langs || 'en,hi' }}
+      SATYA_DB_URL: ${{ secrets.SATYA_DB_URL }}
+      SATYA_DB_TOKEN: ${{ secrets.SATYA_DB_TOKEN }}
+      SATYA_UPSC_DB_URL: ${{ secrets.SATYA_UPSC_DB_URL }}
+      SATYA_UPSC_DB_TOKEN: ${{ secrets.SATYA_UPSC_DB_TOKEN }}
+      SATYA_TRANSLATION_DB_URL: ${{ secrets.SATYA_TRANSLATION_DB_URL }}
+      SATYA_TRANSLATION_DB_TOKEN: ${{ secrets.SATYA_TRANSLATION_DB_TOKEN }}
+      IG_TOKEN: ${{ secrets.IG_TOKEN }}
+      GITHUB_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: pw-chromium-${{ runner.os }}-v1
+      - name: Install
+        run: |
+          pip install libsql-client playwright qrcode requests
+          python -m playwright install --with-deps chromium
+      - run: python -m unittest discover -s tests -t . -p 'test_ig.py'
+      - name: Migrate schema (idempotent)
+        run: python migrate.py
+      - name: Post
+        run: |
+          if [ "$MODE" != dry-run ] && [ -z "$IG_TOKEN" ]; then
+            echo "::notice::IG_TOKEN not set yet — skipping"; exit 0
+          fi
+          case "$MODE" in
+            dry-run)     python -m ig.post --dry-run --langs "$LANGS" | tee /tmp/out.txt ;;
+            check-setup) python -m ig.post --check-setup | tee /tmp/out.txt ;;
+            now)         python -m ig.post --now --langs "$LANGS" | tee /tmp/out.txt ;;
+            *)           python -m ig.post --at 19:00 --langs "$LANGS" | tee /tmp/out.txt ;;
+          esac
+          echo "::notice title=Instagram $MODE::$(tail -c 3000 /tmp/out.txt | sed -e ':a' -e 'N' -e '$!ba' -e 's/%/%25/g' -e 's/\n/%0A/g')"

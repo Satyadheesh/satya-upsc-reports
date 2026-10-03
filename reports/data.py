@@ -30,7 +30,35 @@ over said says such than that their there these they this those under were what 
 india indian government centre state states news today live updates update year""".split())
 COLS = ("a.article_id, a.published_at, a.event_id, a.upsc_score, a.exam_type, a.gs_paper, a.subject, a.syllabus_node, "
         "a.why_in_news, a.fact_box, a.prelims_pointers, a.mains_question, a.keywords, "
-        "k.status, k.short_title, k.takeaway, k.brief_lead, k.brief_text, k.facts, k.mcq")
+        "k.status, k.short_title, k.takeaway, k.brief_lead, k.brief_text, k.facts, k.mcq, a.cluster_id")
+NUM_STORY = re.compile(r"\b\d{2,}\b")
+CUT_SEPS = (". ", "; ", ": ", " — ", ", ")
+
+
+def uncut(t):
+    """Older notes were clipped mid-word with '…' (fixed in the UPSC service, v2.7): trim back to the last full clause."""
+    t = t or ""
+    if not t.rstrip().endswith("…"):
+        return t
+    head = t.rstrip()[:-1]
+    for sep in CUT_SEPS:
+        k = head.rfind(sep)
+        if k >= len(head) // 2:
+            return head[:k].rstrip(" ,;:—") + ("." if sep == ". " else "")
+    return t
+
+
+def story_numbers(text):
+    return {n for n in NUM_STORY.findall(text or "") if not re.fullmatch(r"(19|20)\d\d", n)}
+
+
+def same_headline(a_title, b_title):
+    """The same story told twice (two outlets, often filed under different papers): the headlines share 4+ words
+    (Jaccard >= 0.3), or a story number (not a year) plus 2 words. Same rule as the site's feed."""
+    ta, tb = _tokens(a_title, STOP_DUP), _tokens(b_title, STOP_DUP)
+    sh = len(ta & tb)
+    u = len(ta) + len(tb) - sh
+    return (sh >= 4 and (sh / u if u else 0) >= 0.3) or (bool(story_numbers(a_title) & story_numbers(b_title)) and sh >= 2)
 
 
 def _arr(v):
@@ -144,7 +172,8 @@ class Window:
 def dedupe_across_days(items):
     by_key = {}
     for it in items:
-        k = f"e:{it['event']['slug']}" if it.get("event") else f"a:{it['id']}"
+        k = (f"e:{it['event']['slug']}" if it.get("event") else f"c:{it['cluster']}" if it.get("cluster")
+             else f"a:{it['id']}")
         prev = by_key.get(k)
         if not prev:
             by_key[k] = dict(it)
@@ -156,16 +185,18 @@ def dedupe_across_days(items):
 
 
 def hydrate(rows, w, lang="en"):
-    out, seen_ev, recent = [], {}, []
+    out, seen_ev, seen_cl, recent = [], {}, {}, []
     for r in rows:
         (aid, pub, ev, score, exam, paper, subject, node, why, fact, ptrs, mains, kws,
-         kstatus, ktitle, ktake, klead, ktext, kfacts, kmcq) = r
+         kstatus, ktitle, ktake, klead, ktext, kfacts, kmcq, cluster) = r
         a = w.arts.get(aid)
         if not a:
             continue
-        if ev is not None and ev in seen_ev:
-            seen_ev[ev]["related"] += 1
+        twin = (seen_ev.get(ev) if ev is not None else None) or (seen_cl.get(cluster) if cluster else None)
+        if twin:  # same event or same news cluster
+            twin["related"] += 1
             continue
+        why = uncut(why)
         title_en = upsc_title(a[1], a[2], why)
         h = w.hi_note.get(aid) or {}
         hi = lang == "hi"
@@ -178,15 +209,19 @@ def hydrate(rows, w, lang="en"):
                         or [q for q in _arr(ptrs) if isinstance(q, dict) and q.get("text")],
             "mains": (h.get("mains") if hi else None) or mains,
             "keywords": [k for k in _arr(kws) if isinstance(k, str)],
-            "source": a[4], "url": a[3], "event": w.events.get(ev), "event_id": ev, "related": 0,
+            "source": a[4], "url": a[3], "event": w.events.get(ev), "event_id": ev, "cluster": cluster, "related": 0,
             "hi": bool(h.get("why")),
             "kit_hi": w.hi_kit.get(aid) if hi else None,
             "kit": ({"short_title": ktitle, "takeaway": ktake, "brief_lead": klead, "brief_text": ktext,
                      "facts": _arr(kfacts), "mcq": _obj(kmcq)} if kstatus == "done" else None),
         }
-        toks = _tokens(f"{item['title']} {item['why']}", STOP_DUP)
+        toks = _tokens(f"{title_en} {why or ''}", STOP_DUP)  # English in both languages, like the site
         dup = False
-        for q, qtoks in recent:  # near-duplicate within 48 h, same paper + subject (site rule)
+        for q, qtoks in recent:  # same headline across papers (72 h), or near-duplicate in the same paper + subject (48 h)
+            if abs(q["published_at"] - pub) <= 3 * DAY and same_headline(q["title_en"], title_en):
+                q["related"] += 1
+                dup = True
+                break
             if abs(q["published_at"] - pub) <= 2 * DAY and q["paper"] == paper and q["subject"] == subject:
                 sh = len(toks & qtoks)
                 u = len(toks) + len(qtoks) - sh
@@ -199,6 +234,8 @@ def hydrate(rows, w, lang="en"):
             continue
         if ev is not None:
             seen_ev[ev] = item
+        if cluster:
+            seen_cl[cluster] = item
         recent.append((item, toks))
         out.append(item)
     return out
@@ -209,6 +246,9 @@ def by_importance(x):
 
 
 def _same_story(a, b):
+    if (a.get("cluster") and a.get("cluster") == b.get("cluster")) or (
+            abs(a["published_at"] - b["published_at"]) <= 3 * DAY and same_headline(a["title_en"], b["title_en"])):
+        return True
     if a["paper"] != b["paper"]:
         return False
     ka = {k.lower().strip() for k in a["keywords"]}

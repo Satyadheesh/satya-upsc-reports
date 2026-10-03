@@ -78,3 +78,14 @@ class OddTopStories(unittest.TestCase):
         b = {"score": 4, "demote": 0, "related": 0, "published_at": 1}
         c = {"score": 3, "demote": 0, "related": 0, "published_at": 1}
         self.assertEqual(sorted([a, c, b], key=by_importance), [b, a, c])
+
+
+class OddTopStories2(unittest.TestCase):
+    def test_more(self):
+        from reports.data import upsc_title, demotion, clean_title
+        why = "The Embassy of India in Oman reported the evacuation of Indian nationals from Salalah."
+        t, src = upsc_title("The Embassy of India in Oman reported on Friday, October 2, 2026", None, why, True)
+        self.assertEqual(src, "why")
+        self.assertEqual(demotion("IFCI, New India Assurance, other stocks drop up to 3% as NSE makes a muted market debut", None), 1)
+        self.assertEqual(clean_title("Developing El NiÃ±o becomes strongest on record"), "Developing El Niño becomes strongest on record")
+        self.assertEqual(clean_title("India’s bid"), "India’s bid")

@@ -83,8 +83,21 @@ def clean_hi(t):
     return " ".join(t.split())
 
 
+def unmojibake(t):
+    """'El NiÃ±o' -> 'El Niño' (UTF-8 read as Latin-1 somewhere upstream)."""
+    if t and re.search(r"Ã.|â€", t):
+        try:
+            return t.encode("cp1252").decode("utf-8")
+        except (UnicodeEncodeError, UnicodeDecodeError):
+            try:
+                return t.encode("latin-1").decode("utf-8")
+            except (UnicodeEncodeError, UnicodeDecodeError):
+                return t
+    return t
+
+
 def clean_title(t):
-    t = re.sub(r"\*\*|\*|`", "", t or "")
+    t = re.sub(r"\*\*|\*|`", "", unmojibake(t or ""))
     return re.sub(r"\s[-|]\s[^-|]+$", "", t).strip()
 
 
@@ -107,10 +120,11 @@ PERSON_ROLE = re.compile(r"^(?:[A-Z][\w.'-]*\s){1,4}[A-Z][\w.'-]*,\s+(?:Co-?foun
                          r"Chairperson|Director|President|Head|Chief|Partner|Economist|Analyst|Professor|Editor)\b")
 LIVE_BLOG = re.compile(r"\bLIVE\b|\blive updates\b|\blive:\s", re.I)
 # A lead sentence cut short and used as a headline ('On 13 September 2026, Indian High Commissioner ... met with high-level').
+DATE_END = re.compile(r"\bon\s+(?:[A-Z][a-z]+day,?\s+)?(?:[A-Z][a-z]+\s+\d{1,2}|\d{1,2}\s+[A-Z][a-z]+),?\s+\d{4}$")
 DATE_LEAD = re.compile(r"^On\s+\d{1,2}\s+[A-Z][a-z]+(?:\s+\d{4})?,|^On\s+[A-Z][a-z]+day,|^This\s+(?:week|weekend|morning)\b")
 CUT_WORDS = {"million", "billion", "trillion", "crore", "lakh", "thousand", "high-level", "per"}
 # Stock-tip and share-price stories: not UPSC material even when the model scored them high.
-MARKET = re.compile(r"\bshares?\s+(?:rise|rises|rose|fall|falls|fell|plummet\w*|plunge\w*|jump\w*|surge\w*|slump\w*|gain\w*|"
+MARKET = re.compile(r"\b(?:shares?|stocks?)\s+(?:drop\w*|rise|rises|rose|fall|falls|fell|plummet\w*|plunge\w*|jump\w*|surge\w*|slump\w*|gain\w*|"
                     r"tumble\w*|soar\w*|sink\w*|rall\w*|up|down)\b|\bstocks?\s+to\s+(?:buy|watch)\b|\btarget price\b|"
                     r"\bbrokerage\b|Goldman Sachs|\bmultibagger\b", re.I)
 REGULATOR = re.compile(r"\b(?:SEBI|Sebi|RBI|government|Govt|ministry|Cabinet|Centre|Parliament)\b")
@@ -141,7 +155,7 @@ def upsc_title(rephrased, original, why, with_source=False):
         last = re.sub(r"[^a-z0-9.-]", "", w[-1].lower())
         if last in DANGLING or last in CUT_WORDS or (len(last) <= 1 and not last.isdigit()):
             return None
-        if PERSON_ROLE.match(t) or LIVE_BLOG.search(t) or DATE_LEAD.match(t) or t.count('"') % 2:
+        if PERSON_ROLE.match(t) or LIVE_BLOG.search(t) or DATE_LEAD.match(t) or DATE_END.search(t) or t.count('"') % 2:
             return None  # not a headline: a name + job title, a live blog, a cut lead sentence
         if why_toks and len(_tokens(t, STOP_DUP) & why_toks) < 1:
             return None  # about something else

@@ -88,7 +88,26 @@ def clean_title(t):
     return re.sub(r"\s[-|]\s[^-|]+$", "", t).strip()
 
 
-def upsc_title(rephrased, original, why):
+def why_title(why):
+    """A headline made from 'why in news': its first sentence, cut back at a clause if long (no '…')."""
+    w = " ".join((why or "").split())
+    m = re.search(r"[।!?]|\.(?=\s|$)", w)  # not the dot inside 87.7%
+    first = w[: m.start()] if m else w
+    if len(first) <= 130:
+        return first
+    for sep in (", ", "; ", " — "):
+        k = first.rfind(sep, 0, 130)
+        if k > 50:
+            return first[:k]
+    return first[: first.rfind(" ", 0, 130)]
+
+
+def upsc_title(rephrased, original, why, with_source=False):
+    """The note's headline, and where it came from: 'headline' (the news headline), 'original' (the source's own
+    title) or 'why' (made from why-in-news). A headline about something else than the note (e.g. 'Sarvjeet Singh
+    Virk, Co-founder & MD of Shoonya' on a SEBI F&O study) shares no key word with why-in-news and is not used."""
+    why_toks = _tokens(why, STOP_DUP)
+
     def ok(t):
         if not t:
             return None
@@ -99,9 +118,14 @@ def upsc_title(rephrased, original, why):
         last = re.sub(r"[^a-z0-9.]", "", w[-1].lower())
         if last in DANGLING or (len(last) <= 1 and not last.isdigit()):
             return None
+        if why_toks and len(_tokens(t, STOP_DUP) & why_toks) < 1:
+            return None  # about something else
         return t
-    return clean_title(ok(rephrased) or ok(original) or (why.strip() if why and len(why.strip()) >= 15 else "")
-                       or (rephrased or original or "").strip())
+    for src, t in (("headline", ok(rephrased)), ("original", ok(original)), ("why", why_title(why) if why and len(why.strip()) >= 15 else None)):
+        if t:
+            return (clean_title(t), src) if with_source else clean_title(t)
+    t = clean_title((rephrased or original or "").strip())
+    return (t, "headline") if with_source else t
 
 
 def _tokens(text, stop, stem=False):
@@ -197,12 +221,13 @@ def hydrate(rows, w, lang="en"):
             twin["related"] += 1
             continue
         why = uncut(why)
-        title_en = upsc_title(a[1], a[2], why)
+        title_en, title_src = upsc_title(a[1], a[2], why, with_source=True)
         h = w.hi_note.get(aid) or {}
         hi = lang == "hi"
         item = {
             "id": aid, "published_at": pub, "score": score, "exam": exam, "paper": paper, "subject": subject, "node": node,
-            "title_en": title_en, "title": (w.hi_title.get(aid) if hi else None) or title_en,
+            # Hindi headline only when it translates the headline English uses; otherwise made from the Hindi why-in-news
+            "title_en": title_en, "title": (w.hi_title.get(aid) if hi and title_src == "headline" else None) or title_en,
             "why": (h.get("why") if hi else None) or why or "",
             "fact_box": (h.get("fact") if hi else None) or fact or "",
             "pointers": (h.get("pointers") if hi and h.get("pointers") else None)
@@ -301,14 +326,7 @@ def hindi_title(it):
     """Hindi report: a note whose headline has no Hindi translation gets the start of its Hindi 'why in news'."""
     if DEVANAGARI.search(it["title"]) or not DEVANAGARI.search(it["why"]):
         return it["title"]
-    w = it["why"].strip()
-    m = re.search(r"[।!?]|\.(?=\s|$)", w)  # not the dot inside 87.7%
-    if m and 20 < m.start() <= 120:
-        return w[:m.start()]
-    if len(w) <= 110:
-        return w
-    cut = w.rfind(" ", 0, 100)
-    return w[: cut if cut > 40 else 100] + "…"
+    return why_title(it["why"])
 
 
 def select(period, en_items, hi_items=None):

@@ -39,3 +39,13 @@ class SameEditions(unittest.TestCase):
         from reports.data import same_kit
         e, h = same_kit({"short_title": "A", "facts": [{"label": "Act", "text": "a"}]}, {"short_title": "ए", "facts": []})
         self.assertIsNone(e["facts"]); self.assertIsNone(h["facts"])
+
+
+class Headline(unittest.TestCase):
+    def test_off_topic_headline_replaced_by_why_in_news(self):
+        from reports.data import upsc_title
+        t, src = upsc_title("Sarvjeet Singh Virk, Co-founder & MD of Shoonya", None,
+                            "SEBI's FY25-26 study revealed that 87.7% of individual equity derivative traders incurred net losses.", True)
+        self.assertEqual(src, "why")
+        self.assertIn("87.7%", t)
+        self.assertNotIn("…", t)

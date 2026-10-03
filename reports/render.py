@@ -303,6 +303,13 @@ def brief(p, items, total, lang):
         k = kit(it)
         return (k or {}).get("short_title") or it["title"]
 
+    def facts_both(it):
+        """(English fact, fact in this report's language) pairs, so number-of-the-day, static and places are chosen
+        on the English facts and both editions pick the same ones."""
+        fe = (it.get("kit") or {}).get("facts") or []
+        fd = (kit(it) or {}).get("facts") or []
+        return list(zip(fe, fd)) if len(fe) == len(fd) else []
+
     tops = "".join(
         f'<li><div class="num">{i + 1}</div><div><div class="hl">{e(short_title(it))}</div>'
         f'<div class="why"><b>{e(t["matters"])}</b> {e((kit(it) or {}).get("takeaway") or first_sentence(it["why"]))}</div>'
@@ -315,11 +322,13 @@ def brief(p, items, total, lang):
     # Number of the day / week in numbers + connect to static (study-kit facts, English only)
     figures, static = [], None
     for it in cards:
-        for f in ((kit(it) or {}).get("facts") or []):
+        for fe, f in facts_both(it):
+            name_e = split_fact(fe["text"])[0]
             name, rest_t = split_fact(f["text"])
-            if f["label"] == "Figure" and name and len(name) <= 18 and re.search(r"\d", name):
+            name = name or name_e
+            if fe["label"] == "Figure" and name_e and len(name_e) <= 18 and re.search(r"\d", name_e):
                 figures.append((name, rest_t, it))
-            if static is None and f["label"] in ("Case", "Act") and name:
+            if static is None and fe["label"] in ("Case", "Act") and name_e:
                 static = (name, rest_t, it)
     boxes = ""
     if p["kind"] == "daily" and (figures or static):
@@ -367,11 +376,12 @@ def brief(p, items, total, lang):
             groups.append(f'<div class="grp">{chip(paper, (PAPER_HINT[paper][1] if hi else PAPER_HINT[paper][0]))}<ul>{"".join(li)}</ul></div>')
         places, seen = [], set()
         for it in items:
-            for f in ((kit(it) or {}).get("facts") or []):
+            for fe, f in facts_both(it):
+                name_e = split_fact(fe["text"])[0]
                 name, desc = split_fact(f["text"])
-                if f["label"] == "Place" and name and name.lower() not in seen and len(places) < 5:
-                    seen.add(name.lower())
-                    places.append(f'<tr><td>{e(name)}</td><td>{e(clip(desc, 140))}</td></tr>')
+                if fe["label"] == "Place" and name_e and name_e.lower() not in seen and len(places) < 5:
+                    seen.add(name_e.lower())
+                    places.append(f'<tr><td>{e(name or name_e)}</td><td>{e(clip(desc, 140))}</td></tr>')
         pl = (f'<div class="places"><div class="kicker">{e(t["k_places"])}</div><h2 class="sec" style="font-size:13pt;margin:.4mm 0 1.6mm">'
               f'{e(t["places"])}</h2><table>{"".join(places)}</table></div>') if len(places) >= 3 else ""
         p3 = (f'<section class="page">{sec_head(t["k_brief"], t["inbrief_h"], t["brief_aside"].format(n=len(rest)))}'

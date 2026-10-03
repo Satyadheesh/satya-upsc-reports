@@ -18,3 +18,24 @@ class SameStory(unittest.TestCase):
         self.assertEqual(uncut("The court ruled on the plea, citing Article 21, and asked the Centre to respo…"),
                          "The court ruled on the plea, citing Article 21")
         self.assertEqual(uncut("Complete sentence."), "Complete sentence.")
+
+
+class SameEditions(unittest.TestCase):
+    """Yash, 3 Oct: the Hindi and English reports differed (headline, why it matters, number of the day)."""
+
+    def test_kit_part_only_one_language_has_is_dropped_from_both(self):
+        from reports.data import same_kit
+        en = {"short_title": "A", "takeaway": "T", "brief_lead": "L", "brief_text": "B", "mcq": {"q": 1},
+              "facts": [{"label": "Figure", "text": "13.3 crore — names"}, {"label": "Place", "text": "X — y"}]}
+        hi = {"short_title": "ए", "takeaway": "टी", "brief_lead": None, "brief_text": None, "mcq": None,
+              "facts": [{"label": "Figure", "text": "13.3 करोड़ — नाम"}, {"label": "Place", "text": "एक्स — वाई"}]}
+        e, h = same_kit(en, hi)
+        self.assertIsNone(e["mcq"]); self.assertIsNone(h["mcq"])
+        self.assertIsNone(e["brief_lead"]); self.assertIsNone(h["brief_lead"])
+        self.assertEqual([f["label"] for f in h["facts"]], ["Figure", "Place"])
+        self.assertEqual(same_kit(en, None), (None, None))
+
+    def test_facts_that_cannot_be_matched_are_dropped_from_both(self):
+        from reports.data import same_kit
+        e, h = same_kit({"short_title": "A", "facts": [{"label": "Act", "text": "a"}]}, {"short_title": "ए", "facts": []})
+        self.assertIsNone(e["facts"]); self.assertIsNone(h["facts"])

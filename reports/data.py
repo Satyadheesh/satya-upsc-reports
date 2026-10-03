@@ -330,3 +330,47 @@ def select(period, en_items, hi_items=None):
         if h and h["hi"]:
             out.append({**h, "title": hindi_title(h), "related": en["related"], "kit": en["kit"], "kit_hi": h.get("kit_hi")})
     return out, total, (len(out) / len(chosen) if chosen else 0.0)
+
+
+KIT_FIELDS = ("takeaway", "brief_lead", "brief_text", "mcq")
+
+
+def same_kit(en_kit, hi_kit):
+    """The study-kit parts both languages have, as (english, hindi) — or (None, None).
+    A part only one language has is dropped from both, so the two reports say the same things."""
+    if not (en_kit and hi_kit and en_kit.get("short_title") and hi_kit.get("short_title")):
+        return None, None
+    e, h = dict(en_kit), dict(hi_kit)
+    for f in KIT_FIELDS:
+        if not (e.get(f) and h.get(f)):
+            e[f] = h[f] = None
+    if not (e.get("brief_lead") and e.get("brief_text") and h.get("brief_lead") and h.get("brief_text")):
+        e["brief_lead"] = e["brief_text"] = h["brief_lead"] = h["brief_text"] = None
+    fe, fh = e.get("facts") or [], h.get("facts") or []
+    if len(fe) == len(fh) and fe:
+        h["facts"] = [{**fh[i], "label": fe[i].get("label")} for i in range(len(fe))]  # same order, same labels
+    else:
+        e["facts"] = h["facts"] = None  # can't be matched one-to-one: both use the note's own pointers
+    return e, h
+
+
+def editions(period, en_items, hi_items, ready=0.8):
+    """The English and Hindi editions of one report, built to carry exactly the same stories in the same order
+    with the same parts (headline, why it matters, facts, quiz, In-brief line). Returns (en, hi, total, share):
+    share = how much of the English selection has Hindi; the Hindi edition is only built when it is high enough,
+    and then both editions use only the stories that have Hindi (chosen again from that pool)."""
+    chosen, total, share = select(period, en_items, hi_items)
+    if hi_items is None:
+        return chosen, None, total, 1.0
+    hi_by_id = {i["id"]: i for i in hi_items if i.get("hi")}
+    if not chosen or share < ready:
+        en_only, total, _ = select(period, en_items)
+        return en_only, None, total, share
+    en_sel, total, _ = select(period, [i for i in en_items if i["id"] in hi_by_id])
+    en_out, hi_out = [], []
+    for en in en_sel:
+        h = hi_by_id[en["id"]]
+        ke, kh = same_kit(en.get("kit"), h.get("kit_hi"))
+        en_out.append({**en, "kit": ke})
+        hi_out.append({**h, "title": hindi_title(h), "related": en["related"], "kit": ke, "kit_hi": kh})
+    return en_out, hi_out, total, share

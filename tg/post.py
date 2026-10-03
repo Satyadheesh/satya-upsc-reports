@@ -20,7 +20,8 @@ import requests
 
 from common.db import close_all, main_db, translation_db, upsc_db
 
-from reports.data import Window, select
+from reports.data import Window, editions, select
+from reports.render import SIZE, pick_cards
 
 from .content import caption, quiz_polls, read_editions
 from .periods import file_key, file_name, label, period_for, target_ts
@@ -119,12 +120,14 @@ def main():
     # Top stories = the report's own top stories (same selection as the PDF)
     w = Window(upsc, main, p["start"], p["end"], trans)
     en_items = w.period(p, "en")
-    chosen_en = select(p, en_items)[0][:5]
-    heads_en = [(((it.get("kit") or {}).get("short_title") or it["title"]), it["paper"]) for it in chosen_en]
+    n_top, n_cards = SIZE[p["kind"]][:2]
+    top = lambda items: pick_cards(items, n_cards, p["kind"])[:n_top]  # the PDF's own 'top stories'
+    en_ed, hi_ed, _, _ = editions(p, en_items, w.period(p, "hi") if hi_pdfs else None)
+    heads_en = [(((it.get("kit") or {}).get("short_title") or it["title"]), it["paper"]) for it in top(en_ed)]
     cap_en = caption(p, en_meta["items"], heads_en, hi=False, both=len(en_pdfs) > 1)
 
     def hindi_caption(w):
-        chosen_hi = select(p, w.period(p, "en"), w.period(p, "hi"))[0][:5]
+        chosen_hi = top(editions(p, w.period(p, "en"), w.period(p, "hi"))[1] or [])
         return caption(p, hi_meta["items"], [(((it.get("kit_hi") or {}).get("short_title") or it["title"]), it["paper"])
                                              for it in chosen_hi], hi=True, both=len(hi_pdfs) > 1)
     cap_hi = hindi_caption(w) if hi_pdfs else None

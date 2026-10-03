@@ -20,7 +20,7 @@ import time
 from common.db import close_all, main_db, translation_db, upsc_db
 
 from . import render
-from .data import select, Window
+from .data import Window, editions, select
 from .periods import periods_for, parse
 
 REPORT_VERSION = 5          # bump when layout or selection changes: every PDF is rebuilt
@@ -122,14 +122,14 @@ def main():
         en_items = w.period(p, "en")
         if not en_items:
             continue
-        chosen_en, total, _ = select(p, en_items)
+        # Both editions are chosen together (reports/data.editions): same stories, same parts, so the Hindi report
+        # is the English one in Hindi. Without enough Hindi yet, only the English edition is built.
+        chosen_en, chosen_hi, total, share = editions(p, en_items, w.period(p, "hi") if trans is not None else None, HI_READY)
         langs = [("en", chosen_en, 1.0)]
-        if trans is not None:
-            chosen_hi, _, share = select(p, en_items, w.period(p, "hi"))
-            if share >= HI_READY:
-                langs.append(("hi", chosen_hi, share))
-            else:
-                print(f"  {p['kind']}:{p['key']}:hi not ready ({share:.0%} translated)")
+        if chosen_hi is not None:
+            langs.append(("hi", chosen_hi, share))
+        elif trans is not None:
+            print(f"  {p['kind']}:{p['key']}:hi not ready ({share:.0%} translated)")
         for lang, items, _ in langs:
             for edition in ("brief", "detailed"):
                 key = f"{p['kind']}:{p['key']}:{lang}:{edition}"

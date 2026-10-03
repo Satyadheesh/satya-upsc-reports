@@ -21,7 +21,7 @@ import time
 import requests
 
 from common.db import close_all, main_db, translation_db, upsc_db
-from reports.data import Window, hindi_title, select
+from reports.data import Window, editions, hindi_title, select
 from tg.periods import DAY, ist_date, ist_midnight, target_ts
 
 from .caption import caption
@@ -64,13 +64,12 @@ def story(it, lang):
 
 
 def pick(p, w):
-    """Top 5 of the day (same order as the reports), stories with a study kit first so slides have takeaways + facts."""
-    en_items = w.period(p, "en")
-    chosen = select(p, en_items)[0]
-    ranked = [i for i in chosen if i.get("kit")] + [i for i in chosen if not i.get("kit")]
-    top = ranked[:5]
-    hi_items = {i["id"]: i for i in select(p, en_items, w.period(p, "hi"))[0]}
-    return top, [hi_items[i["id"]] for i in top if i["id"] in hi_items and hi_items[i["id"]].get("hi")]
+    """Top 5 of the day (same order as the reports), stories with a study kit first so slides have takeaways + facts.
+    English and Hindi come from the same pairing as the PDFs (reports.data.editions): the same 5 stories with the same
+    parts, so the Hindi carousel is the English one in Hindi. Without enough Hindi yet: English only."""
+    en_ed, hi_ed, _, _ = editions(p, w.period(p, "en"), w.period(p, "hi"))
+    order = sorted(range(len(en_ed)), key=lambda k: (not en_ed[k].get("kit"), k))[:5]
+    return [en_ed[k] for k in order], ([hi_ed[k] for k in order] if hi_ed else [])
 
 
 META = re.compile(r"^(?:the|this) (?:note|article|news) (?:states|says|mentions|notes|reports) that\s+|^according to the (?:note|article),?\s+|"
@@ -84,8 +83,10 @@ def _no_meta(t):
     return out[:1].upper() + out[1:] if out != t else t
 
 
-def quiz_of(stories):
+def quiz_of(stories, only_id=None):
     for s in stories:
+        if only_id is not None and s["id"] != only_id:
+            continue
         m = s.get("mcq")
         if m and m.get("options") and len(m["options"]) == 4 and len(m.get("question", "")) <= 260:
             return {"question": m["question"], "statements": m.get("statements"), "options": m["options"],
@@ -204,13 +205,15 @@ def main():
         print(f"::warning::only {len(top)} notes today; nothing posted")
         return
     posts = {}
+    st_en = [story(i, "en") for i in top]
+    q_en = quiz_of(st_en)
+    q_id = next((s["id"] for s in st_en if q_en and s.get("mcq") and s["mcq"].get("question") == q_en["question"]), None)
     if "en" in langs:
-        st = [story(i, "en") for i in top]
-        posts["en"] = (st, quiz_of(st))
+        posts["en"] = (st_en, q_en)
     if "hi" in langs:
         if len(top_hi) >= HI_MIN:
             st = [story(i, "hi") for i in top_hi]
-            posts["hi"] = (st, quiz_of(st))
+            posts["hi"] = (st, quiz_of(st, q_id) if q_id is not None else None)
         else:
             print(f"::warning::Hindi: {len(top_hi)} of {len(top)} stories translated (needs {HI_MIN}); the 21:00 IST catch-up retries")
 

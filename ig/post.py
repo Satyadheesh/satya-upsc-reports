@@ -73,12 +73,22 @@ def pick(p, w):
     return top, [hi_items[i["id"]] for i in top if i["id"] in hi_items and hi_items[i["id"]].get("hi")]
 
 
+META = re.compile(r"^(?:the|this) (?:note|article|news) (?:states|says|mentions|notes|reports) that\s+|^according to the (?:note|article),?\s+", re.I)
+
+
+def _no_meta(t):
+    """'The note states that the Chairperson receives…' -> 'The Chairperson receives…' (readers never see 'the note')."""
+    t = " ".join(str(t or "").split())
+    out = META.sub("", t)
+    return out[:1].upper() + out[1:] if out != t else t
+
+
 def quiz_of(stories):
     for s in stories:
         m = s.get("mcq")
         if m and m.get("options") and len(m["options"]) == 4 and len(m.get("question", "")) <= 260:
             return {"question": m["question"], "statements": m.get("statements"), "options": m["options"],
-                    "answer": int(m["answer"]), "explanation": tidy(m.get("explanation"), 260)}
+                    "answer": int(m["answer"]), "explanation": tidy(_no_meta(m.get("explanation")), 260)}
     return None
 
 

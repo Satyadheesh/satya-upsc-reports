@@ -66,26 +66,32 @@ ol.top .p { font: 600 20px var(--mono); color: var(--ink3); letter-spacing: .08e
 .gs1 { background: var(--gs1); } .gs2 { background: var(--gs2); } .gs3 { background: var(--gs3); } .gs4 { background: var(--gs4); }
 .top-row { display: flex; justify-content: space-between; align-items: center; }
 .count { font: 600 26px var(--mono); color: var(--ink3); }
-h1 { font: 900 66px/1.1 var(--display); margin: 34px 0 30px; letter-spacing: -.01em; }
-:lang(hi) h1 { font-size: 60px; line-height: 1.3; }
-.lbl { font: 600 22px var(--mono); letter-spacing: .14em; color: var(--accent); text-transform: uppercase; margin-bottom: 10px; }
+h1 { font: 900 76px/1.1 var(--display); margin: 44px 0 40px; letter-spacing: -.01em; }
+:lang(hi) h1 { font-size: 68px; line-height: 1.3; }
+.lbl { font: 600 25px var(--mono); letter-spacing: .14em; color: var(--accent); text-transform: uppercase; margin-bottom: 10px; }
 :lang(hi) .lbl { letter-spacing: .02em; font-size: 25px; }
-.why { font-size: 35px; line-height: 1.42; padding-bottom: 30px; border-bottom: 3px solid var(--rule); margin-bottom: 30px; }
-ul.rem { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 18px; }
-ul.rem li { position: relative; padding-left: 34px; font-size: 31px; line-height: 1.38; color: var(--ink2); }
-ul.rem li::before { content: ''; position: absolute; left: 0; top: 16px; width: 14px; height: 14px; background: var(--accent); }
+.why { font-size: 41px; line-height: 1.42; padding-bottom: 40px; border-bottom: 3px solid var(--rule); margin-bottom: 40px; }
+ul.rem { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 26px; }
+ul.rem li { position: relative; padding-left: 38px; font-size: 36px; line-height: 1.4; color: var(--ink2); }
+ul.rem li::before { content: ''; position: absolute; left: 0; top: 19px; width: 16px; height: 16px; background: var(--accent); }
 ul.rem b { color: var(--ink); }
-.q { font: 700 40px/1.35 var(--sans); margin: 36px 0 26px; }
-ol.st { padding-left: 44px; margin: 0 0 22px; font-size: 31px; line-height: 1.38; display: flex; flex-direction: column; gap: 10px; }
-.ask { font: 500 30px var(--sans); color: var(--ink2); margin-bottom: 20px; }
-.opts { display: flex; flex-direction: column; gap: 16px; }
-.opt { display: grid; grid-template-columns: 60px 1fr; align-items: center; gap: 16px; font-size: 32px; line-height: 1.3;
-       background: #fff; border: 3px solid var(--rule); border-radius: 14px; padding: 16px 22px; }
-.opt i { font: 600 30px var(--mono); font-style: normal; color: var(--accent); }
+.q { font: 700 50px/1.32 var(--sans); margin: 48px 0 40px; }
+ol.st { padding-left: 48px; margin: 0 0 26px; font-size: 38px; line-height: 1.38; display: flex; flex-direction: column; gap: 10px; }
+.ask { font: 500 36px var(--sans); color: var(--ink2); margin-bottom: 26px; }
+.opts { display: flex; flex-direction: column; gap: 22px; }
+.opt { display: grid; grid-template-columns: 72px 1fr; align-items: center; gap: 16px; font-size: 40px; line-height: 1.3;
+       background: #fff; border: 3px solid var(--rule); border-radius: 16px; padding: 24px 28px; }
+.opt i { font: 600 36px var(--mono); font-style: normal; color: var(--accent); }
 .opt.ok { border-color: var(--gs1); background: #e6f2ec; }
 .opt.ok i { color: var(--gs1); }
 .hint { margin-top: auto; font: 600 26px var(--mono); color: var(--ink3); letter-spacing: .06em; }
-.expl { margin-top: 28px; font-size: 31px; line-height: 1.42; color: var(--ink2); }
+.expl { margin-top: 36px; font-size: 37px; line-height: 1.42; color: var(--ink2); }
+.s.long .q { font-size: 42px; margin: 36px 0 26px; }
+.s.long ol.st { font-size: 33px; gap: 8px; }
+.s.long .ask { font-size: 31px; }
+.s.long .opts { gap: 16px; }
+.s.long .opt { font-size: 34px; padding: 16px 24px; }
+.s.long .expl { font-size: 32px; }
 .dark { background: var(--ink); color: var(--cream); }
 .dark .word, .dark .date { color: var(--cream); }
 .dark .sub { color: #d9d2c8; }
@@ -143,7 +149,8 @@ def slides_html(day, stories, quiz, lang):
                            for j, o in enumerate(quiz["options"]))
             tail = (f'<div class="expl"><b>{e(t["answer"])}: ({"abcd"[quiz["answer"]]})</b> {e(quiz["explanation"])}</div>' if reveal
                     else f'<div class="hint">{e(t["quiz_hint"])}  →</div>')
-            out.append(f'<section class="s"><div class="stripe"></div><div class="kicker">{e(t["quiz"] if not reveal else t["answer"])}</div>'
+            long = " long" if quiz.get("statements") or len(quiz["question"]) > 160 or max(len(o) for o in quiz["options"]) > 60 else ""
+            out.append(f'<section class="s{long}"><div class="stripe"></div><div class="kicker">{e(t["quiz"] if not reveal else t["answer"])}</div>'
                        f'<div class="q">{e(quiz["question"])}</div>{st}<div class="opts">{opts}</div>{tail}{_foot(t, i, n)}</section>')
     i += 1
     out.append(f'<section class="s dark"><div class="stripe"></div>{_brand()}<div class="date" style="margin-top:70px;font-size:76px">{e(t["cta1"])}</div>'

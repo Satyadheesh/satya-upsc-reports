@@ -59,7 +59,7 @@ def story(it, lang):
     kit = (it.get("kit_hi") if hi else it.get("kit")) or {}
     title = kit.get("short_title") or (hindi_title(it) if hi else it["title_en"])
     why = kit.get("takeaway") or tidy(it["why"], 200)
-    return {"id": it["id"], "title": tidy(title, 110), "why": tidy(why, 220), "paper": it["paper"], "subject": it["subject"],
+    return {"id": it["id"], "title": tidy(title, 170), "why": tidy(why, 220), "paper": it["paper"], "subject": it["subject"],
             "facts": [(lab, tidy(txt, 170)) for lab, txt in fact_pairs(kit.get("facts"), it["pointers"], hi)][:3],
             "mcq": kit.get("mcq")}
 

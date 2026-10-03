@@ -93,13 +93,13 @@ def why_title(why):
     w = " ".join((why or "").split())
     m = re.search(r"[।!?]|\.(?=\s|$)", w)  # not the dot inside 87.7%
     first = w[: m.start()] if m else w
-    if len(first) <= 130:
+    if len(first) <= 160:  # Hindi runs ~30% longer than English
         return first
     for sep in (", ", "; ", " — "):
-        k = first.rfind(sep, 0, 130)
+        k = first.rfind(sep, 0, 160)
         if k > 50:
             return first[:k]
-    return first[: first.rfind(" ", 0, 130)]
+    return first
 
 
 def upsc_title(rephrased, original, why, with_source=False):

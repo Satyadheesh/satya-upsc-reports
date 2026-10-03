@@ -2,7 +2,7 @@
 import time
 
 from common.db import close_all, main_db, upsc_db
-from reports.data import DAY, IST, Window
+from reports.data import DAY, IST, Window, by_importance
 from reports.render import pick_cards
 
 now = int(time.time())
@@ -13,11 +13,11 @@ try:
     w = Window(up, mn, start, today + DAY)
     d = today
     while d >= start:
-        items = w.day(d)
+        items = sorted(w.day(d), key=by_importance)
         top = pick_cards(items, 5, "daily")
         print(f"\n## {time.strftime('%d %b', time.gmtime(d + IST))} ({len(items)} notes)")
         for it in top:
-            print(f"- s{it['score']} r{it['related']} {it['paper']}/{it['subject']}/{it['node']} [{it['source']}] {it['title_en'][:110]}"
+            print(f"- s{it['score']}{'-' if it.get('demote') else ''} r{it['related']} {it['paper']}/{it['subject']}/{it['node']} [{it['source']}] {it['title_en'][:110]}"
                   f"\n    why: {it['why'][:160]}")
         d -= DAY
 finally:

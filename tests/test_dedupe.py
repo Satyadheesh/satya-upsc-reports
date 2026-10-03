@@ -49,3 +49,32 @@ class Headline(unittest.TestCase):
         self.assertEqual(src, "why")
         self.assertIn("87.7%", t)
         self.assertNotIn("…", t)
+
+
+class OddTopStories(unittest.TestCase):
+    def test_not_headlines_fall_back_to_why(self):
+        from reports.data import upsc_title
+        why = "India and Liberia set up a Group of Friends at the 81st UN General Assembly to address maritime security."
+        for bad in ('At the 81st UN General Assembly, India and Liberia established a "group',
+                    "On 13 September 2026, Indian High Commissioner Dinesh Trivedi met with high-level",
+                    "Under a free trade agreement, India will export up to 1.64 million",
+                    "Donald Trump Xi Jinping LIVE Updates: US-China Summit Key Announcements",
+                    "Sarvjeet Singh Virk, Co-founder & MD of Shoonya"):
+            t, src = upsc_title(bad + " India Liberia maritime", None, why, True) if "LIVE" in bad or "Virk" in bad else upsc_title(bad, None, why + " " + bad, True)
+            self.assertEqual(src, "why", bad)
+        t, src = upsc_title("RBI issues norms on capital requirements for market risk under Basel III for banks", None,
+                            "RBI issued new norms to align market risk capital requirements with Basel III standards.", True)
+        self.assertEqual(src, "headline")
+
+    def test_demotion(self):
+        from reports.data import demotion, by_importance
+        self.assertEqual(demotion("Paytm shares plummet after government RuPay, UPI fee move", None), 0)  # government move
+        self.assertEqual(demotion("HAL shares rise 2% as firm hands over 3 aerospace platforms to IAF. What is Goldman Sachs saying?", None), 1)
+        self.assertEqual(demotion("Sarvjeet Singh Virk, Co-founder & MD of Shoonya", None), 1)
+        self.assertEqual(demotion("Iran war live: Tehran sets terms for peace", None), 1)
+        self.assertEqual(demotion("Sebi approves new rules to widen investment avenues", None), 0)
+        self.assertEqual(demotion("Supreme Court Collegium recommends three High Court Chiefs", None), 0)
+        a = {"score": 4, "demote": 1, "related": 3, "published_at": 2}
+        b = {"score": 4, "demote": 0, "related": 0, "published_at": 1}
+        c = {"score": 3, "demote": 0, "related": 0, "published_at": 1}
+        self.assertEqual(sorted([a, c, b], key=by_importance), [b, a, c])

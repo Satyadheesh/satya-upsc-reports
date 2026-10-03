@@ -102,6 +102,29 @@ def why_title(why):
     return first
 
 
+# A person + job title, not a headline ('Sarvjeet Singh Virk, Co-founder & MD of Shoonya').
+PERSON_ROLE = re.compile(r"^(?:[A-Z][\w.'-]*\s){1,4}[A-Z][\w.'-]*,\s+(?:Co-?founder|Founder|CEO|MD|Managing Director|Chairman|"
+                         r"Chairperson|Director|President|Head|Chief|Partner|Economist|Analyst|Professor|Editor)\b")
+LIVE_BLOG = re.compile(r"\bLIVE\b|\blive updates\b|\blive:\s", re.I)
+# A lead sentence cut short and used as a headline ('On 13 September 2026, Indian High Commissioner ... met with high-level').
+DATE_LEAD = re.compile(r"^On\s+\d{1,2}\s+[A-Z][a-z]+(?:\s+\d{4})?,|^On\s+[A-Z][a-z]+day,|^This\s+(?:week|weekend|morning)\b")
+CUT_WORDS = {"million", "billion", "trillion", "crore", "lakh", "thousand", "high-level", "per"}
+# Stock-tip and share-price stories: not UPSC material even when the model scored them high.
+MARKET = re.compile(r"\bshares?\s+(?:rise|rises|rose|fall|falls|fell|plummet\w*|plunge\w*|jump\w*|surge\w*|slump\w*|gain\w*|"
+                    r"tumble\w*|soar\w*|sink\w*|rall\w*|up|down)\b|\bstocks?\s+to\s+(?:buy|watch)\b|\btarget price\b|"
+                    r"\bbrokerage\b|Goldman Sachs|\bmultibagger\b", re.I)
+REGULATOR = re.compile(r"\b(?:SEBI|Sebi|RBI|government|Govt|ministry|Cabinet|Centre|Parliament)\b")
+
+
+def demotion(*titles):
+    """How far down to move a story whose headline is a share-price move, a live blog or a person's name and job
+    title (0 = none, 1 = one importance step). Every UPSC note is relevant, but these should not lead a report."""
+    t = " ".join(x for x in titles if x)
+    if (MARKET.search(t) and not REGULATOR.search(t)) or LIVE_BLOG.search(t) or any(PERSON_ROLE.match(x) for x in titles if x):
+        return 1
+    return 0
+
+
 def upsc_title(rephrased, original, why, with_source=False):
     """The note's headline, and where it came from: 'headline' (the news headline), 'original' (the source's own
     title) or 'why' (made from why-in-news). A headline about something else than the note (e.g. 'Sarvjeet Singh
@@ -115,9 +138,11 @@ def upsc_title(rephrased, original, why, with_source=False):
         w = t.split()
         if len(w) < 3:
             return None
-        last = re.sub(r"[^a-z0-9.]", "", w[-1].lower())
-        if last in DANGLING or (len(last) <= 1 and not last.isdigit()):
+        last = re.sub(r"[^a-z0-9.-]", "", w[-1].lower())
+        if last in DANGLING or last in CUT_WORDS or (len(last) <= 1 and not last.isdigit()):
             return None
+        if PERSON_ROLE.match(t) or LIVE_BLOG.search(t) or DATE_LEAD.match(t) or t.count('"') % 2:
+            return None  # not a headline: a name + job title, a live blog, a cut lead sentence
         if why_toks and len(_tokens(t, STOP_DUP) & why_toks) < 1:
             return None  # about something else
         return t
@@ -225,7 +250,7 @@ def hydrate(rows, w, lang="en"):
         h = w.hi_note.get(aid) or {}
         hi = lang == "hi"
         item = {
-            "id": aid, "published_at": pub, "score": score, "exam": exam, "paper": paper, "subject": subject, "node": node,
+            "id": aid, "published_at": pub, "score": score, "demote": demotion(a[1], a[2]), "exam": exam, "paper": paper, "subject": subject, "node": node,
             # Hindi headline only when it translates the headline English uses; otherwise made from the Hindi why-in-news
             "title_en": title_en, "title": (w.hi_title.get(aid) if hi and title_src == "headline" else None) or title_en,
             "why": (h.get("why") if hi else None) or why or "",
@@ -267,7 +292,7 @@ def hydrate(rows, w, lang="en"):
 
 
 def by_importance(x):
-    return (-x["score"], -x["related"], -x["published_at"])
+    return (-(x["score"] - x.get("demote", 0)), -x["related"], -x["published_at"])
 
 
 def _same_story(a, b):

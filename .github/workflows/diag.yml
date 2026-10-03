@@ -19,7 +19,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.10'
-      - run: pip install libsql-client
+      - run: pip install libsql-client qrcode
       - name: Run
         env:
           SATYA_UPSC_DB_URL: ${{ secrets.SATYA_UPSC_DB_URL }}

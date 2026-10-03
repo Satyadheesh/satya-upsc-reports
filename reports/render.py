@@ -100,10 +100,26 @@ def clip(s, n):
     return s[: cut if cut > n * 0.6 else n - 1].rstrip(" ,;:") + "…"
 
 
-def first_sentence(s, n=150):
+def first_sentence(s, n=240):
+    """The first sentence, whole. A very long one is cut back at its last clause (', ' / '; ') — never mid-word
+    and never with '…' (reviewer, 3 Oct: cut-off text reads as broken)."""
     s = " ".join(str(s or "").split())
     m = re.search(r"(?<=[.।!?])\s", s)
-    return clip(s[: m.start()] if m and m.start() <= n else s, n)
+    first = s[: m.start()] if m else s
+    if len(first) <= n:
+        return first
+    for sep in ("; ", ", ", " — "):
+        k = first.rfind(sep, 0, n)
+        if k > n // 2:
+            return first[:k]
+    return clip(first, n)
+
+
+def fit(s, n):
+    """Text for a box of about n characters: whole if it nearly fits (Hindi runs ~30% longer), else its first
+    sentence cut back at a clause — never mid-word with '…'."""
+    s = " ".join(str(s or "").split())
+    return s if len(s) <= int(n * 1.3) else first_sentence(s, n)
 
 
 def subject_name(s, hi):
@@ -333,26 +349,26 @@ def brief(p, items, total, lang):
     boxes = ""
     if p["kind"] == "daily" and (figures or static):
         num = (f'<div class="box cream"><div class="kicker">{e(t["number"])}</div><div class="bignum">{e(figures[0][0])}</div>'
-               f'<p>{e(clip(figures[0][1], 150))}</p></div>') if figures else ""
+               f'<p>{e(fit(figures[0][1], 150))}</p></div>') if figures else ""
         st = (f'<div class="box line"><div class="kicker">{e(t["static"])}</div><h4>{e(static[0])}</h4>'
-              f'<p>{e(clip(static[1], 120))} <i>{"ख़बर में" if hi else "In the news"}: {e(short_title(static[2]))}.</i></p></div>') if static else ""
+              f'<p>{e(fit(static[1], 120))} <i>{"ख़बर में" if hi else "In the news"}: {e(short_title(static[2]))}.</i></p></div>') if static else ""
         boxes = f'<div class="duo" style="grid-template-columns:{"1fr 1.25fr" if num and st else "1fr"}">{num}{st}</div>'
     elif p["kind"] != "daily" and len(figures) >= 3:
-        tiles = "".join(f'<div class="tile"><div class="v">{e(v)}</div><div class="c">{e(clip(c, 90))}</div></div>' for v, c, _ in figures[:4])
+        tiles = "".join(f'<div class="tile"><div class="v">{e(v)}</div><div class="c">{e(fit(c, 90))}</div></div>' for v, c, _ in figures[:4])
         boxes = (f'<div class="kicker">{e(t["number_w"])}</div><div class="tiles" style="grid-template-columns:repeat({min(4, len(figures))},1fr)">{tiles}</div>')
     p1 += boxes + f'<div class="inside">{t["inside_b"]}</div>'
 
     def card(it):
         k = kit(it) or {}
-        rem = "".join(f"<li>{e(clip(x, 170))}</li>" for x in kit_facts(it, lang))
+        rem = "".join(f"<li>{e(fit(x, 170))}</li>" for x in kit_facts(it, lang))
         kw = "".join(f"<span>{e(x)}</span>" for x in it["keywords"][:4]) if not hi else ""
-        angle = (f'<div class="angle"><div class="q"><b>{e(t["angle"])}</b>{e(clip(it["mains"], 220))}</div>'
+        angle = (f'<div class="angle"><div class="q"><b>{e(t["angle"])}</b>{e(fit(it["mains"], 220))}</div>'
                  + (f'<div class="kw"><em>{e(t["use"])}</em>{kw}</div>' if kw else "")
                  + f'<div class="more">{e(t["full"])} satyadheesh.in/news/{it["id"]}</div></div>') if it.get("mains") else \
             f'<div class="angle"><div class="more">{e(t["full"])} satyadheesh.in/news/{it["id"]}</div></div>'
         return (f'<article class="card"><div class="in"><div class="chips">{chip(it["paper"], subject_name(it["subject"], hi))}'
                 f'{exam_chips(it["exam"])}</div><h3>{e(k.get("short_title") or it["title"])}</h3>'
-                f'<p class="why"><b>{e(t["why"])}</b> {e(clip(it["why"], 260))}</p>'
+                f'<p class="why"><b>{e(t["why"])}</b> {e(fit(it["why"], 260))}</p>'
                 + (f'<div class="lbl">{e(t["remember"])}</div><ul class="rem">{rem}</ul>' if rem else "")
                 + f'</div>{angle}</article>')
 
@@ -372,7 +388,7 @@ def brief(p, items, total, lang):
                 if k and k.get("brief_lead"):
                     li.append(f'<li><b>{e(k["brief_lead"])}</b> {e(k["brief_text"])}</li>')
                 else:
-                    li.append(f'<li>{e(clip(it["title"], 150))}</li>')
+                    li.append(f'<li>{e(fit(it["title"], 150))}</li>')
             groups.append(f'<div class="grp">{chip(paper, (PAPER_HINT[paper][1] if hi else PAPER_HINT[paper][0]))}<ul>{"".join(li)}</ul></div>')
         places, seen = [], set()
         for it in items:
@@ -381,7 +397,7 @@ def brief(p, items, total, lang):
                 name, desc = split_fact(f["text"])
                 if fe["label"] == "Place" and name_e and name_e.lower() not in seen and len(places) < 5:
                     seen.add(name_e.lower())
-                    places.append(f'<tr><td>{e(name or name_e)}</td><td>{e(clip(desc, 140))}</td></tr>')
+                    places.append(f'<tr><td>{e(name or name_e)}</td><td>{e(fit(desc, 140))}</td></tr>')
         pl = (f'<div class="places"><div class="kicker">{e(t["k_places"])}</div><h2 class="sec" style="font-size:13pt;margin:.4mm 0 1.6mm">'
               f'{e(t["places"])}</h2><table>{"".join(places)}</table></div>') if len(places) >= 3 else ""
         p3 = (f'<section class="page">{sec_head(t["k_brief"], t["inbrief_h"], t["brief_aside"].format(n=len(rest)))}'

@@ -140,8 +140,9 @@ def push_media(files_by_dir, branch, msg):
         for f in files:
             (d / f.name).write_bytes(f.read_bytes())
     git("add", "-A")
-    git("commit", "-qm", msg)
-    git("push", "-q", "origin", f"HEAD:{branch}")
+    if subprocess.run(["git", "diff", "--cached", "--quiet"], cwd=wt).returncode != 0:  # same slides as an earlier run: nothing to push
+        git("commit", "-qm", msg)
+        git("push", "-q", "origin", f"HEAD:{branch}")
     return f"https://raw.githubusercontent.com/{repo}/{branch}"
 
 

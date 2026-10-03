@@ -21,7 +21,8 @@ import time
 import requests
 
 from common.db import close_all, main_db, translation_db, upsc_db
-from reports.data import Window, editions, hindi_title, select
+from reports.data import Window, editions, hindi_title
+from reports.render import SIZE, pick_cards
 from tg.periods import DAY, ist_date, ist_midnight, target_ts
 
 from .caption import caption
@@ -64,12 +65,18 @@ def story(it, lang):
 
 
 def pick(p, w):
-    """Top 5 of the day (same order as the reports), stories with a study kit first so slides have takeaways + facts.
-    English and Hindi come from the same pairing as the PDFs (reports.data.editions): the same 5 stories with the same
-    parts, so the Hindi carousel is the English one in Hindi. Without enough Hindi yet: English only."""
+    """The day's 5 stories = the PDF's own '5 stories you can't skip' (reports.render.pick_cards), from the same
+    English/Hindi pairing as the PDFs (reports.data.editions): same stories, same parts, so the Hindi carousel is the
+    English one in Hindi. Also returns the quiz story: the most important one whose quiz exists in both languages.
+    Without enough Hindi yet: English only."""
     en_ed, hi_ed, _, _ = editions(p, w.period(p, "en"), w.period(p, "hi"))
-    order = sorted(range(len(en_ed)), key=lambda k: (not en_ed[k].get("kit"), k))[:5]
-    return [en_ed[k] for k in order], ([hi_ed[k] for k in order] if hi_ed else [])
+    n_top, n_cards = SIZE["daily"][:2]
+    ids = [it["id"] for it in pick_cards(en_ed, n_cards, "daily")[:n_top]]
+    pos = {it["id"]: k for k, it in enumerate(en_ed)}
+    order = [pos[i] for i in ids]
+    quiz = next((k for k, it in enumerate(en_ed) if (it.get("kit") or {}).get("mcq")), None)
+    pair = lambda eds: [eds[k] for k in order] if eds else []
+    return pair(en_ed), pair(hi_ed), (en_ed[quiz] if quiz is not None else None), (hi_ed[quiz] if hi_ed and quiz is not None else None)
 
 
 META = re.compile(r"^(?:the|this) (?:note|article|news) (?:states|says|mentions|notes|reports) that\s+|^according to the (?:note|article),?\s+|"
@@ -200,20 +207,20 @@ def main():
         print(f"posting as @{ig.username}")
 
     w = Window(upsc, main_db(), p["start"], p["end"], translation_db())
-    top, top_hi = pick(p, w)
+    top, top_hi, quiz_en, quiz_hi = pick(p, w)
     if len(top) < 3:
         print(f"::warning::only {len(top)} notes today; nothing posted")
         return
     posts = {}
-    st_en = [story(i, "en") for i in top]
-    q_en = quiz_of(st_en)
-    q_id = next((s["id"] for s in st_en if q_en and s.get("mcq") and s["mcq"].get("question") == q_en["question"]), None)
+    q_en = quiz_of([story(quiz_en, "en")]) if quiz_en else None
+    q_hi = quiz_of([story(quiz_hi, "hi")]) if quiz_hi else None
+    if top_hi and not (q_en and q_hi):
+        q_en = q_hi = None  # the quiz runs in both carousels or in neither
     if "en" in langs:
-        posts["en"] = (st_en, q_en)
+        posts["en"] = ([story(i, "en") for i in top], q_en)
     if "hi" in langs:
         if len(top_hi) >= HI_MIN:
-            st = [story(i, "hi") for i in top_hi]
-            posts["hi"] = (st, quiz_of(st, q_id) if q_id is not None else None)
+            posts["hi"] = ([story(i, "hi") for i in top_hi], q_hi)
         else:
             print(f"::warning::Hindi: {len(top_hi)} of {len(top)} stories translated (needs {HI_MIN}); the 21:00 IST catch-up retries")
 

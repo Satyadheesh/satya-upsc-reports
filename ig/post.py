@@ -35,8 +35,8 @@ LATE_LIMIT = 4 * 3600
 HI_MIN = 4                                 # Hindi post only when 4 of the 5 stories have Hindi
 
 
-def today_period(now):
-    d = ist_date(now)
+def today_period(now, day=None):
+    d = dt.date.fromisoformat(day) if day else ist_date(now)
     start = ist_midnight(d)
     return {"kind": "daily", "key": d.isoformat(), "start": start, "end": start + DAY, "first": d, "last": d}
 
@@ -172,6 +172,7 @@ def main():
     ap.add_argument("--now", action="store_true")
     ap.add_argument("--check-setup", action="store_true")
     ap.add_argument("--langs", default="en,hi")
+    ap.add_argument("--day", default="", help="post this IST day's notes instead of today's (YYYY-MM-DD)")
     args = ap.parse_args()
     upsc = upsc_db()
 
@@ -183,7 +184,7 @@ def main():
         return
 
     start = time.time()
-    p = today_period(start)
+    p = today_period(start, args.day or None)
     target = start if (args.now or args.dry_run) else target_ts(start, args.at)
     if time.time() > target + LATE_LIMIT and not args.now:
         print(f"::warning::more than {LATE_LIMIT // 3600} h past {args.at} IST; not posting")

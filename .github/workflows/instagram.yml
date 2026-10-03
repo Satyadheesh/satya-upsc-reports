@@ -17,6 +17,9 @@ on:
       langs:
         description: 'Languages'
         default: 'en,hi'
+      day:
+        description: "Post this day's notes instead of today's (YYYY-MM-DD, optional)"
+        default: ''
 
 concurrency:
   group: instagram
@@ -25,12 +28,13 @@ concurrency:
 jobs:
   post:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 300   # a scheduled run started early waits for 19:00 IST
     permissions:
       contents: write     # slides go to the public ig-media branch (Instagram fetches images by URL)
     env:
       MODE: ${{ github.event.inputs.mode || 'scheduled' }}
       LANGS: ${{ github.event.inputs.langs || 'en,hi' }}
+      DAY: ${{ github.event.inputs.day || '' }}
       SATYA_DB_URL: ${{ secrets.SATYA_DB_URL }}
       SATYA_DB_TOKEN: ${{ secrets.SATYA_DB_TOKEN }}
       SATYA_UPSC_DB_URL: ${{ secrets.SATYA_UPSC_DB_URL }}
@@ -63,9 +67,9 @@ jobs:
             echo "::notice::IG_TOKEN not set yet — skipping"; exit 0
           fi
           case "$MODE" in
-            dry-run)     python -m ig.post --dry-run --langs "$LANGS" 2>&1 | tee /tmp/out.txt ;;
+            dry-run)     python -m ig.post --dry-run --langs "$LANGS" ${DAY:+--day "$DAY"} 2>&1 | tee /tmp/out.txt ;;
             check-setup) python -m ig.post --check-setup 2>&1 | tee /tmp/out.txt ;;
-            now)         python -m ig.post --now --langs "$LANGS" 2>&1 | tee /tmp/out.txt ;;
-            *)           python -m ig.post --at 19:00 --langs "$LANGS" 2>&1 | tee /tmp/out.txt ;;
+            now)         python -m ig.post --now --langs "$LANGS" ${DAY:+--day "$DAY"} 2>&1 | tee /tmp/out.txt ;;
+            *)           python -m ig.post --at 19:00 --langs "$LANGS" ${DAY:+--day "$DAY"} 2>&1 | tee /tmp/out.txt ;;
           esac || { echo "::error title=Instagram $MODE failed::$(tail -c 2500 /tmp/out.txt | sed -e ':a' -e 'N' -e '$!ba' -e 's/%/%25/g' -e 's/\n/%0A/g')"; exit 1; }
           echo "::notice title=Instagram $MODE::$(tail -c 2500 /tmp/out.txt | sed -e ':a' -e 'N' -e '$!ba' -e 's/%/%25/g' -e 's/\n/%0A/g')"

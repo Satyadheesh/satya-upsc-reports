@@ -57,9 +57,16 @@ def store(c, key, p, lang, h, items, pdf):
 
 def content_hash(p, lang, edition, items):
     kit = (lambda i: (i.get("kit_hi") if lang == "hi" else i.get("kit")) or {})
-    sig = [[i["id"], i["title"], i["why"], i["fact_box"], i["pointers"], i["mains"], i["related"], i["paper"], i["subject"],
-            kit(i).get("short_title"), kit(i).get("takeaway"), kit(i).get("brief_text"), kit(i).get("facts"), kit(i).get("mcq")]
-           for i in items]
+    ssc = (lambda i: i.get("ssc_kit") or {})
+    if edition == "ssc":
+        sig = [[i["id"], i["title"], i["why"], i["fact_box"], i["pointers"], i["related"], i["paper"], i["subject"],
+                ssc(i).get("question_en"), ssc(i).get("answer_en"), ssc(i).get("key_fact_en"), ssc(i).get("static_gk_en"),
+                ssc(i).get("question_hi"), ssc(i).get("answer_hi"), ssc(i).get("key_fact_hi"), ssc(i).get("static_gk_hi")]
+               for i in items]
+    else:
+        sig = [[i["id"], i["title"], i["why"], i["fact_box"], i["pointers"], i["mains"], i["related"], i["paper"], i["subject"],
+                kit(i).get("short_title"), kit(i).get("takeaway"), kit(i).get("brief_text"), kit(i).get("facts"), kit(i).get("mcq")]
+               for i in items]
     raw = json.dumps({"v": REPORT_VERSION, "k": p["kind"], "p": p["key"], "l": lang, "e": edition, "n": sig},
                      ensure_ascii=False, sort_keys=True, default=str)
     return hashlib.sha256(raw.encode()).hexdigest()[:24]

@@ -668,28 +668,14 @@ def ssc(p, items, total, lang="en"):
             static_gk = ssc_data.get("static_gk_en") or ""
 
             if not (q_text and ans_text):
-                k = kit_of(it, "en") or {}
-                lead = (k.get("brief_lead") or "").strip()
-                title = (it.get("title") or "").strip()
-                why = (it.get("why") or it.get("why_in_news") or "").strip()
-                fact = (it.get("fact_box") or "").strip()
+                continue
 
-                # Build a proper interrogative question, never a headline
-                if lead:
-                    q_text = f"What is the key development regarding {lead}?"
-                elif title:
-                    q_text = f"What is the key development regarding {first_sentence(title, 80)}?"
-                else:
-                    q_text = f"What is the key development in this news?"
-
-                # Answer: prefer a short factual snippet, not a sentence
-                ans_text = (k.get("brief_text") or fact or why or "")[:50].strip()
-                if not ans_text:
-                    ans_text = "See note"
-
-                key_text = fact or ""
-                static_gk = ((it.get("pointers") or [{}])[0].get("text", "")
-                             if it.get("pointers") else "")
+            more_parts = []
+            if key_text:
+                more_parts.append(f'<p><span>Key</span>{e(fit(key_text, 160))}</p>')
+            if static_gk:
+                more_parts.append(f'<p><span>Static GK</span>{e(fit(static_gk, 160))}</p>')
+            more_html = "".join(more_parts)
 
             src_url = f"https://satyadheesh.in/upsc/note/{it.get('id') or it.get('article_id')}"
             row_html = (
@@ -697,13 +683,15 @@ def ssc(p, items, total, lang="en"):
                 f'<h3><i>{q_counter}</i>{e(q_text)}</h3>'
                 f'<div class="ans">{e(ans_text)}</div>'
                 f'<div class="more">'
-                f'<p><span>Key</span>{e(fit(key_text, 160))}</p>'
-                f'<p><span>Static GK</span>{e(fit(static_gk, 160))}</p>'
+                f'{more_html}'
                 f'<a class="src" href="{src_url}" target="_blank" rel="noopener" title="Read note" aria-label="Read note">↗</a>'
                 f'</div></div>'
             )
             rows.append(row_html)
             q_counter += 1
+
+        if not rows:
+            continue
 
         tr_cells = "".join(f"<tr><td>{r}</td></tr>" for r in rows)
         sec = (

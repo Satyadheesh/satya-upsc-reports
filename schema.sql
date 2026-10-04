@@ -47,3 +47,25 @@ CREATE TABLE IF NOT EXISTS ig_auth (
   token        TEXT NOT NULL,
   refreshed_at INTEGER NOT NULL
 );
+
+-- SSC CGL Study Kit: rapid-fire active-recall flashcards generated per note (Gemma 4 12B).
+CREATE TABLE IF NOT EXISTS ssc_kit (
+  article_id      INTEGER PRIMARY KEY,
+  status          TEXT NOT NULL CHECK (status IN ('done','failed')),
+  attempts        INTEGER NOT NULL DEFAULT 1,
+  question_en     TEXT,
+  answer_en       TEXT,
+  key_fact_en     TEXT,
+  static_gk_en    TEXT,
+  question_hi     TEXT,
+  answer_hi       TEXT,
+  key_fact_hi     TEXT,
+  static_gk_hi    TEXT,
+  note_updated_at INTEGER,
+  model           TEXT,
+  prompt_version  TEXT,
+  error           TEXT,
+  created_at      INTEGER NOT NULL,
+  updated_at      INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_ssc_kit_status ON ssc_kit(status, attempts);

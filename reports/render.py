@@ -539,30 +539,42 @@ def ssc(p, items, total, lang):
 
         rows_html = []
         for it in groups[mod]:
-            k = kit_of(it, lang)
-            mcq = k.get("mcq") if (k and isinstance(k.get("mcq"), dict)) else None
-            if mcq and mcq.get("question") and mcq.get("correct"):
-                question = mcq["question"]
-                answer = mcq["correct"]
+            ssc = it.get("ssc_kit")
+            q_field = "question_hi" if hi else "question_en"
+            a_field = "answer_hi" if hi else "answer_en"
+            k_field = "key_fact_hi" if hi else "key_fact_en"
+            s_field = "static_gk_hi" if hi else "static_gk_en"
+
+            if ssc and ssc.get(q_field) and ssc.get(a_field):
+                question = ssc[q_field]
+                answer = ssc[a_field]
+                key_text = fit(ssc.get(k_field) or "", 180)
+                static_gk = fit(ssc.get(s_field) or "", 180)
             else:
-                lead = (k.get("brief_lead") if k else None) or it.get("title")
-                why = it.get("why") or it.get("why_in_news") or ""
-                question = f"{lead}: {first_sentence(why, 130)}" if why else f"Regarding {lead}, what is the key development?"
-                answer = (k.get("brief_text") if k else None) or (it.get("fact_box") or "")[:80]
+                k = kit_of(it, lang)
+                mcq = k.get("mcq") if (k and isinstance(k.get("mcq"), dict)) else None
+                if mcq and mcq.get("question") and mcq.get("correct"):
+                    question = mcq["question"]
+                    answer = mcq["correct"]
+                else:
+                    lead = (k.get("brief_lead") if k else None) or it.get("title")
+                    why = it.get("why") or it.get("why_in_news") or ""
+                    question = f"{lead}: {first_sentence(why, 130)}" if why else f"Regarding {lead}, what is the key development?"
+                    answer = (k.get("brief_text") if k else None) or (it.get("fact_box") or "")[:80]
 
-            key_text = (k.get("brief_text") if k else None) or it.get("fact_box") or ""
-            key_text = fit(key_text, 180)
+                key_text = (k.get("brief_text") if k else None) or it.get("fact_box") or ""
+                key_text = fit(key_text, 180)
 
-            static_candidates = []
-            for ptr in (it.get("pointers") or []):
-                if isinstance(ptr, dict) and ptr.get("type") in ("act_bill", "constitution", "institution", "place"):
-                    static_candidates.append(ptr.get("text", ""))
-            if k and k.get("facts"):
-                for fct in k["facts"]:
-                    if isinstance(fct, dict) and fct.get("label") in ("Act", "Body", "Scheme", "Constitution"):
-                        static_candidates.append(fct.get("text", ""))
-            static_gk = static_candidates[0] if static_candidates else (it.get("fact_box") or "")
-            static_gk = fit(static_gk, 180)
+                static_candidates = []
+                for ptr in (it.get("pointers") or []):
+                    if isinstance(ptr, dict) and ptr.get("type") in ("act_bill", "constitution", "institution", "place"):
+                        static_candidates.append(ptr.get("text", ""))
+                if k and k.get("facts"):
+                    for fct in k["facts"]:
+                        if isinstance(fct, dict) and fct.get("label") in ("Act", "Body", "Scheme", "Constitution"):
+                            static_candidates.append(fct.get("text", ""))
+                static_gk = static_candidates[0] if static_candidates else (it.get("fact_box") or "")
+                static_gk = fit(static_gk, 180)
 
             key_lbl = "KEY" if not hi else "मुख्य बिंदु"
             static_lbl = "STATIC GK" if not hi else "स्टैटिक जीके"

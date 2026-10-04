@@ -218,6 +218,19 @@ class Window:
             except Exception as ex:
                 print(f"Hindi study kit not available: {type(ex).__name__}")
 
+        self.ssc_cards = {}
+        if ids:
+            try:
+                for r in in_chunks(upsc, "SELECT article_id, status, question_en, answer_en, key_fact_en, static_gk_en, "
+                                         "question_hi, answer_hi, key_fact_hi, static_gk_hi FROM ssc_kit WHERE article_id IN ({ph})", ids):
+                    if r[1] == "done":
+                        self.ssc_cards[r[0]] = {
+                            "question_en": r[2], "answer_en": r[3], "key_fact_en": r[4], "static_gk_en": r[5],
+                            "question_hi": r[6], "answer_hi": r[7], "key_fact_hi": r[8], "static_gk_hi": r[9],
+                        }
+            except Exception:
+                pass
+
     def day(self, day_start, lang="en"):
         """One IST day's notes, best first, de-duplicated like the site's day lists."""
         return hydrate([r for r in self.rows if day_start <= r[1] < day_start + DAY], self, lang)
@@ -278,6 +291,7 @@ def hydrate(rows, w, lang="en"):
             "kit_hi": w.hi_kit.get(aid) if hi else None,
             "kit": ({"short_title": ktitle, "takeaway": ktake, "brief_lead": klead, "brief_text": ktext,
                      "facts": _arr(kfacts), "mcq": _obj(kmcq)} if kstatus == "done" else None),
+            "ssc_kit": getattr(w, "ssc_cards", {}).get(aid),
         }
         toks = _tokens(f"{title_en} {why or ''}", STOP_DUP)  # English in both languages, like the site
         dup = False

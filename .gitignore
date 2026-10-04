@@ -4,3 +4,6 @@ out/
 prev/
 *.pyc
 ig_out/
+*.pdf
+*.png
+build.log

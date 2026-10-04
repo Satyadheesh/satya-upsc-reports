@@ -29,3 +29,11 @@ class Model:
             temperature=temperature, max_tokens=max_tokens,
         )
         return json.loads(out["choices"][0]["message"]["content"])
+
+    def chat(self, messages, schema, temperature=0.2, max_tokens=350):
+        out = self.llm.create_chat_completion(
+            messages=messages,
+            response_format={"type": "json_object", "schema": schema},
+            temperature=temperature, max_tokens=max_tokens,
+        )
+        return json.loads(out["choices"][0]["message"]["content"])

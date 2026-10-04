@@ -639,9 +639,14 @@ def ssc(p, items, total, lang="en"):
 
             if not (q_text and ans_text):
                 k = kit_of(it, "en") or {}
-                lead = k.get("brief_lead") or it.get("title") or ""
-                why = it.get("why") or it.get("why_in_news") or ""
-                q_text = f"Regarding {lead}, what is the key development?" if not why else f"{lead}: {first_sentence(why, 120)}"
+                lead = (k.get("brief_lead") or it.get("title") or "").strip()
+                why = (it.get("why") or it.get("why_in_news") or "").strip()
+                if lead and why:
+                    q_text = f"{lead}: {first_sentence(why, 120)}"
+                elif lead:
+                    q_text = f"Regarding {lead}, what is the key development?"
+                else:
+                    q_text = first_sentence(why, 120) or "What is the key development in this report?"
                 ans_text = k.get("brief_text") or (it.get("fact_box") or "")[:50]
                 key_text = it.get("fact_box") or ""
                 static_gk = (it.get("pointers") or [{}])[0].get("text", "") if it.get("pointers") else ""

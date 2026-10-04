@@ -583,10 +583,30 @@ sup{color:var(--rust);font-weight:700}
 .cta span{font:400 13px/1.45 "Inter","DM Sans",sans-serif;color:#3a3732}
 .foot{display:flex;justify-content:space-between;margin-top:22px;padding-top:10px;border-top:1px solid var(--line)}
 .foot a{color:var(--rust);text-decoration:none}
-@media(max-width:620px){.ans{font-size:18px}.word{font-size:26px}.meta,.foot{flex-direction:column;gap:2px}}
-@page{size:A4;margin:11mm}
-@media print{body{font-size:12px;-webkit-print-color-adjust:exact;print-color-adjust:exact}.page{max-width:none;padding:0 2px;border-top:3px solid var(--rust)}h2{break-after:avoid}.mod{break-after:avoid}.row{padding:10px 14px 9px 50px}.ans{font-size:17px;padding:7px 14px}}
+@page{size:A4;margin:10mm}
+@media print{
+  body{font-size:12px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .page{max-width:none;padding:0 2px;border-top:3px solid var(--rust)}
+  .brand{padding:8px 0 2px}
+  .pill{margin:8px 0 6px;padding:4px 12px;font-size:9.5px}
+  h1{margin:0 0 10px;font-size:19px}
+  .stats{margin-bottom:6px}
+  .stats div{padding:6px 12px}
+  .stats b{font-size:18px}
+  .mod{margin-top:16px;font-size:10px;break-after:avoid}
+  h2{margin:16px 0 4px;font-size:17px;break-after:avoid}
+  .list{margin-top:6px}
+  .row{padding:9px 12px 8px 46px;break-inside:avoid}
+  .row h3{margin:0 0 6px;font-size:13.5px}
+  .row h3 i{left:10px;font-size:12px;width:28px}
+  .ans{padding:5px 12px;font-size:15px;border-left-width:3px}
+  .more{margin-top:6px;row-gap:2px}
+  .more p{font-size:11.5px;line-height:1.4}
+  .more p span{font-size:9px}
+  .cta{margin-top:18px;padding:10px 14px;break-inside:avoid}
+}
 .src{position:absolute;top:14px;right:14px;display:block;padding:2px 4px;font-size:15px;line-height:1;color:#b5b3ae;text-decoration:none}.src:hover{color:var(--rust);text-decoration:underline}.src[hidden]{display:none}
+
 """
 
 SHORT_MODULE_NAMES = {

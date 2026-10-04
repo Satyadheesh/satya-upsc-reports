@@ -125,9 +125,12 @@ class SscInvalid(ValueError):
 
 
 # Interrogative starters that mark a genuine question (case-insensitive)
+# Supports introductory phrases like "In Rajasthan, what...", "According to ..., how...", "By how much..."
 _Q_STARTERS = re.compile(
-    r"^(who|what|where|when|how|which|name|in which|under which|for which|from which)"
+    r"^(?:(?:in|under|according to|as per|by)\b[^,?:;]{1,60},\s*)?"
+    r"(who|what|where|when|how|which|name|whom|whose|in which|under which|for which|from which|to which|with which|by how)"
     r"\b", re.IGNORECASE)
+
 
 # Sentence-like answer: contains a verb phrase or is unreasonably long
 _SENTENCE_ANS = re.compile(

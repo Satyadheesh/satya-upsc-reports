@@ -64,21 +64,59 @@ def load_notes(ids, preview=False):
     return up, notes, prior
 
 
+from .ssc_validate import fallback_static_gk
+
+
 def generate_card(model, note, lang="en"):
     feedback = None
-    err = None
     sc = schema(lang)
     max_tokens = 320 if lang == "hi" else 220
+    attempts = []
+    last_card = None
+
     for i in range(TRIES):
+        raw = None
         try:
             msgs = build_messages(note, lang=lang, feedback=feedback)
             raw = model.chat(msgs, sc, temperature=0.2 if i == 0 else 0.4, max_tokens=max_tokens)
             card = validate_ssc_card(raw, note, lang=lang)
             return card, None
         except (SscInvalid, ValueError, KeyError) as e:
-            err = str(e)[:200]
-            feedback = err
+            raw_sgk = raw.get("static_gk") if isinstance(raw, dict) else None
+            raw_kf = (raw.get("key") or raw.get("key_fact")) if isinstance(raw, dict) else None
+            attempts.append({
+                "try": i + 1,
+                "static_gk": raw_sgk,
+                "key": raw_kf,
+                "why": str(e)
+            })
+            feedback = str(e)[:200]
+            print(f"      [TRY {i+1} REJECTED aid={note.get('article_id')}]: {feedback} | static_gk: '{raw_sgk}'")
+            if isinstance(raw, dict) and "no permanent anchor" in str(e):
+                last_card = raw
+
+    # Fallback: if tries failed over static GK anchor, check curated fallback table
+    if last_card:
+        text_context = " ".join([
+            str(note.get("title") or ""),
+            str(last_card.get("ssc_question") or ""),
+            str(last_card.get("ssc_answer") or ""),
+            str(last_card.get("static_gk") or ""),
+        ])
+        fb = fallback_static_gk(text_context)
+        if fb:
+            candidate = dict(last_card)
+            candidate["static_gk"] = fb
+            try:
+                card = validate_ssc_card(candidate, note, lang=lang)
+                print(f"      [FALLBACK APPLIED aid={note.get('article_id')}]: Using curated static GK -> '{fb}'")
+                return card, None
+            except Exception:
+                pass
+
+    err = json.dumps(attempts)
     return None, err
+
 
 
 def main():

@@ -9,8 +9,11 @@ on:
         description: 'Preview only: number of recent notes to try (0 = normal run, writes to the DB)'
         default: '0'
       batch:
-        description: 'Notes per run (split over 7 runners)'
+        description: 'Notes per run (split over parallel runners)'
         default: '140'
+      shards:
+        description: 'Number of parallel runners/shards'
+        default: '18'
       full:
         description: 'Scan the whole 30-day window, not just the last 3 days'
         type: boolean
@@ -57,7 +60,7 @@ jobs:
         env:
           BATCH: ${{ github.event.inputs.batch || '140' }}
           FULL: ${{ github.event.inputs.full || 'false' }}
-          SHARDS: '7'
+          SHARDS: ${{ github.event.inputs.shards || '18' }}
           RECENT_DAYS: '3'
         run: python -m kit.setup_ssc_shards
 
@@ -68,7 +71,7 @@ jobs:
     timeout-minutes: 60
     strategy:
       fail-fast: false
-      max-parallel: 7
+      max-parallel: 18
       matrix:
         shard: ${{ fromJson(needs.setup.outputs.shards) }}
     steps:

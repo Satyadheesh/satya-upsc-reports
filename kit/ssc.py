@@ -137,8 +137,8 @@ def build_messages(note, lang="en", feedback=None):
 # Interrogative starters that mark a genuine question (case-insensitive)
 # Supports introductory phrases like "In Rajasthan, what...", "According to ..., how...", "By how much..."
 _Q_STARTERS = re.compile(
-    r"^(?:(?:in|under|according to|as per|by)\b[^,?:;]{1,60},\s*)?"
-    r"(who|what|where|when|how|which|name|whom|whose|in which|under which|for which|from which|to which|with which|by how)"
+    r"^(?:(?:in|under|according to|as per|by|on|to)\b[^,?:;]{1,60},\s*)?"
+    r"(who|what|where|when|how|which|name|whom|whose|in which|under which|for which|from which|to which|with which|by how|by what|by which|on which|to what)"
     r"\b", re.IGNORECASE)
 
 
@@ -148,6 +148,8 @@ _SENTENCE_ANS = re.compile(
     r"|will be|launched|signed|released|conducted|established|formed"
     r"|approved|inaugurated|announced|proposed|collaboration between)"
     r"\b", re.IGNORECASE)
+
+_VAGUE_ANS = re.compile(r"^(not specified|unknown|none|n/a|not mentioned|unclear)\b", re.IGNORECASE)
 
 
 def validate_ssc_card(card, note, lang="en"):
@@ -183,6 +185,8 @@ def validate_ssc_card(card, note, lang="en"):
         raise SscInvalid(f"Answer too long ({len(ans_words)} words), must be ≤10 words: '{ans[:50]}'")
     if _SENTENCE_ANS.search(ans):
         raise SscInvalid(f"Answer looks like a sentence, not an entity: '{ans[:50]}'")
+    if _VAGUE_ANS.search(ans):
+        raise SscInvalid(f"Answer '{ans}' is vague or indicates missing information. Pick a concrete entity from the note.")
 
     # 5. No field repetition: key_fact and static_gk should not just repeat the question/answer
     def _norm(s):

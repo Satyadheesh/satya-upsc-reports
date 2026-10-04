@@ -6,7 +6,7 @@ import time
 from common.db import close_all, upsc_db
 from .ssc import PROMPT_VERSION
 
-SHARDS = int(os.environ.get("SHARDS") or 7)
+SHARDS = int(os.environ.get("SHARDS") or 18)
 BATCH = int(os.environ.get("BATCH") or 140)
 LOOKBACK_DAYS = int(os.environ.get("LOOKBACK_DAYS") or 30)
 RECENT_DAYS = int(os.environ.get("RECENT_DAYS") or 3)

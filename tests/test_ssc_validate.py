@@ -72,3 +72,24 @@ def test_full_card_entry_point():
             "key": "Announced drive to re-enroll 8.97 lakh voters removed during SIR",
             "static_gk": "Election Commission of India is established under Article 324 of the Constitution"}
     check_card_v4(card, Y)
+
+
+@pytest.mark.parametrize("sgk", [
+    "Minamata Convention on Mercury was adopted in 2013 under UNEP",
+    "KMSCL is under Department of Health, Government of Kerala",
+    "SEEDAP operates under Directorate of Skill Development",
+    "Strait of Hormuz is a vital strait connecting the Persian Gulf and the Gulf of Oman",
+    "Western Ghats is a UNESCO World Heritage site and global biodiversity hotspot in India",
+    "Jennifer Doudna received the Nobel Prize in Chemistry in 2020 for CRISPR gene editing",
+])
+def test_new_anchors_pass(sgk):
+    validate_static_gk(sgk, key="unrelated key text", year=Y)
+
+
+def test_fallback_static_gk_lookup():
+    from kit.ssc_validate import fallback_static_gk
+    assert fallback_static_gk("SEBI proposed changes to CAS") is not None
+    assert "SEBI Act, 1992" in fallback_static_gk("SEBI")
+    assert "Department of Health" in fallback_static_gk("KMSCL debt")
+    assert fallback_static_gk("unrelated random query") is None
+

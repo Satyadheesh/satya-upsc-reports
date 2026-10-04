@@ -22,6 +22,21 @@ _VAGUE = re.compile(
 _QUAL = re.compile(r"\b(up to|over|nearly|about|at least|approximately|around|more than)\s+$", re.I)
 
 
+def grounded(answer: str, note_text: str) -> bool:
+    norm = lambda s: re.sub(r"[^a-z0-9.%]+", " ", (s or "").lower()).strip()
+    a, n = norm(answer), norm(note_text)
+    if not a or not n:
+        return False
+    if a in n:
+        return True
+    toks = [t for t in a.split() if len(t) > 2]
+    return bool(toks) and sum(t in n for t in toks) / len(toks) >= 0.8
+
+
+def numbers_in(text: str) -> set[str]:
+    return {re.sub(r",", "", m) for m in re.findall(r"\b\d+(?:,\d+)*(?:\.\d+)?\b", text or "")}
+
+
 def validate_qa(question: str, answer: str, note_text: str = "") -> None:
     q, a = (question or "").strip(), (answer or "").strip()
     if not q.endswith("?") or not _Q_START.match(q):
@@ -33,7 +48,16 @@ def validate_qa(question: str, answer: str, note_text: str = "") -> None:
     if len(a) > 60 or len(a.split()) > 10 or a.endswith(("…", "...")):
         raise SscInvalid("answer must be a short entity or number (max ~10 words), not a sentence fragment.")
     if note_text:
-        for m in re.finditer(re.escape(a), note_text):
+        if not grounded(a, note_text):
+            raise SscInvalid(f"answer '{a}' is not grounded in the source note.")
+
+        note_nums = numbers_in(note_text)
+        ans_nums = numbers_in(a)
+        for num in ans_nums:
+            if num not in note_nums:
+                raise SscInvalid(f"number '{num}' in answer does not appear in the source note.")
+
+        for m in re.finditer(re.escape(a), note_text, re.I):
             hit = _QUAL.search(note_text[max(0, m.start() - 12):m.start()])
             if hit:
                 if hit.group(1).lower() not in a.lower():
@@ -52,6 +76,36 @@ STATIC_GK = {
     "ncpor": (["ncpor"], "NCPOR is headquartered in Goa"),
     "jncasr": (["jncasr"], "JNCASR is an autonomous institution under the Department of Science and Technology"),
     "madras_hc": (["madras high court"], "Madras High Court was established in 1862; principal bench at Chennai"),
+    "kmscl": (["kmscl"], "KMSCL is under Department of Health, Government of Kerala"),
+    "isro": (["isro"], "ISRO HQ: Bengaluru, Karnataka; under Department of Space"),
+    "drdo": (["drdo"], "DRDO HQ: New Delhi; under Ministry of Defence"),
+    "cisf": (["cisf"], "CISF was established under the CISF Act, 1968; HQ: New Delhi"),
+    "crpf": (["crpf"], "CRPF was established under the CRPF Act, 1949; HQ: New Delhi"),
+    "bsf": (["bsf"], "BSF was established under the BSF Act, 1968; HQ: New Delhi"),
+    "nabard": (["nabard"], "NABARD was established in 1982 under the NABARD Act, 1981; HQ: Mumbai"),
+    "sidbi": (["sidbi"], "SIDBI was established in 1990 under the SIDBI Act, 1989; HQ: Lucknow"),
+    "lic": (["lic"], "LIC was established in 1956 under the Life Insurance Corporation Act, 1956; HQ: Mumbai"),
+    "upsc": (["upsc"], "UPSC is established under Article 315 of the Constitution"),
+    "cag": (["cag", "comptroller and auditor general"], "CAG of India is appointed under Article 148 of the Constitution"),
+    "finance_commission": (["finance commission"], "Finance Commission is constituted under Article 280 of the Constitution"),
+    "supreme_court": (["supreme court"], "Supreme Court of India was established under Article 124 of the Constitution"),
+    "minamata": (["minamata convention", "minamata"], "Minamata Convention on Mercury was adopted in 2013 under UNEP"),
+    "strait_of_hormuz": (["strait of hormuz"], "Strait of Hormuz connects the Persian Gulf and the Gulf of Oman"),
+    "persian_gulf": (["persian gulf"], "Persian Gulf is a mediterranean sea in Western Asia connecting to the Gulf of Oman"),
+    "western_ghats": (["western ghats"], "Western Ghats is a UNESCO World Heritage site and global biodiversity hotspot in India"),
+    "unicef": (["unicef"], "UNICEF is headquartered in New York City"),
+    "mea": (["ministry of external affairs", "mea"], "Ministry of External Affairs HQ: South Block, New Delhi"),
+    "germany": (["germany"], "Germany's capital is Berlin; currency: Euro"),
+    "seychelles": (["seychelles"], "Seychelles is an archipelago nation in the Indian Ocean; capital: Victoria"),
+    "ppac": (["ppac", "petroleum planning"], "PPAC operates under the Ministry of Petroleum and Natural Gas"),
+    "indus_water": (["indus water treaty"], "Indus Water Treaty was signed in 1960 between India and Pakistan; mediated by World Bank"),
+    "desert_np": (["desert national park"], "Desert National Park is located in Rajasthan; known for Great Indian Bustard"),
+    "gib": (["great indian bustard"], "Great Indian Bustard is listed as Critically Endangered on the IUCN Red List"),
+    "lactoferrin": (["lactoferrin"], "Lactoferrin is an iron-binding glycoprotein found in milk and mucosal secretions"),
+    "openai": (["openai"], "OpenAI was founded in 2015; HQ: San Francisco, California"),
+    "survey_of_india": (["survey of india"], "Survey of India was established in 1767 under the Department of Science and Technology; HQ: Dehradun"),
+    "aisi": (["aisi", "ai safety institute"], "UK AI Safety Institute (AISI) was established in 2023 under the UK Government"),
+    "dfsi": (["dfsi", "diabetic foot society"], "Diabetic Foot Society of India (DFSI) was established in 2001; HQ: Chennai"),
 }
 
 
@@ -80,26 +134,27 @@ def circular(sgk: str) -> bool:
 
 
 def relevant(sgk: str, question: str, answer: str, key: str) -> bool:
-    toks = lambda s: {w for w in re.findall(r"[A-Za-z0-9]+", s.lower()) if len(w) > 3}
+    toks = lambda s: {w for w in re.findall(r"[A-Za-z0-9]+", s.lower()) if len(w) >= 3}
     return bool(toks(sgk) & toks(question + " " + answer + " " + key))
 
 
-def choose_static_gk(card: dict, gemma_ok) -> tuple[str, str]:
-    """Returns (line, source). The table always wins for known entities, because Gemma can be
-    confidently wrong. Otherwise Gemma's line is kept only if it validates, is relevant and not
-    circular, and is tagged 'gemma-unverified' for the review queue. Else blank."""
+def choose_static_gk(card: dict, gemma_ok=None) -> tuple[str, str]:
+    """Returns (published_line, source).
+    Table first. If the entity isn't in the table, leave the line blank.
+    Gemma's own line goes to a review queue and is never published automatically.
+    """
     q = card.get("ssc_question") or card.get("question") or ""
     a = card.get("ssc_answer") or card.get("answer") or ""
     k = card.get("key_fact") or card.get("key") or ""
-    t = static_gk_from_table(q, a, k)
+
+    # Subject entities in Q and A get top priority
+    t = static_gk_from_table(q, a)
     if t:
         return t, "table"
-    s = (card.get("static_gk") or "").strip()
-    if s:
-        try:
-            gemma_ok(s)  # e.g. lambda s: validate_static_gk(s, k, today.year)
-            if not circular(s) and relevant(s, q, a, k):
-                return s, "gemma-unverified"
-        except Exception:
-            pass
+
+    # Only check key if the static GK line is relevant to the card subject
+    candidate = static_gk_from_table(k)
+    if candidate and relevant(candidate, q, a, k):
+        return candidate, "table"
+
     return "", "none"

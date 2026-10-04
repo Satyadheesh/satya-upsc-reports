@@ -71,18 +71,26 @@ def test_choose_static_gk_table_wins():
         "key": "RBI announced hike",
         "static_gk": "Some gemma fact about RBI",
     }
-    line, source = choose_static_gk(card, lambda s: True)
+    line, source = choose_static_gk(card)
     assert "RBI was established on 1 April 1935" in line
     assert source == "table"
 
 
-def test_choose_static_gk_gemma_unverified_kept_if_relevant_and_non_circular():
+def test_choose_static_gk_unverified_returns_blank():
     card = {
-        "question": "Which national park released two Great Indian Bustards?",
-        "answer": "Desert National Park",
-        "key": "Conservation initiative in Rajasthan",
-        "static_gk": "Desert National Park is located in Rajasthan",
+        "question": "Which novel initiative was launched by a private startup?",
+        "answer": "Project GreenEcho",
+        "key": "Startup founded in 2024",
+        "static_gk": "Project GreenEcho is an innovative tree-planting system",
     }
-    line, source = choose_static_gk(card, lambda s: True)
-    assert line == "Desert National Park is located in Rajasthan"
-    assert source == "gemma-unverified"
+    line, source = choose_static_gk(card)
+    assert line == ""
+    assert source == "none"
+
+
+def test_gold_set_metrics():
+    from tests.gold_set import evaluate_gold_set
+    res = evaluate_gold_set()
+    assert res["total"] >= 50
+    assert res["false_rejects_count"] == 0, f"False rejects found: {res['false_rejects']}"
+    assert res["false_accepts_count"] == 0, f"False accepts found: {res['false_accepts']}"

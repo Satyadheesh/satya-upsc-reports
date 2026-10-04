@@ -65,6 +65,7 @@ def load_notes(ids, preview=False):
 
 
 from datetime import date
+from .judge import judge_card
 from .ssc_guard import SscInvalid, choose_static_gk, validate_qa
 from .ssc_validate import validate_key, validate_static_gk
 
@@ -101,11 +102,24 @@ def generate_card(model, note, lang="en"):
             raw["key_fact"] = kf
 
             if lang == "en":
+                # 1. Structural checks
                 validate_qa(q, a, note_text=note_text)
                 validate_key(kf, year=date.today().year)
 
                 if len(a) >= 4 and a.lower() in q.lower():
                     raise SscInvalid(f"Answer '{a}' leaked inside question '{q}'")
+
+                # 2. Semantic LLM Judge
+                audit = judge_card(raw, note_text, model=model)
+                if not audit.get("pass", True):
+                    failed_rules = audit.get("failed", [])
+                    hint = audit.get("fix_hint", "Card failed audit")
+                    # If Q&A rules failed (R1, R2, R3), feed hint back into retry loop
+                    if any(r in {"R1", "R2", "R3"} for r in failed_rules):
+                        raise SscInvalid(f"Judge rejected ({','.join(failed_rules)}): {hint}")
+                    # If R5 or R6 failed (static GK), replace from table or leave blank
+                    if "R5" in failed_rules or "R6" in failed_rules:
+                        raw["static_gk"] = ""
 
             card = raw
             break
@@ -130,10 +144,7 @@ def generate_card(model, note, lang="en"):
         return None, err
 
     if lang == "en":
-        sgk_line, sgk_source = choose_static_gk(
-            card,
-            lambda s: validate_static_gk(s, card.get("key_fact", ""), date.today().year)
-        )
+        sgk_line, sgk_source = choose_static_gk(card)
         card["static_gk"] = sgk_line
         card["static_gk_source"] = sgk_source
     else:

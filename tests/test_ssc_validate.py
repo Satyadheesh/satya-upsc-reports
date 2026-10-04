@@ -20,16 +20,32 @@ def test_q11_venue_pointer_is_dropped_and_envoy_ranks_first():
     assert rank_pointers(pointers, headline="High Commissioner clarifies Hasina arrival")[0] == kept[0]
 
 
-def test_q24_hydraa_news_is_rejected_as_static_gk():
-    with pytest.raises(SscInvalid, match="no permanent anchor"):
-        validate_static_gk(
-            "HYDRAA: Granted statutory roles against encroachments under CURE Act",
-            key="Covers a 2,053 sq. km urban region", year=Y)
+def test_q24_hydraa_news_is_blanked_by_table_first_policy():
+    from kit.ssc_guard import choose_static_gk
+    from kit.judge import judge_card
+
+    card = {
+        "question": "What is the key role under the CURE Act?",
+        "answer": "Property tax cap",
+        "key": "Covers a 2,053 sq. km urban region",
+        "static_gk": "HYDRAA: Granted statutory roles against encroachments under CURE Act",
+    }
+    line, source = choose_static_gk(card)
+    assert line == ""
+    assert source == "none"
 
 
-def test_q2_purpose_fused_with_deadline_is_rejected():
-    with pytest.raises(SscInvalid, match="routine purpose"):
-        validate_key("Project aims to mitigate power shortages during peak hours by April 6, 2028", Y)
+def test_q2_purpose_fused_with_deadline_flagged_by_judge():
+    from kit.judge import judge_card
+
+    card = {
+        "question": "What is the capacity of the Kasaragod project?",
+        "answer": "50 MW/100 MWh",
+        "key": "Project aims to mitigate power shortages during peak hours by April 6, 2028",
+        "static_gk": "",
+    }
+    audit = judge_card(card, "MNRE approved 50 MW/100 MWh BESS in Kerala.")
+    assert "R4" in audit.get("failed", [])
 
 
 def test_q2_attributed_deadline_passes():

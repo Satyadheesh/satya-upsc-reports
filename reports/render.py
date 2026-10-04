@@ -172,13 +172,17 @@ def split_fact(text):
 def masthead(p, lang, edition):
     t, hi = T[lang], lang == "hi"
     kind = t[p["kind"]]
-    left = (t["vol_brief"].format(kind=kind) if edition == "brief" else t["vol_detailed"])
+    if edition == "ssc":
+        left = "Vol. I · SSC CGL One-Liner" if not hi else "भाग I · एसएससी सीजीएल वन-लाइनर"
+        product = f"SSC CGL {kind} One-Liner Revision" if not hi else f"एसएससी सीजीएल {kind} वन-लाइनर"
+    else:
+        left = (t["vol_brief"].format(kind=kind) if edition == "brief" else t["vol_detailed"])
+        product = (t["brief"] if edition == "brief" else t["detailed"]).format(kind=kind)
     if p["kind"] == "daily":
         d = p["first"]
         right = f"{DAYS_HI[d.weekday()]}, {date_label(d, True)}" if hi else d.strftime("%A, ") + date_label(d, False)
     else:
         right = period_label(p, hi)
-    product = (t["brief"] if edition == "brief" else t["detailed"]).format(kind=kind)
     return f'''<header class="mast"><div class="stripe"></div>
 <div class="edition"><span>{e(left)}</span><span>{e(right)}</span></div>
 <div class="logo">{GAVEL}<div><div class="word">Satya<i>Dheesh</i></div><div class="hiword">सत्याधीश</div></div></div>
@@ -481,4 +485,109 @@ def detailed(p, items, total, lang):
     tail = (f'<section class="page">{sec_head(t["practice"], t["test"].format(n=len(mcqs)), t["test_aside"])}{qs}{keys}{cta(lang)}</section>'
             if mcqs else f'<section>{cta(lang)}</section>')
     title = f'{t["detailed"].format(kind=t[p["kind"]])} — {period_label(p, hi)}'
+    return doc(lang, title, cover + body + tail)
+
+
+# ---------------------------------------------------------------- SSC One-Liner
+
+def _map_ssc_module(it, hi):
+    s = it.get("subject") or ""
+    n = it.get("node") or ""
+    title_lower = ((it.get("title") or "") + " " + (it.get("why") or "")).lower()
+
+    if n == "legislation" or "bill" in title_lower or "act" in title_lower or "amendment" in title_lower:
+        return ("08", "Government Bills & Acts", "शासन एवं महत्वपूर्ण अधिनियम")
+    if n == "schemes" or "scheme" in title_lower or "yojana" in title_lower:
+        return ("03", "Government Schemes", "सरकारी योजनाएं")
+    if s == "polity" or n in ("constitutional_bodies", "statutory_bodies", "executive", "judiciary", "elections"):
+        return ("04", "Appointments & Constitutional Posts", "संवैधानिक पद एवं नियुक्तियां")
+    if "index" in title_lower or "rank" in title_lower or s == "economy":
+        return ("02", "Reports, Rankings & Economy", "रिपोर्ट, सूचकांक एवं अर्थव्यवस्था")
+    if s == "security" or "defence" in title_lower or "exercise" in title_lower or "missile" in title_lower:
+        return ("11", "Defence & Security", "रक्षा एवं सैन्य अभ्यास")
+    if s == "science_tech":
+        return ("01", "Science & Technology", "विज्ञान एवं प्रौद्योगिकी")
+    if s == "environment":
+        return ("01", "Environment & Ecology", "पर्यावरण एवं पारिस्थितिकी")
+    if any(w in title_lower for w in ("trophy", "cup", "medal", "champion", "olympic", "cricket", "fifa")):
+        return ("05", "Sports & Tournaments", "खेल एवं प्रतियोगिताएं")
+    if s == "history_culture" or n == "heritage":
+        return ("12", "National & State News (Culture / Heritage)", "राष्ट्रीय एवं राज्य समाचार")
+    if s == "ir":
+        return ("13", "International News & Summits", "अंतर्राष्ट्रीय समाचार एवं सम्मेलन")
+    return ("12", "National & State News", "राष्ट्रीय एवं राज्य समाचार")
+
+
+def ssc(p, items, total, lang):
+    t, hi = T[lang], lang == "hi"
+    merged = sum(it["related"] for it in items)
+    cells = [(str(len(items)), "Questions" if not hi else "प्रश्न"),
+             (str(merged), t["merged"])]
+    cover = masthead(p, lang, "ssc") + glance(cells, paper_mix(items), t["mix"])
+
+    groups = {}
+    for it in items:
+        mod = _map_ssc_module(it, hi)
+        groups.setdefault(mod, []).append(it)
+
+    body = ""
+    q_counter = 1
+    for mod in sorted(groups.keys(), key=lambda x: x[0]):
+        code, title_en, title_hi = mod
+        mod_title = title_hi if hi else title_en
+        kicker_text = f"Module {code}" if not hi else f"मॉड्यूल {code}"
+
+        rows_html = []
+        for it in groups[mod]:
+            k = kit_of(it, lang)
+            mcq = k.get("mcq") if (k and isinstance(k.get("mcq"), dict)) else None
+            if mcq and mcq.get("question") and mcq.get("correct"):
+                question = mcq["question"]
+                answer = mcq["correct"]
+            else:
+                lead = (k.get("brief_lead") if k else None) or it.get("title")
+                why = it.get("why") or it.get("why_in_news") or ""
+                question = f"{lead}: {first_sentence(why, 130)}" if why else f"Regarding {lead}, what is the key development?"
+                answer = (k.get("brief_text") if k else None) or (it.get("fact_box") or "")[:80]
+
+            key_text = (k.get("brief_text") if k else None) or it.get("fact_box") or ""
+            key_text = fit(key_text, 180)
+
+            static_candidates = []
+            for ptr in (it.get("pointers") or []):
+                if isinstance(ptr, dict) and ptr.get("type") in ("act_bill", "constitution", "institution", "place"):
+                    static_candidates.append(ptr.get("text", ""))
+            if k and k.get("facts"):
+                for fct in k["facts"]:
+                    if isinstance(fct, dict) and fct.get("label") in ("Act", "Body", "Scheme", "Constitution"):
+                        static_candidates.append(fct.get("text", ""))
+            static_gk = static_candidates[0] if static_candidates else (it.get("fact_box") or "")
+            static_gk = fit(static_gk, 180)
+
+            key_lbl = "KEY" if not hi else "मुख्य बिंदु"
+            static_lbl = "STATIC GK" if not hi else "स्टैटिक जीके"
+
+            row = (
+                f'<tr class="qa-row">'
+                f'<td class="qa-col-question">'
+                f'<div class="q-text"><span class="q-num">{q_counter}.</span> {e(question)}</div>'
+                f'<div class="q-meta-line"><span class="q-tag-key">{key_lbl}</span> {e(key_text)}</div>'
+                f'<div class="q-meta-line"><span class="q-tag-static">{static_lbl}</span> {e(static_gk)}</div>'
+                f'</td>'
+                f'<td class="qa-col-answer"><div class="ans-box">{e(answer)}</div></td>'
+                f'</tr>'
+            )
+            rows_html.append(row)
+            q_counter += 1
+
+        sec = (
+            f'<div class="sec-row"><div><div class="kicker">{e(kicker_text)}</div>'
+            f'<h2 class="sec">{e(mod_title)}</h2></div>'
+            f'<div class="aside">{len(rows_html)} {"items" if not hi else "तथ्य"}</div></div>'
+            f'<table class="qa-table">{"".join(rows_html)}</table>'
+        )
+        body += sec
+
+    tail = f'<section>{cta(lang)}</section>'
+    title = f'{"SSC CGL One-Liner" if not hi else "एसएससी सीजीएल वन-लाइनर"} — {period_label(p, hi)}'
     return doc(lang, title, cover + body + tail)

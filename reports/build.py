@@ -67,6 +67,8 @@ def content_hash(p, lang, edition, items):
 
 def label(p, lang, edition):
     kind = {"daily": "DAILY", "weekly": "WEEKLY", "monthly": "MONTHLY"}[p["kind"]]
+    if edition == "ssc":
+        return f"SSC CGL {kind} ONE-LINER{' (HINDI)' if lang == 'hi' else ''} · {p['key']}"
     return f"UPSC {kind} {'BRIEF' if edition == 'brief' else 'DETAILED NOTES'}{' (HINDI)' if lang == 'hi' else ''} · {p['key']}"
 
 
@@ -113,7 +115,7 @@ def main():
     print(f"{len(w.rows)} notes in window ({len(periods)} periods) loaded in {time.time() - t0:.1f}s")
     stored = {}
     if not args.preview:  # only this run's keys (the table holds every report ever built)
-        want = [f"{p['kind']}:{p['key']}:{lang}:{ed}" for p in periods for lang in ("en", "hi") for ed in ("brief", "detailed")]
+        want = [f"{p['kind']}:{p['key']}:{lang}:{ed}" for p in periods for lang in ("en", "hi") for ed in ("brief", "detailed", "ssc")]
         from common.db import in_chunks
         stored = {r[0]: r[1] for r in in_chunks(upsc, "SELECT key, hash FROM upsc_reports WHERE key IN ({ph})", want)}
 
@@ -131,7 +133,7 @@ def main():
         elif trans is not None:
             print(f"  {p['kind']}:{p['key']}:hi not ready ({share:.0%} translated)")
         for lang, items, _ in langs:
-            for edition in ("brief", "detailed"):
+            for edition in ("brief", "detailed", "ssc"):
                 key = f"{p['kind']}:{p['key']}:{lang}:{edition}"
                 if args.only and args.only not in key:
                     continue
@@ -154,7 +156,12 @@ def main():
         for key, p, lang, edition, items, total, h in jobs:
             t = time.time()
             try:
-                html = (render.brief if edition == "brief" else render.detailed)(p, items, total, lang)
+                if edition == "brief":
+                    html = render.brief(p, items, total, lang)
+                elif edition == "detailed":
+                    html = render.detailed(p, items, total, lang)
+                elif edition == "ssc":
+                    html = render.ssc(p, items, total, lang)
                 f = HERE / f"_render_{os.getpid()}.html"
                 f.write_text(html, encoding="utf-8")
                 page.goto(f.as_uri(), wait_until="load")

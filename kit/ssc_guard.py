@@ -10,8 +10,8 @@ class SscInvalid(ValueError):
 
 # ---------- Q&A checks ----------
 _Q_START = re.compile(
-    r"^\s*(?:(?:by|on|in|to|at|from|for|with|under|of|against|since|until)\s+)?"
-    r"(?:who|whom|whose|what|which|when|where|why|how)\b",
+    r"^\s*(?:(?:by|on|in|to|at|from|for|with|under|of|against|since|until|according to|as per)\b[^,?:;]{1,80},\s*)?"
+    r"(?:who|whom|whose|what|which|when|where|why|how|in which|under which|for which|from which|to which|with which|by how|by what|by which|on which|to what)\b",
     re.I,
 )
 _BAD_Q = re.compile(r"key development|key update|what is the news|\.{3}|…|:\s*\?", re.I)

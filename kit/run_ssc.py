@@ -120,19 +120,17 @@ def main():
         attempts = (prior.get(aid) or 0) + 1
         now = int(time.time())
 
-        # 1. Generate English
+        # Generate English SSC card
         card_en, err_en = generate_card(model, note, lang="en")
-        # 2. Generate Hindi
-        card_hi, err_hi = generate_card(model, note, lang="hi")
 
-        status = "done" if (card_en and card_hi) else "failed"
-        err = f"EN: {err_en} | HI: {err_hi}" if status == "failed" else None
+        status = "done" if card_en else "failed"
+        err = f"EN: {err_en}" if status == "failed" else None
 
         if status == "done":
             done_count += 1
-            print(f"[{idx+1}/{len(ids)}] note {aid}: OK -> EN: {card_en['ssc_question'][:50]}... | HI: {card_hi['ssc_question'][:50]}...")
+            print(f"[{idx+1}/{len(ids)}] note {aid}: OK -> {card_en['ssc_question'][:60]} | Ans: {card_en['ssc_answer']}")
             if preview:
-                preview_records.append({"article_id": aid, "en": card_en, "hi": card_hi})
+                preview_records.append({"article_id": aid, "en": card_en})
         else:
             failed_count += 1
             print(f"[{idx+1}/{len(ids)}] note {aid}: FAILED -> {err}")
@@ -153,10 +151,10 @@ def main():
                     card_en.get("ssc_answer") if card_en else None,
                     card_en.get("key_fact") if card_en else None,
                     card_en.get("static_gk") if card_en else None,
-                    card_hi.get("ssc_question") if card_hi else None,
-                    card_hi.get("answer_hi", card_hi.get("ssc_answer")) if card_hi else None,
-                    card_hi.get("key_fact") if card_hi else None,
-                    card_hi.get("static_gk") if card_hi else None,
+                    None,
+                    None,
+                    None,
+                    None,
                     note.get("updated_at"),
                     MODEL_NAME,
                     PROMPT_VERSION,

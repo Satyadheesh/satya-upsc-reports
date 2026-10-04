@@ -490,116 +490,162 @@ def detailed(p, items, total, lang):
 
 # ---------------------------------------------------------------- SSC One-Liner
 
-def _map_ssc_module(it, hi):
-    s = it.get("subject") or ""
-    n = it.get("node") or ""
-    title_lower = ((it.get("title") or "") + " " + (it.get("why") or "")).lower()
+# ---------------------------------------------------------------- SSC One-Liner
 
-    if n == "legislation" or "bill" in title_lower or "act" in title_lower or "amendment" in title_lower:
-        return ("08", "Government Bills & Acts", "शासन एवं महत्वपूर्ण अधिनियम")
-    if n == "schemes" or "scheme" in title_lower or "yojana" in title_lower:
-        return ("03", "Government Schemes", "सरकारी योजनाएं")
-    if s == "polity" or n in ("constitutional_bodies", "statutory_bodies", "executive", "judiciary", "elections"):
-        return ("04", "Appointments & Constitutional Posts", "संवैधानिक पद एवं नियुक्तियां")
-    if "index" in title_lower or "rank" in title_lower or s == "economy":
-        return ("02", "Reports, Rankings & Economy", "रिपोर्ट, सूचकांक एवं अर्थव्यवस्था")
-    if s == "security" or "defence" in title_lower or "exercise" in title_lower or "missile" in title_lower:
-        return ("11", "Defence & Security", "रक्षा एवं सैन्य अभ्यास")
-    if s == "science_tech":
-        return ("01", "Science & Technology", "विज्ञान एवं प्रौद्योगिकी")
-    if s == "environment":
-        return ("01", "Environment & Ecology", "पर्यावरण एवं पारिस्थितिकी")
-    if any(w in title_lower for w in ("trophy", "cup", "medal", "champion", "olympic", "cricket", "fifa")):
-        return ("05", "Sports & Tournaments", "खेल एवं प्रतियोगिताएं")
-    if s == "history_culture" or n == "heritage":
-        return ("12", "National & State News (Culture / Heritage)", "राष्ट्रीय एवं राज्य समाचार")
-    if s == "ir":
-        return ("13", "International News & Summits", "अंतर्राष्ट्रीय समाचार एवं सम्मेलन")
-    return ("12", "National & State News", "राष्ट्रीय एवं राज्य समाचार")
+def _map_ssc_topic(it):
+    s = (it.get("subject") or "").lower()
+    n = (it.get("node") or it.get("syllabus_node") or "").lower()
+    t = ((it.get("title") or "") + " " + (it.get("why") or "")).lower()
+
+    # Topic 01: Economy & Energy
+    if s == "economy" or any(w in t for w in ("energy", "power", "hydropower", "solar", "bess", "gas", "fpi", "rbi", "repo", "growth", "gdp")):
+        return ("01", "Economy & Energy")
+    # Topic 02: Science & Technology
+    if s in ("science_tech", "environment") or any(w in t for w in ("pathogen", "fungal", "candida", "species", "antarctica", "isea", "ai", "openai", "it act", "bitchat", "protein", "lactoferrin")):
+        return ("02", "Science & Technology")
+    # Topic 03: Defence & Security
+    if s == "security" or any(w in t for w in ("defence", "defense", "aircraft", "fighter", "squadron", "nuclear", "warhead", "missile", "exercise", "iaf", "hal", "triad")):
+        return ("03", "Defence & Security")
+    # Topic 05: International News
+    if s == "ir" or any(w in t for w in ("russia", "ukraine", "dhaka", "bangladesh", "seychelles", "summit", "foreign", "munich", "ceasefire", "diplomat", "high commissioner")):
+        return ("05", "International News")
+    # Topic 04: Polity, Governance & Schemes
+    return ("04", "Polity, Governance & Schemes")
 
 
-def ssc(p, items, total, lang):
-    t, hi = T[lang], lang == "hi"
-    merged = sum(it["related"] for it in items)
-    cells = [(str(len(items)), "Questions" if not hi else "प्रश्न"),
-             (str(merged), t["merged"])]
-    cover = masthead(p, lang, "ssc") + glance(cells, paper_mix(items), t["mix"])
+SSC_CSS = """
+:root{--rust:#bf4a07;--ink:#120f0b;--cream:#f8f6f2;--line:#e0dfdb;--mute:#6b6a67}
+*{box-sizing:border-box}
+body{margin:0;background:#fff;color:var(--ink);font:15px/1.5 "DM Sans",system-ui,Arial,sans-serif}
+.page{max-width:820px;margin:0 auto;padding:0 20px 40px;border-top:3px solid var(--rust)}
+.mono{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--mute)}
+.meta{display:flex;justify-content:space-between;padding:10px 0}
+.brand{text-align:center;padding:14px 0 6px}
+.logo{display:inline-flex;align-items:center;gap:14px;text-align:left}
+.word{font-family:"Playfair Display",Georgia,serif;font-weight:900;font-size:40px;letter-spacing:.14em;line-height:1}
+.word b{color:var(--rust);font-weight:900}
+.dev{font-family:"Noto Serif Devanagari",serif;font-weight:700;color:var(--rust);font-size:18px;line-height:1.2;margin-top:2px}
+.pill{display:inline-block;background:var(--ink);color:#fff;font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:.16em;padding:6px 16px;border-radius:3px;margin:16px 0 12px}
+h1{font:700 22px "Playfair Display",Georgia,serif;margin:0 0 16px}
+.stats{display:flex;background:var(--cream);border:1px solid var(--line);border-radius:4px;margin-bottom:8px}
+.stats div{flex:1;padding:10px 16px}.stats div+div{border-left:1px solid var(--line)}
+.stats b{font:700 20px "Playfair Display",serif;display:block;line-height:1.2}
+h2{display:flex;justify-content:space-between;align-items:baseline;font:700 26px "Playfair Display",Georgia,serif;margin:34px 0 4px;padding-bottom:0}
+h2 small{font:500 10.5px "IBM Plex Mono",monospace;color:var(--mute);letter-spacing:.08em;text-transform:uppercase}
+.mod{display:block;margin-top:30px;color:var(--rust)}
+.mod+h2{margin-top:2px}
+.list{border:1px solid var(--line);border-radius:4px;overflow:hidden;margin-top:10px}
+.row{position:relative;padding:16px 18px 14px 58px;border-top:1px solid var(--line);break-inside:avoid}
+.row:first-child{border-top:0}
+.row h3{padding-right:30px;font:700 15.5px/1.4 "Playfair Display",Georgia,serif;margin:0 0 10px;color:#3a3732}
+.row h3 i{position:absolute;left:14px;width:32px;text-align:right;font-style:normal;font-variant-numeric:tabular-nums;color:var(--rust)}
+.ans{background:var(--cream);border-left:4px solid var(--rust);padding:10px 16px;font:900 24px/1.25 "Playfair Display",Georgia,serif;color:var(--ink);border-radius:0 4px 4px 0}
+.more{margin-top:10px;display:grid;grid-template-columns:76px 1fr;row-gap:4px;align-items:baseline}
+.more p{display:contents;margin:0}
+.more p span{font:600 9px/1.6 "IBM Plex Mono",monospace;letter-spacing:.1em;text-transform:uppercase;color:#a9a7a2;white-space:nowrap}
+.more p{font-size:12px;line-height:1.5;color:#8a8883}
+sup{color:var(--rust);font-weight:700}
+.note{margin-top:22px;font-size:12px;color:var(--mute);border-top:1px solid var(--line);padding-top:10px}
+.cta{margin-top:26px;background:var(--cream);border:1px solid var(--line);border-left:3px solid var(--rust);border-radius:4px;padding:14px 18px;break-inside:avoid}
+.cta b{font:700 17px "Playfair Display",serif;display:block}
+.cta span{font-size:13px;color:#3a3732}
+.foot{display:flex;justify-content:space-between;margin-top:22px;padding-top:10px;border-top:1px solid var(--line)}
+.foot a{color:var(--rust);text-decoration:none}
+@media(max-width:620px){.ans{font-size:20px}.word{font-size:26px}.meta,.foot{flex-direction:column;gap:2px}}
+@page{size:A4;margin:11mm}
+@media print{body{font-size:12.5px;-webkit-print-color-adjust:exact;print-color-adjust:exact}.page{max-width:none;padding:0 2px;border-top:3px solid var(--rust)}h2{break-after:avoid}.mod{break-after:avoid}.row{padding:10px 14px 9px 52px}.ans{font-size:19px;padding:7px 14px}}
+.src{position:absolute;top:14px;right:14px;display:block;padding:2px 4px;font-size:15px;line-height:1;color:#b5b3ae;text-decoration:none}.src:hover{color:var(--rust);text-decoration:underline}.src[hidden]{display:none}
+"""
 
+
+def ssc(p, items, total, lang="en"):
+    # English-only SSC edition
     groups = {}
     for it in items:
-        mod = _map_ssc_module(it, hi)
-        groups.setdefault(mod, []).append(it)
+        topic = _map_ssc_topic(it)
+        groups.setdefault(topic, []).append(it)
 
-    body = ""
+    date_str = p["first"].strftime("%A, %-d %B %Y")
+    h1_date = p["first"].strftime("%-d %B %Y")
+    date_key = p["key"]
+
+    pm = paper_mix(items)
+    mix_str = " &nbsp; ".join(f"{pp} · {n}" for pp, n in pm)
+
+    topics_html = []
     q_counter = 1
-    for mod in sorted(groups.keys(), key=lambda x: x[0]):
-        code, title_en, title_hi = mod
-        mod_title = title_hi if hi else title_en
-        kicker_text = f"Module {code}" if not hi else f"मॉड्यूल {code}"
+    for topic in sorted(groups.keys(), key=lambda x: x[0]):
+        code, topic_title = topic
+        rows = []
+        for it in groups[topic]:
+            ssc_data = it.get("ssc_kit") or {}
+            q_text = ssc_data.get("question_en")
+            ans_text = ssc_data.get("answer_en")
+            key_text = ssc_data.get("key_fact_en") or ""
+            static_gk = ssc_data.get("static_gk_en") or ""
 
-        rows_html = []
-        for it in groups[mod]:
-            ssc = it.get("ssc_kit")
-            q_field = "question_hi" if hi else "question_en"
-            a_field = "answer_hi" if hi else "answer_en"
-            k_field = "key_fact_hi" if hi else "key_fact_en"
-            s_field = "static_gk_hi" if hi else "static_gk_en"
+            if not (q_text and ans_text):
+                k = kit_of(it, "en") or {}
+                lead = k.get("brief_lead") or it.get("title") or ""
+                why = it.get("why") or it.get("why_in_news") or ""
+                q_text = f"Regarding {lead}, what is the key development?" if not why else f"{lead}: {first_sentence(why, 120)}"
+                ans_text = k.get("brief_text") or (it.get("fact_box") or "")[:50]
+                key_text = it.get("fact_box") or ""
+                static_gk = (it.get("pointers") or [{}])[0].get("text", "") if it.get("pointers") else ""
 
-            if ssc and ssc.get(q_field) and ssc.get(a_field):
-                question = ssc[q_field]
-                answer = ssc[a_field]
-                key_text = fit(ssc.get(k_field) or "", 180)
-                static_gk = fit(ssc.get(s_field) or "", 180)
-            else:
-                k = kit_of(it, lang)
-                mcq = k.get("mcq") if (k and isinstance(k.get("mcq"), dict)) else None
-                if mcq and mcq.get("question") and mcq.get("correct"):
-                    question = mcq["question"]
-                    answer = mcq["correct"]
-                else:
-                    lead = (k.get("brief_lead") if k else None) or it.get("title")
-                    why = it.get("why") or it.get("why_in_news") or ""
-                    question = f"{lead}: {first_sentence(why, 130)}" if why else f"Regarding {lead}, what is the key development?"
-                    answer = (k.get("brief_text") if k else None) or (it.get("fact_box") or "")[:80]
-
-                key_text = (k.get("brief_text") if k else None) or it.get("fact_box") or ""
-                key_text = fit(key_text, 180)
-
-                static_candidates = []
-                for ptr in (it.get("pointers") or []):
-                    if isinstance(ptr, dict) and ptr.get("type") in ("act_bill", "constitution", "institution", "place"):
-                        static_candidates.append(ptr.get("text", ""))
-                if k and k.get("facts"):
-                    for fct in k["facts"]:
-                        if isinstance(fct, dict) and fct.get("label") in ("Act", "Body", "Scheme", "Constitution"):
-                            static_candidates.append(fct.get("text", ""))
-                static_gk = static_candidates[0] if static_candidates else (it.get("fact_box") or "")
-                static_gk = fit(static_gk, 180)
-
-            key_lbl = "KEY" if not hi else "मुख्य बिंदु"
-            static_lbl = "STATIC GK" if not hi else "स्टैटिक जीके"
-
-            row = (
-                f'<tr class="qa-row">'
-                f'<td class="qa-col-question">'
-                f'<div class="q-text"><span class="q-num">{q_counter}.</span> {e(question)}</div>'
-                f'<div class="q-meta-line"><span class="q-tag-key">{key_lbl}</span> {e(key_text)}</div>'
-                f'<div class="q-meta-line"><span class="q-tag-static">{static_lbl}</span> {e(static_gk)}</div>'
-                f'</td>'
-                f'<td class="qa-col-answer"><div class="ans-box">{e(answer)}</div></td>'
-                f'</tr>'
+            src_url = f"https://satyadheesh.in/upsc/note/{it.get('id') or it.get('article_id')}"
+            row_html = (
+                f'<div class="row">'
+                f'<h3><i>{q_counter}</i>{e(q_text)}</h3>'
+                f'<div class="ans">{e(ans_text)}</div>'
+                f'<div class="more">'
+                f'<p><span>Key</span>{e(fit(key_text, 160))}</p>'
+                f'<p><span>Static GK</span>{e(fit(static_gk, 160))}</p>'
+                f'<a class="src" href="{src_url}" target="_blank" rel="noopener" title="Read note" aria-label="Read note">↗</a>'
+                f'</div></div>'
             )
-            rows_html.append(row)
+            rows.append(row_html)
             q_counter += 1
 
         sec = (
-            f'<div class="sec-row"><div><div class="kicker">{e(kicker_text)}</div>'
-            f'<h2 class="sec">{e(mod_title)}</h2></div>'
-            f'<div class="aside">{len(rows_html)} {"items" if not hi else "तथ्य"}</div></div>'
-            f'<table class="qa-table">{"".join(rows_html)}</table>'
+            f'<span class="mod mono">Topic {code}</span>\n'
+            f'<h2>{e(topic_title)} <small>{len(rows)} items</small></h2>\n'
+            f'<div class="list">\n{"".join(rows)}\n</div>\n'
         )
-        body += sec
+        topics_html.append(sec)
 
-    tail = f'<section>{cta(lang)}</section>'
-    title = f'{"SSC CGL One-Liner" if not hi else "एसएससी सीजीएल वन-लाइनर"} — {period_label(p, hi)}'
-    return doc(lang, title, cover + body + tail)
+    body = f"""
+<div class="page">
+<div class="meta mono"><span>Vol. I · SSC CGL One-Liner</span><span>{date_str}</span></div>
+
+<div class="brand">
+<div class="logo">
+<svg width="46" height="46" viewBox="0 0 46 46" aria-hidden="true"><rect x="2" y="2" width="42" height="42" rx="10" fill="#f8f6f2" stroke="#120f0b" stroke-width="2.5"/><g transform="rotate(-35 23 21)"><rect x="12" y="17" width="14" height="10" rx="2" fill="#bf4a07"/><rect x="26" y="20" width="9" height="4" rx="2" fill="#bf4a07"/></g><rect x="11" y="34" width="24" height="3" rx="1.5" fill="#8e8d8b"/></svg>
+<div><div class="word">SATYA<b>DHEESH</b></div><div class="dev">सत्याधीश</div></div>
+</div>
+<div><span class="pill">SSC CGL DAILY ONE-LINER REVISION</span></div>
+<h1>Current Affairs · {h1_date}</h1>
+</div>
+
+<div class="stats">
+<div><b>{len(items)}</b><span class="mono">Questions</span></div>
+<div><b>{len(groups)}</b><span class="mono">Topics</span></div>
+<div><b>{mix_str}</b><span class="mono">Paper mix</span></div>
+</div>
+
+{"".join(topics_html)}
+
+<div class="cta"><b>Get it every morning on Telegram</b><span>Daily PDF + quiz at 5 AM · weekly review every Sunday · English · free, no sign-up.</span></div>
+
+<div class="foot mono"><span>Satyadheesh · SSC CGL Daily One-Liner · {date_key}</span><span>satyadheesh.in/upsc · <a href="https://t.me/satyadheesh">t.me/satyadheesh</a></span></div>
+</div>
+"""
+    title = f"Satyadheesh · SSC CGL Daily One-Liner · {h1_date}"
+    return (
+        f'<!doctype html><html lang="en"><head><meta charset="utf-8"><title>{e(title)}</title>'
+        f'<link rel="stylesheet" href="base.css">'
+        f'<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=IBM+Plex+Mono:wght@500;600&family=Noto+Serif+Devanagari:wght@700&family=Playfair+Display:wght@700;900&display=swap">'
+        f'<style>{SSC_CSS}</style>'
+        f'</head><body>{body}</body></html>'
+    )
+

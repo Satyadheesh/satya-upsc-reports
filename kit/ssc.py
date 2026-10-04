@@ -2,9 +2,9 @@
 import json
 import re
 
-PROMPT_VERSION = "ssc-v1"
+PROMPT_VERSION = "ssc-v2"
 
-SYSTEM = """You are a senior SSC CGL General Awareness paper setter (TCS pattern, Tier-1/Tier-2). You convert one daily current-affairs note into ONE rapid-fire active-recall flashcard.
+PROMPT_TEMPLATE = """You are a senior SSC CGL General Awareness paper setter (TCS pattern, Tier-1/Tier-2). You convert one daily current-affairs note into ONE rapid-fire active-recall flashcard.
 
 THINK LIKE SSC, NOT UPSC
 - SSC tests direct recall: Who, What, Where, When, How many, Which. No analysis, no "with reference to", no multi-statement evaluation, no "significance" or "impact".
@@ -14,132 +14,49 @@ OUTPUT: one JSON object with exactly these keys, nothing else:
 - ssc_question: one direct question ending with "?". Max 120 chars. Must NOT contain or hint at the answer.
 - ssc_answer: the bare answer: a name, place, number, scheme or short phrase. No full sentence, no verb. Max 50 chars.
 - key_fact: one supporting fact taken from the note (duration, predecessor, target, batch, venue, edition, score). Max 120 chars.
-- static_gk: one high-yield static fact linked to the answer or its organisation. Max 140 chars.
+- static_gk: one high-yield static fact directly linked to the answer or its parent body. Max 140 chars.
 
-STATIC GK RULES
-- Prefer: headquarters, founding/launch year, constitutional article, first person to hold the post, nodal ministry, parent body, associated river/state/capital, motto.
-- Use only stable facts you are certain about. Never state who currently holds a post in static_gk.
-- If you are not sure of a static fact, give a different certain one. Never guess years, articles or names.
+STATE & JURISDICTION RULE (CRITICAL)
+- If an event, election, policy, court order or scheme applies to a specific Indian state or territory, the question MUST name that state (e.g. "In Rajasthan, what is the...?", "Under Tamil Nadu's scheme...?").
+- Never frame a state-level matter as an unqualified national rule.
 
 FACTUAL BOUNDARIES
-- ssc_answer and key_fact must come ONLY from the supplied note. Never add numbers, names or dates that are not in it.
+- ssc_answer and key_fact must come ONLY from the note. Never add numbers, names or dates that are not in it.
 - Copy numbers, spellings and units exactly. Use the ₹ symbol and "crore"/"lakh".
-- If the note lacks a clean answerable fact, use the Prelims pointers or Key facts field. Do not invent one.
+- If a figure is an independent estimate or third-party report (think-tank, university study), attribute it in the question or key_fact.
+- If the note lacks a clean answerable fact, use its Prelims pointers or Key facts. Do not invent one.
+
+STATIC GK (ANTI-HALLUCINATION)
+- First preference: an existing static hook in the note's Prelims pointers or Key facts (Act, Article, Body, Ministry, River).
+- Otherwise, from memory, use ONLY high-confidence anchors for the subject entity itself:
+  1. Headquarters city (e.g. "HQ: New Delhi")
+  2. Nodal Ministry or parent body (e.g. "Under Ministry of Power")
+  3. Constitutional Article or statutory Act (e.g. "Article 243D", "IT Act, 2000")
+  4. Directly associated river, state capital or international border
+- NEVER state who currently holds an office.
+- NEVER guess founding years, exact dates or superlatives ("oldest", "first", "largest"). If not 100% certain, use a headquarters or ministry anchor instead.
+- NEVER hook an unrelated third country or entity to the story.
+- If you have no high-confidence anchor, use another supporting fact from the note rather than guessing.
 
 STYLE
-- Telegraphic. No filler words, no "The government...", no explanations.
+- Telegraphic. No filler, no "The government...", no explanations.
 - Question patterns: "Who was appointed as...?", "In which state/city was ... held?", "What is the outlay of ...?", "Which country became ...?", "Which institution ...?"
-- Do not output markdown, comments or text outside the JSON.
+- Write in English.
 
-LANGUAGE
-- Obey the Output language field. If en, write English. If hi, follow the Hindi rules below.
-- Hindi rules: write the question the way Hindi exam papers do, not as a literal translation. Use patterns like "हाल ही में किसे ... नियुक्त किया गया?", "... का आयोजन कहाँ किया गया?", "किस देश ने ...?", "... योजना का कुल बजट कितना है?". Use Devanagari, with Western digits (0-9) for numbers and dates. Keep ₹ and use "करोड़". Keep acronyms in their common form (ISRO, CISF, MeitY). Use the standard Hindi form of well-known proper nouns (e.g. दिल्ली, राजस्थान). The answer must be a bare name, number or phrase, with no sentence ending in "है"."""
+QUESTION CHECK
+- Bad (leaks answer): "Which scheme, launched as PM Awas Yojana 2.0, gives urban housing?" 
+- Good: "Which scheme was launched to provide urban housing for the poor?"
 
-USER_TEMPLATE = """Output language: {lang}   (en | hi)
+EXAMPLE OUTPUT (unrelated to the note; use for format only)
+{"ssc_question":"Which exercise did India and France conduct in Rajasthan?","ssc_answer":"Shakti","key_fact":"13-day exercise held at Mahajan Field Firing Range","static_gk":"Mahajan Field Firing Range is in Bikaner, Rajasthan"}
 
-NOTE
-Title: {title}
-Paper: {paper}
-Why in news: {why_in_news}
-Key facts: {key_facts}
-Prelims pointers:
-{prelims_pointers}
-Keywords: {keywords}
+<note>
+{note}
+</note>
 
-Create the SSC CGL flashcard JSON for this note."""
+Output only the JSON object. No markdown, no comments, no text outside the JSON."""
 
-FEW_SHOTS_EN = [
-    (
-        """Output language: en
-
-NOTE
-Title: Neena Singh appointed first woman Director General of CISF
-Paper: GS2 · Governance
-Why in news: Senior IPS officer Neena Singh was appointed DG of the Central Industrial Security Force, the first woman to head the force.
-Key facts: 1989-batch IPS officer, Rajasthan cadre; earlier served in CBI and as Special DG in CISF.
-Prelims pointers:
-- person: Neena Singh
-- institution: CISF
-Keywords: ["CISF", "Neena Singh", "Director General"]
-
-Create the SSC CGL flashcard JSON for this note.""",
-        {
-            "ssc_question": "Who became the first woman Director General of CISF?",
-            "ssc_answer": "Neena Singh",
-            "key_fact": "1989-batch IPS officer of Rajasthan cadre.",
-            "static_gk": "CISF raised 1969 under CISF Act 1968; HQ: New Delhi; works under MHA.",
-        },
-    ),
-    (
-        """Output language: en
-
-NOTE
-Title: Government approves ₹10,372 crore IndiaAI Mission to bolster compute capacity
-Paper: GS3 · Science & Technology
-Why in news: The Union Cabinet chaired by PM Modi approved the IndiaAI Mission with a budget outlay of ₹10,372 crore over 5 years to establish 10,000 GPUs.
-Key facts: Outlay ₹10,372 crore for 5 years; AI compute capacity of 10,000+ GPUs; IndiaAI Innovation Centre; IndiaAI Datasets Platform; implemented by Independent Business Division under Digital India Corporation.
-Prelims pointers:
-- scheme: IndiaAI Mission
-- institution: Digital India Corporation (DIC) under MeitY
-- data_fact: 10,000 GPUs compute capacity
-Keywords: ["IndiaAI Mission", "MeitY", "GPUs"]
-
-Create the SSC CGL flashcard JSON for this note.""",
-        {
-            "ssc_question": "What is the total financial outlay approved for the IndiaAI Mission?",
-            "ssc_answer": "₹10,372 crore",
-            "key_fact": "Spread over 5 years; target of 10,000+ GPUs of compute capacity.",
-            "static_gk": "Nodal ministry: MeitY; Digital India launched on 1 July 2015.",
-        },
-    ),
-    (
-        """Output language: en
-
-NOTE
-Title: India-US joint military exercise Yudh Abhyas 2024 begins in Alaska
-Paper: GS3 · Internal Security
-Why in news: The 20th edition of Exercise Yudh Abhyas began at Fort Wainwright, Alaska, with Indian Army and US Army contingents.
-Key facts: 20th edition; venue Fort Wainwright, Alaska; September 2024; focus on interoperability and joint operations.
-Prelims pointers:
-- exercise: Yudh Abhyas
-- place: Alaska, USA
-Keywords: ["Yudh Abhyas", "Indian Army", "US Army", "Alaska"]
-
-Create the SSC CGL flashcard JSON for this note.""",
-        {
-            "ssc_question": "In which US state was the 20th edition of Exercise Yudh Abhyas held?",
-            "ssc_answer": "Alaska",
-            "key_fact": "Held at Fort Wainwright in Sept 2024; India-US Army exercise.",
-            "static_gk": "Alaska was bought from Russia in 1867; Yudh Abhyas has been held since 2004.",
-        },
-    ),
-]
-
-FEW_SHOTS_HI = [
-    (
-        """Output language: hi
-
-NOTE
-Title: D Gukesh becomes youngest World Chess Champion
-Paper: Miscellaneous · Sports
-Why in news: Indian Grandmaster D Gukesh defeated China's Ding Liren in the World Chess Championship final in Singapore at age 18.
-Key facts: Won 7.5-6.5 in the final game decider; youngest undisputed world champion; venue Singapore; December 2024.
-Prelims pointers:
-- person: D Gukesh
-- event: FIDE World Chess Championship 2024
-Keywords: ["Gukesh", "Ding Liren", "FIDE", "Singapore"]
-
-Create the SSC CGL flashcard JSON for this note.""",
-        {
-            "ssc_question": "हाल ही में विश्व शतरंज चैंपियनशिप 2024 किस भारतीय खिलाड़ी ने जीती?",
-            "ssc_answer": "डी. गुकेश",
-            "key_fact": "सिंगापुर में चीन के डिंग लिरेन को हराया; 18 वर्ष में सबसे युवा चैंपियन।",
-            "static_gk": "FIDE की स्थापना 1924, मुख्यालय: लुसाने (स्विट्जरलैंड); पहले भारतीय विश्व चैंपियन: विश्वनाथन आनंद।",
-        },
-    )
-]
-
-SCHEMA_EN = {
+SCHEMA = {
     "type": "object",
     "properties": {
         "ssc_question": {"type": "string", "minLength": 15, "maxLength": 120, "pattern": r"^[^\n]*\?$"},
@@ -151,55 +68,47 @@ SCHEMA_EN = {
     "additionalProperties": False,
 }
 
-SCHEMA_HI = {
-    "type": "object",
-    "properties": {
-        "ssc_question": {"type": "string", "minLength": 15, "maxLength": 150, "pattern": r"^[^\n]*[?？]$"},
-        "ssc_answer":   {"type": "string", "minLength": 1,  "maxLength": 70,  "pattern": r"^[^\n]*$"},
-        "key_fact":     {"type": "string", "minLength": 5,  "maxLength": 170, "pattern": r"^[^\n]*$"},
-        "static_gk":    {"type": "string", "minLength": 5,  "maxLength": 190, "pattern": r"^[^\n]*$"},
-    },
-    "required": ["ssc_question", "ssc_answer", "key_fact", "static_gk"],
-    "additionalProperties": False,
-}
-
 
 def schema(lang="en"):
-    return SCHEMA_HI if lang == "hi" else SCHEMA_EN
+    return SCHEMA
 
 
-def user_prompt(note, lang="en", feedback=None):
-    ptrs = "\n".join(
-        f"- {p.get('type', '')}: {p.get('text', '')}"
-        for p in (note.get("prelims_pointers") or [])
-        if isinstance(p, dict)
-    )
-    if not ptrs:
-        ptrs = "- none"
+def format_note(note):
+    lines = []
+    title = note.get("title") or note.get("original_title") or ""
+    if title:
+        lines.append(f"Title: {title}")
+    if note.get("gs_paper"):
+        lines.append(f"Paper: {note.get('gs_paper')} · {note.get('subject') or 'General'}")
+    if note.get("why_in_news"):
+        lines.append(f"Why in news: {note.get('why_in_news')}")
+    if note.get("fact_box"):
+        lines.append(f"Key facts: {note.get('fact_box')}")
 
-    keywords = json.dumps(note.get("keywords") or [])
-    text = USER_TEMPLATE.format(
-        lang=lang,
-        title=note.get("title") or note.get("original_title") or "",
-        paper=f"{note.get('gs_paper') or 'GS'} · {note.get('subject') or 'General'}",
-        why_in_news=note.get("why_in_news") or "",
-        key_facts=note.get("fact_box") or "",
-        prelims_pointers=ptrs,
-        keywords=keywords,
-    )
-    if feedback:
-        text += f"\n\nYour previous answer was rejected: {feedback}. Please rewrite and fix that."
-    return text
+    pointers = note.get("prelims_pointers") or []
+    if pointers:
+        lines.append("Prelims pointers:")
+        for p in pointers:
+            if isinstance(p, dict):
+                t = p.get("type", "fact")
+                txt = p.get("text", "")
+                lines.append(f"- {t}: {txt}")
+            elif isinstance(p, str):
+                lines.append(f"- {p}")
+
+    keywords = note.get("keywords") or []
+    if keywords:
+        lines.append(f"Keywords: {keywords}")
+
+    return "\n".join(lines)
 
 
 def build_messages(note, lang="en", feedback=None):
-    shots = FEW_SHOTS_HI if lang == "hi" else FEW_SHOTS_EN
-    msgs = [{"role": "system", "content": SYSTEM}]
-    for u, a in shots:
-        msgs.append({"role": "user", "content": u})
-        msgs.append({"role": "assistant", "content": json.dumps(a, ensure_ascii=False)})
-    msgs.append({"role": "user", "content": user_prompt(note, lang, feedback)})
-    return msgs
+    note_text = format_note(note)
+    prompt = PROMPT_TEMPLATE.format(note=note_text)
+    if feedback:
+        prompt += f"\n\nYour previous answer was rejected: {feedback}. Please rewrite and fix that."
+    return [{"role": "user", "content": prompt}]
 
 
 class SscInvalid(ValueError):
@@ -220,21 +129,15 @@ def validate_ssc_card(card, note, lang="en"):
     ans = card["ssc_answer"]
     kf = card["key_fact"]
 
-    # 1. Must end in ? or ？
-    if not (q.endswith("?") or q.endswith("？")):
+    # 1. Must end in ?
+    if not q.endswith("?"):
         raise SscInvalid("Question must end with '?'")
 
     # 2. Leakage check: answer should not appear inside question
     if len(ans) >= 4 and ans.lower() in q.lower():
         raise SscInvalid(f"Answer '{ans}' leaked inside question '{q}'")
 
-    # 3. Hindi check: answer must not end in auxiliary verbs (है, हैं, था, थी, थे)
-    if lang == "hi":
-        trimmed = ans.rstrip(".।! ")
-        if trimmed.endswith(("है", "हैं", "था", "थी", "थे")):
-            raise SscInvalid(f"Hindi answer must be bare entity, cannot end in verb '{trimmed}': {ans}")
-
-    # 4. Digit grounding: any 2+ digit numbers in answer and key_fact must appear in source note
+    # 3. Digit grounding: any 2+ digit numbers in answer and key_fact must appear in source note
     note_text = " ".join([
         str(note.get("title") or ""),
         str(note.get("original_title") or ""),

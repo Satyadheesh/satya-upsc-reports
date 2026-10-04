@@ -141,6 +141,8 @@ def main():
             print(f"  {p['kind']}:{p['key']}:hi not ready ({share:.0%} translated)")
         for lang, items, _ in langs:
             for edition in ("brief", "detailed", "ssc"):
+                if edition == "ssc" and lang != "en":
+                    continue
                 key = f"{p['kind']}:{p['key']}:{lang}:{edition}"
                 if args.only and args.only not in key:
                     continue

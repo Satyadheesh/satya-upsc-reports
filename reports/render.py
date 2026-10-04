@@ -639,17 +639,27 @@ def ssc(p, items, total, lang="en"):
 
             if not (q_text and ans_text):
                 k = kit_of(it, "en") or {}
-                lead = (k.get("brief_lead") or it.get("title") or "").strip()
+                lead = (k.get("brief_lead") or "").strip()
+                title = (it.get("title") or "").strip()
                 why = (it.get("why") or it.get("why_in_news") or "").strip()
-                if lead and why:
-                    q_text = f"{lead}: {first_sentence(why, 120)}"
-                elif lead:
-                    q_text = f"Regarding {lead}, what is the key development?"
+                fact = (it.get("fact_box") or "").strip()
+
+                # Build a proper interrogative question, never a headline
+                if lead:
+                    q_text = f"What is the key development regarding {lead}?"
+                elif title:
+                    q_text = f"What is the key development regarding {first_sentence(title, 80)}?"
                 else:
-                    q_text = first_sentence(why, 120) or "What is the key development in this report?"
-                ans_text = k.get("brief_text") or (it.get("fact_box") or "")[:50]
-                key_text = it.get("fact_box") or ""
-                static_gk = (it.get("pointers") or [{}])[0].get("text", "") if it.get("pointers") else ""
+                    q_text = f"What is the key development in this news?"
+
+                # Answer: prefer a short factual snippet, not a sentence
+                ans_text = (k.get("brief_text") or fact or why or "")[:50].strip()
+                if not ans_text:
+                    ans_text = "See note"
+
+                key_text = fact or ""
+                static_gk = ((it.get("pointers") or [{}])[0].get("text", "")
+                             if it.get("pointers") else "")
 
             src_url = f"https://satyadheesh.in/upsc/note/{it.get('id') or it.get('article_id')}"
             row_html = (

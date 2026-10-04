@@ -57,6 +57,61 @@ class TestSsc(unittest.TestCase):
         with self.assertRaises(SscInvalid):
             validate_ssc_card(card, self.note, lang="en")
 
+    def test_headline_as_question(self):
+        """Question that is a headline (no interrogative starter) should be rejected."""
+        card = {
+            "ssc_question": "India releases Great Indian Bustards in Desert National Park?",
+            "ssc_answer": "Great Indian Bustards",
+            "key_fact": "Two male birds released.",
+            "static_gk": "Desert National Park is in Jaisalmer, Rajasthan.",
+        }
+        with self.assertRaises(SscInvalid):
+            validate_ssc_card(card, self.note, lang="en")
+
+    def test_sentence_as_answer(self):
+        """Answer that is a sentence fragment with verbs should be rejected."""
+        card = {
+            "ssc_question": "What was launched for Telangana government hospitals?",
+            "ssc_answer": "The NEHS was launched on July 17 for Telangana gov",
+            "key_fact": "919 hospitals now offer cashless treatment.",
+            "static_gk": "Telangana capital: Hyderabad.",
+        }
+        with self.assertRaises(SscInvalid):
+            validate_ssc_card(card, self.note, lang="en")
+
+    def test_answer_too_long(self):
+        """Answer with more than 10 words should be rejected."""
+        card = {
+            "ssc_question": "Who became the first woman Director General of CISF?",
+            "ssc_answer": "Senior IPS officer Neena Singh was appointed as the new DG of CISF",
+            "key_fact": "1989-batch IPS officer of Rajasthan cadre.",
+            "static_gk": "CISF HQ: New Delhi.",
+        }
+        with self.assertRaises(SscInvalid):
+            validate_ssc_card(card, self.note, lang="en")
+
+    def test_field_repetition_kf_equals_q(self):
+        """key_fact that is just a copy of the question should be rejected."""
+        card = {
+            "ssc_question": "Who became the first woman Director General of CISF?",
+            "ssc_answer": "Neena Singh",
+            "key_fact": "Who became the first woman Director General of CISF",
+            "static_gk": "CISF HQ: New Delhi.",
+        }
+        with self.assertRaises(SscInvalid):
+            validate_ssc_card(card, self.note, lang="en")
+
+    def test_field_repetition_sgk_equals_kf(self):
+        """static_gk identical to key_fact should be rejected."""
+        card = {
+            "ssc_question": "Who became the first woman Director General of CISF?",
+            "ssc_answer": "Neena Singh",
+            "key_fact": "CISF HQ: New Delhi",
+            "static_gk": "CISF HQ: New Delhi",
+        }
+        with self.assertRaises(SscInvalid):
+            validate_ssc_card(card, self.note, lang="en")
+
     def test_schema(self):
         sc_en = schema("en")
         self.assertEqual(sc_en["properties"]["ssc_question"]["maxLength"], 120)

@@ -2,7 +2,7 @@
 import json
 import re
 
-PROMPT_VERSION = "ssc-v2"
+PROMPT_VERSION = "ssc-v3"
 
 PROMPT_TEMPLATE = """You are a senior SSC CGL General Awareness paper setter (TCS pattern, Tier-1/Tier-2). You convert one daily current-affairs note into ONE rapid-fire active-recall flashcard.
 
@@ -15,6 +15,12 @@ OUTPUT: one JSON object with exactly these keys, nothing else:
 - ssc_answer: the bare answer: a name, place, number, scheme or short phrase. No full sentence, no verb. Max 50 chars.
 - key_fact: one supporting fact taken from the note (duration, predecessor, target, batch, venue, edition, score). Max 120 chars.
 - static_gk: one high-yield static fact directly linked to the answer or its parent body. Max 140 chars.
+
+CRITICAL: NEVER OUTPUT A HEADLINE OR STORY SUMMARY
+- The ssc_question MUST be a genuine question that a student can answer from recall. It MUST start with Who, What, Where, When, How, Which, Name, In which, Under which, or a similar interrogative.
+- NEVER paste a news headline, story title, or descriptive sentence as the question. Headlines like "India releases Great Indian Bustards..." or "Telangana launches cashless treatment scheme" are NOT questions.
+- The ssc_answer MUST be a short entity: a name, number, place, scheme name, or date. NEVER a clause or sentence. No verbs, no articles ("The"), no explanations. 1–5 words maximum.
+- key_fact and static_gk MUST each add DIFFERENT information. NEVER repeat or rephrase the question or the answer in these fields.
 
 STATE & JURISDICTION RULE (CRITICAL)
 - If an event, election, policy, court order or scheme applies to a specific Indian state or territory, the question MUST name that state (e.g. "In Rajasthan, what is the...?", "Under Tamil Nadu's scheme...?").
@@ -44,8 +50,11 @@ STYLE
 - Write in English.
 
 QUESTION CHECK
-- Bad (leaks answer): "Which scheme, launched as PM Awas Yojana 2.0, gives urban housing?" 
-- Good: "Which scheme was launched to provide urban housing for the poor?"
+- Bad (headline as Q): "India and France conduct Shakti exercise in Rajasthan?" → This is a headline, not a question.
+- Bad (sentence as answer): "The exercise is a collaboration between India and France" → Too long, contains verbs.
+- Bad (leaks answer): "Which scheme, launched as PM Awas Yojana 2.0, gives urban housing?"
+- Good Q: "Which exercise did India and France conduct in Rajasthan?"
+- Good A: "Shakti"
 
 EXAMPLE OUTPUT (unrelated to the note; use for format only)
 {"ssc_question":"Which exercise did India and France conduct in Rajasthan?","ssc_answer":"Shakti","key_fact":"13-day exercise held at Mahajan Field Firing Range","static_gk":"Mahajan Field Firing Range is in Bikaner, Rajasthan"}
@@ -115,6 +124,19 @@ class SscInvalid(ValueError):
     pass
 
 
+# Interrogative starters that mark a genuine question (case-insensitive)
+_Q_STARTERS = re.compile(
+    r"^(who|what|where|when|how|which|name|in which|under which|for which|from which)"
+    r"\b", re.IGNORECASE)
+
+# Sentence-like answer: contains a verb phrase or is unreasonably long
+_SENTENCE_ANS = re.compile(
+    r"\b(is a|was a|is the|was the|are the|were the|has been|have been"
+    r"|will be|launched|signed|released|conducted|established|formed"
+    r"|approved|inaugurated|announced|proposed|collaboration between)"
+    r"\b", re.IGNORECASE)
+
+
 def validate_ssc_card(card, note, lang="en"):
     if not isinstance(card, dict):
         raise SscInvalid("Output must be a JSON object")
@@ -128,16 +150,45 @@ def validate_ssc_card(card, note, lang="en"):
     q = card["ssc_question"]
     ans = card["ssc_answer"]
     kf = card["key_fact"]
+    sgk = card["static_gk"]
 
     # 1. Must end in ?
     if not q.endswith("?"):
         raise SscInvalid("Question must end with '?'")
 
-    # 2. Leakage check: answer should not appear inside question
+    # 2. Question must start with an interrogative word (not a headline)
+    if not _Q_STARTERS.search(q):
+        raise SscInvalid(f"Question looks like a headline, not a question: '{q[:60]}'")
+
+    # 3. Leakage check: answer should not appear inside question
     if len(ans) >= 4 and ans.lower() in q.lower():
         raise SscInvalid(f"Answer '{ans}' leaked inside question '{q}'")
 
-    # 3. Digit grounding: any 2+ digit numbers in answer and key_fact must appear in source note
+    # 4. Answer must be short and entity-like, not a sentence fragment
+    ans_words = ans.split()
+    if len(ans_words) > 10:
+        raise SscInvalid(f"Answer too long ({len(ans_words)} words), must be ≤10 words: '{ans[:50]}'")
+    if _SENTENCE_ANS.search(ans):
+        raise SscInvalid(f"Answer looks like a sentence, not an entity: '{ans[:50]}'")
+
+    # 5. No field repetition: key_fact and static_gk should not just repeat the question/answer
+    def _norm(s):
+        return re.sub(r"[^a-z0-9 ]", "", s.lower()).strip()
+    q_norm = _norm(q.rstrip("?"))
+    ans_norm = _norm(ans)
+    kf_norm = _norm(kf)
+    sgk_norm = _norm(sgk)
+    # key_fact should not be a near-copy of the question
+    if kf_norm and q_norm and (kf_norm in q_norm or q_norm in kf_norm):
+        raise SscInvalid("key_fact is just repeating the question")
+    # static_gk should not be a near-copy of key_fact
+    if sgk_norm and kf_norm and (sgk_norm == kf_norm):
+        raise SscInvalid("static_gk is identical to key_fact")
+    # static_gk should not be a near-copy of the question
+    if sgk_norm and q_norm and (sgk_norm in q_norm or q_norm in sgk_norm):
+        raise SscInvalid("static_gk is just repeating the question")
+
+    # 6. Digit grounding: any 2+ digit numbers in answer and key_fact must appear in source note
     note_text = " ".join([
         str(note.get("title") or ""),
         str(note.get("original_title") or ""),

@@ -583,27 +583,37 @@ sup{color:var(--rust);font-weight:700}
 .cta span{font:400 13px/1.45 "Inter","DM Sans",sans-serif;color:#3a3732}
 .foot{display:flex;justify-content:space-between;margin-top:22px;padding-top:10px;border-top:1px solid var(--line)}
 .foot a{color:var(--rust);text-decoration:none}
+.mod-table { width: 100%; border-collapse: separate; border-spacing: 0; margin-top: 14px; page-break-inside: auto; }
+.mod-table thead { display: table-header-group; }
+.mod-table th { padding: 0; font-weight: normal; text-align: left; }
+.mod-table tbody { display: table-row-group; }
+.mod-table tr { break-inside: avoid; page-break-inside: avoid; }
+.mod-table td { padding: 0; }
+.mod-table tr td .row { border: 1px solid var(--line); border-top: 0; }
+.mod-table tbody tr:first-child td .row { border-top: 1px solid var(--line); border-radius: 4px 4px 0 0; }
+.mod-table tbody tr:last-child td .row { border-radius: 0 0 4px 4px; }
+.mod-table tbody tr:only-child td .row { border-top: 1px solid var(--line); border-radius: 4px; }
 @page{size:A4;margin:10mm}
 @media print{
-  body{font-size:12px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  body{font-size:11.5px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
   .page{max-width:none;padding:0 2px;border-top:3px solid var(--rust)}
-  .brand{padding:8px 0 2px}
-  .pill{margin:8px 0 6px;padding:4px 12px;font-size:9.5px}
-  h1{margin:0 0 10px;font-size:19px}
-  .stats{margin-bottom:6px}
-  .stats div{padding:6px 12px}
-  .stats b{font-size:18px}
-  .mod{margin-top:16px;font-size:10px;break-after:avoid}
-  h2{margin:16px 0 4px;font-size:17px;break-after:avoid}
-  .list{margin-top:6px}
-  .row{padding:9px 12px 8px 46px;break-inside:avoid}
-  .row h3{margin:0 0 6px;font-size:13.5px}
-  .row h3 i{left:10px;font-size:12px;width:28px}
-  .ans{padding:5px 12px;font-size:15px;border-left-width:3px}
-  .more{margin-top:6px;row-gap:2px}
-  .more p{font-size:11.5px;line-height:1.4}
-  .more p span{font-size:9px}
-  .cta{margin-top:18px;padding:10px 14px;break-inside:avoid}
+  .brand{padding:4px 0 2px}
+  .pill{margin:4px 0 4px;padding:3px 10px;font-size:9px}
+  h1{margin:0 0 6px;font-size:18px}
+  .stats{margin-bottom:5px}
+  .stats div{padding:4px 10px}
+  .stats b{font-size:17px}
+  .mod{margin-top:10px;font-size:9.5px;break-after:avoid}
+  h2{margin:10px 0 3px;font-size:16px;break-after:avoid}
+  .mod-table{margin-top:8px}
+  .row{padding:7px 12px 6px 42px;break-inside:avoid}
+  .row h3{margin:0 0 4px;font-size:13px;line-height:1.35}
+  .row h3 i{left:8px;font-size:11.5px;width:26px}
+  .ans{padding:4px 10px;font-size:14px;border-left-width:3px}
+  .more{margin-top:4px;row-gap:2px}
+  .more p{font-size:11px;line-height:1.35}
+  .more p span{font-size:8.5px}
+  .cta{margin-top:14px;padding:8px 12px;break-inside:avoid}
 }
 .src{position:absolute;top:14px;right:14px;display:block;padding:2px 4px;font-size:15px;line-height:1;color:#b5b3ae;text-decoration:none}.src:hover{color:var(--rust);text-decoration:underline}.src[hidden]{display:none}
 
@@ -695,10 +705,15 @@ def ssc(p, items, total, lang="en"):
             rows.append(row_html)
             q_counter += 1
 
+        tr_cells = "".join(f"<tr><td>{r}</td></tr>" for r in rows)
         sec = (
+            f'<table class="mod-table">\n'
+            f'<thead><tr><th>'
             f'<span class="mod mono">Module {code}</span>\n'
             f'<h2>{e(topic_title)} <small>{len(rows)} items</small></h2>\n'
-            f'<div class="list">\n{"".join(rows)}\n</div>\n'
+            f'</th></tr></thead>\n'
+            f'<tbody>\n{tr_cells}\n</tbody>\n'
+            f'</table>\n'
         )
         topics_html.append(sec)
 

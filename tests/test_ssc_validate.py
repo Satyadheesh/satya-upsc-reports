@@ -81,9 +81,17 @@ def test_full_card_entry_point():
     "Strait of Hormuz is a vital strait connecting the Persian Gulf and the Gulf of Oman",
     "Western Ghats is a UNESCO World Heritage site and global biodiversity hotspot in India",
     "Jennifer Doudna received the Nobel Prize in Chemistry in 2020 for CRISPR gene editing",
+    "Buxa Tiger Reserve is located in the West Bengal state.",
+    "Innovative Genomics Institute (IGI) was founded by Jennifer Doudna.",
+    "Lactoferrin is a protein found in mucosal secretions and milk",
 ])
 def test_new_anchors_pass(sgk):
     validate_static_gk(sgk, key="unrelated key text", year=Y)
+
+
+def test_formation_and_rename_dates_do_not_trigger_deadline_false_positive():
+    validate_key("Formed on October 2, 2026, to address high mortality rates following ulcers and amputations", Y)
+    validate_key("Renamed on October 03, 2026, to align with the Governor’s 2026 policy address", Y)
 
 
 def test_fallback_static_gk_lookup():
@@ -91,5 +99,9 @@ def test_fallback_static_gk_lookup():
     assert fallback_static_gk("SEBI proposed changes to CAS") is not None
     assert "SEBI Act, 1992" in fallback_static_gk("SEBI")
     assert "Department of Health" in fallback_static_gk("KMSCL debt")
+    assert "Survey of India" in fallback_static_gk("Survey of India mapping")
+    assert "AISI" in fallback_static_gk("UK AISI AI report")
+    assert "OpenAI" in fallback_static_gk("OpenAI GPT-6 model")
+    assert "Diabetic Foot Society" in fallback_static_gk("DFSI health alliance")
     assert fallback_static_gk("unrelated random query") is None
 

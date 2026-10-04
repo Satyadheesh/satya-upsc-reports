@@ -28,13 +28,23 @@ _ANCHORS = {
     "department / directorate": re.compile(
         r"\b(?:Department of|Directorate of|nodal department)\b", re.I),
     "static geography": re.compile(
-        r"\b(?:capital(?: of|:)?|currency|river|national park|IUCN|state formation|border)\b", re.I),
+        r"\b(?:capital(?: of|:)?|currency|river|national park|tiger reserve|wildlife sanctuary|biosphere reserve|bird sanctuary|IUCN|state formation|border)\b", re.I),
     "physical geography": re.compile(
         r"\b(?:strait|gulf|sea|ocean|bay|ghats|hills|plateau|mountains?|peninsula|island|lake|"
         r"desert|world heritage|UNESCO)\b[^.;]*\b(?:is|are|connects|lies|located|situated|flows|"
         r"borders|separates|spans)\b|\b(?:is|are|connects|lies|located|situated|borders|separates)\b"
         r"[^.;]*\b(?:strait|gulf|sea|ocean|bay|ghats|hills|plateau|mountains?|peninsula|island|lake|"
         r"desert|world heritage|UNESCO)\b", re.I),
+    "science concept": re.compile(
+        r"\b(?:protein|enzyme|hormone|vitamin|mineral|glycoprotein|antibody|antigen|"
+        r"amino acid|nucleic acid|peptide|pathogen|bacterium|bacteria|virus|fungus|fungi|cell|tissue|organ)\b"
+        r"[^.;]*\b(?:found in|secreted by|present in|produced by|component of|synthesized in|"
+        r"located in|responsible for|causes|stored in|essential for|functions as)\b|"
+        r"\b(?:is|are)\s+(?:an?\s+)?(?:iron-binding\s+)?(?:protein|enzyme|hormone|vitamin|mineral|"
+        r"glycoprotein|antibody|antigen|amino acid|peptide|microorganism|pathogen)\b",
+        re.I),
+    "founder fact": re.compile(
+        r"\b(?:founded|co-founded|established)\s+by\s+[A-Z][a-z]+(?:\s+[A-Z][a-z]+)?\b"),
     "major award": re.compile(
         r"\b(?:Nobel Prize|Bharat Ratna)\b[^.;]{0,40}?\b(19\d{2}|20\d{2})\b"),
     "founding fact": re.compile(
@@ -76,6 +86,15 @@ CURATED_STATIC_GK = {
     "kmscl": "Kerala Medical Services Corporation (KMSCL) is under Department of Health, Government of Kerala",
     "seedap": "SEEDAP is under the Department of Skill Development, Government of Andhra Pradesh",
     "jncasr": "JNCASR is an autonomous institution under the Department of Science and Technology",
+    "survey of india": "Survey of India was established in 1767 under the Department of Science and Technology; HQ: Dehradun",
+    "jennifer doudna": "Jennifer Doudna was awarded the Nobel Prize in Chemistry in 2020 for CRISPR-Cas9 genome editing",
+    "innovative genomics institute": "Innovative Genomics Institute (IGI) was founded in 2014 by Nobel laureate Jennifer Doudna; HQ: Berkeley, California",
+    "aisi": "UK AI Safety Institute (AISI) was established in 2023 under the UK Government",
+    "ai safety institute": "UK AI Safety Institute (AISI) was established in 2023 under the UK Government",
+    "openai": "OpenAI was founded in 2015; HQ: San Francisco, California",
+    "gpt": "OpenAI is an AI research organization founded in 2015; HQ: San Francisco, California",
+    "diabetic foot society": "Diabetic Foot Society of India (DFSI) was established in 2001; HQ: Chennai",
+    "dfsi": "Diabetic Foot Society of India (DFSI) was established in 2001; HQ: Chennai",
 }
 
 
@@ -126,6 +145,9 @@ _PURPOSE = re.compile(
     r"\b(mitigate|reduce|meet|address|ease|curb|improve|boost|enable|ensure|provide|manage)\b", re.I)
 _COMPLETION = re.compile(
     r"\b(complet\w+|commission\w*|operational|deadline|target\w*|ready|handover|go-live)\b", re.I)
+_DEADLINE = re.compile(
+    r"\b(by\s+(?:jan\w*|feb\w*|mar\w*|apr\w*|may|jun\w*|jul\w*|aug\w*|sep\w*|oct\w*|nov\w*|dec\w*|\d{1,2}\b|\d{4})|deadline|target(?:ed|ing|s)?\b|scheduled (?:for|to|by)|aims? to|plans? to|expected (?:by|in|to)|set to)\b",
+    re.I)
 _ACTOR_STOP = {"The", "This", "It", "Project", "Scheme", "Plan", "Government", "State"}
 
 
@@ -133,7 +155,9 @@ def validate_key(key: str, year: int | None = None) -> None:
     year = _year(year)
     for sent in re.split(r"(?<=[.;])\s+", key or ""):
         years = [int(y) for y in re.findall(r"\b(20\d{2})\b", sent)]
-        if not any(y >= year for y in years) or not _PURPOSE.search(sent):
+        has_future_year = any(y > year for y in years)
+        has_deadline = has_future_year or bool(_DEADLINE.search(sent))
+        if not (has_deadline and _PURPOSE.search(sent)):
             continue
         actor = re.search(r"\b[A-Z]{2,}\b", sent) or any(
             w[0].isupper() and w not in _ACTOR_STOP for w in re.findall(r"[A-Za-z]+", sent)[1:])

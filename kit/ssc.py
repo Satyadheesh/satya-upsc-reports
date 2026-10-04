@@ -100,6 +100,9 @@ def format_note(note):
     headline = note.get("title") or note.get("original_title") or ""
     if headline:
         lines.append(f"Title: {headline}")
+    orig = note.get("original_title")
+    if orig and orig != headline:
+        lines.append(f"Original headline: {orig}")
     if note.get("gs_paper"):
         lines.append(f"Paper: {note.get('gs_paper')} · {note.get('subject') or 'General'}")
     if note.get("why_in_news"):

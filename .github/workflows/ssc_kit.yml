@@ -105,3 +105,17 @@ jobs:
           name: ssc-kits-${{ strategy.job-index }}
           path: out/
           if-no-files-found: ignore
+
+  recompile_reports:
+    needs: [setup, kit]
+    if: ${{ !cancelled() && needs.kit.result == 'success' && needs.setup.outputs.mode != 'preview' }}
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "Triggering automated report PDF recompilation..."
+          gh workflow run reports.yml --repo "$GITHUB_REPOSITORY" --ref main -f scope=recent -f only=:ssc
+

@@ -2,13 +2,25 @@
 import json
 import re
 
-PROMPT_VERSION = "ssc-v3"
+from .ssc_validate import SscInvalid, check_card_v4, rank_pointers
+
+PROMPT_VERSION = "ssc-v4"
 
 PROMPT_TEMPLATE = """You are a senior SSC CGL General Awareness paper setter (TCS pattern, Tier-1/Tier-2). You convert one daily current-affairs note into ONE rapid-fire active-recall flashcard.
 
 THINK LIKE SSC, NOT UPSC
 - SSC tests direct recall: Who, What, Where, When, How many, Which. No analysis, no "with reference to", no multi-statement evaluation, no "significance" or "impact".
-- Pick the single most exam-worthy entity from the note: a person, place, scheme, number, date, trophy, exercise, organisation or book.
+
+FOCUS ENTITY (SSC):
+Pick the entity the story is ABOUT (the one in the headline). Use this order
+only to break ties between equally central entities:
+1. Dignitaries: envoys, governors, committee heads, heads of statutory bodies
+2. Schemes, Acts, portals, apps
+3. Measurable targets: outlays, capacities, percentages, deadlines
+4. Awards, champions, trophies
+5. Exercises and summits
+Never ask about a venue, seminar name, press-conference title or event setting
+where someone merely spoke.
 
 OUTPUT: one JSON object with exactly these keys, nothing else:
 - ssc_question: one direct question ending with "?". Max 120 chars. Must NOT contain or hint at the answer.
@@ -22,6 +34,9 @@ CRITICAL: NEVER OUTPUT A HEADLINE OR STORY SUMMARY
 - The ssc_answer MUST be a short entity: a name, number, place, scheme name, or date. NEVER a clause or sentence. No verbs, no articles ("The"), no explanations. 1–5 words maximum.
 - key_fact and static_gk MUST each add DIFFERENT information. NEVER repeat or rephrase the question or the answer in these fields.
 
+KEY LINE (deadlines):
+Keep actor + verb + date together: "<Agency> aims to complete <project> by <date>". Never attach a deadline to a routine purpose such as managing peak demand. Put the purpose in a separate sentence.
+
 STATE & JURISDICTION RULE (CRITICAL)
 - If an event, election, policy, court order or scheme applies to a specific Indian state or territory, the question MUST name that state (e.g. "In Rajasthan, what is the...?", "Under Tamil Nadu's scheme...?").
 - Never frame a state-level matter as an unqualified national rule.
@@ -32,17 +47,15 @@ FACTUAL BOUNDARIES
 - If a figure is an independent estimate or third-party report (think-tank, university study), attribute it in the question or key_fact.
 - If the note lacks a clean answerable fact, use its Prelims pointers or Key facts. Do not invent one.
 
-STATIC GK (ANTI-HALLUCINATION)
-- First preference: an existing static hook in the note's Prelims pointers or Key facts (Act, Article, Body, Ministry, River).
-- Otherwise, from memory, use ONLY high-confidence anchors for the subject entity itself:
-  1. Headquarters city (e.g. "HQ: New Delhi")
-  2. Nodal Ministry or parent body (e.g. "Under Ministry of Power")
-  3. Constitutional Article or statutory Act (e.g. "Article 243D", "IT Act, 2000")
-  4. Directly associated river, state capital or international border
-- NEVER state who currently holds an office.
-- NEVER guess founding years, exact dates or superlatives ("oldest", "first", "largest"). If not 100% certain, use a headquarters or ministry anchor instead.
-- NEVER hook an unrelated third country or entity to the story.
-- If you have no high-confidence anchor, use another supporting fact from the note rather than guessing.
+STATIC GK (permanent knowledge only):
+Use exactly ONE of: Act/Treaty and its year, a specific Constitutional Article,
+headquarters city, parent ministry, or static geography (capital, currency,
+river, national park). Take it from the note only if it is permanent.
+Format examples only, do not reuse: "<Body> HQ: <city>", "<Body> is under the
+Ministry of <X>", "Article <number>: <subject>".
+Forbidden: anything that happened recently, new appointments, new powers,
+recent decisions, or any year from the last two years. If it is happening now,
+it is current affairs, not static GK.
 
 STYLE
 - Telegraphic. No filler, no "The government...", no explanations.
@@ -84,9 +97,9 @@ def schema(lang="en"):
 
 def format_note(note):
     lines = []
-    title = note.get("title") or note.get("original_title") or ""
-    if title:
-        lines.append(f"Title: {title}")
+    headline = note.get("title") or note.get("original_title") or ""
+    if headline:
+        lines.append(f"Title: {headline}")
     if note.get("gs_paper"):
         lines.append(f"Paper: {note.get('gs_paper')} · {note.get('subject') or 'General'}")
     if note.get("why_in_news"):
@@ -95,12 +108,13 @@ def format_note(note):
         lines.append(f"Key facts: {note.get('fact_box')}")
 
     pointers = note.get("prelims_pointers") or []
-    if pointers:
+    ranked = rank_pointers(pointers, headline=headline)
+    if ranked:
         lines.append("Prelims pointers:")
-        for p in pointers:
+        for p in ranked:
             if isinstance(p, dict):
                 t = p.get("type", "fact")
-                txt = p.get("text", "")
+                txt = p.get("text") or p.get("description") or ""
                 lines.append(f"- {t}: {txt}")
             elif isinstance(p, str):
                 lines.append(f"- {p}")
@@ -118,10 +132,6 @@ def build_messages(note, lang="en", feedback=None):
     if feedback:
         prompt += f"\n\nYour previous answer was rejected: {feedback}. Please rewrite and fix that."
     return [{"role": "user", "content": prompt}]
-
-
-class SscInvalid(ValueError):
-    pass
 
 
 # Interrogative starters that mark a genuine question (case-insensitive)
@@ -206,4 +216,9 @@ def validate_ssc_card(card, note, lang="en"):
             if len(d) >= 2 and d not in note_digits:
                 raise SscInvalid(f"Digit '{d}' in {field_name} not found in source note")
 
+    # 7. ssc-v4 guards (static GK purity, anchor check, timeline/purpose decoupling)
+    if lang == "en":
+        check_card_v4(card)
+
     return card
+

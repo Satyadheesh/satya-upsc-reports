@@ -105,7 +105,7 @@ def format_note(note):
 
 def build_messages(note, lang="en", feedback=None):
     note_text = format_note(note)
-    prompt = PROMPT_TEMPLATE.format(note=note_text)
+    prompt = PROMPT_TEMPLATE.replace("{note}", note_text)
     if feedback:
         prompt += f"\n\nYour previous answer was rejected: {feedback}. Please rewrite and fix that."
     return [{"role": "user", "content": prompt}]

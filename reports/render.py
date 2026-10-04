@@ -4,8 +4,11 @@ import datetime as dt
 import html
 import re
 
-import qrcode
-import qrcode.image.svg
+try:
+    import qrcode
+    import qrcode.image.svg
+except ImportError:
+    qrcode = None
 
 from common.syllabus import SYLLABUS
 
@@ -149,6 +152,8 @@ def period_label(p, hi):
 
 
 def qr_svg(url):
+    if not qrcode:
+        return '<svg class="qr" viewBox="0 0 100 100"></svg>'
     s = qrcode.make(url, image_factory=qrcode.image.svg.SvgPathImage, border=1, box_size=10).to_string(encoding="unicode")
     return re.sub(r"<\?xml[^>]*>", "", s).replace("<svg ", '<svg class="qr" ', 1)
 
@@ -490,27 +495,49 @@ def detailed(p, items, total, lang):
 
 # ---------------------------------------------------------------- SSC One-Liner
 
-# ---------------------------------------------------------------- SSC One-Liner
-
 def _map_ssc_topic(it):
     s = (it.get("subject") or "").lower()
     n = (it.get("node") or it.get("syllabus_node") or "").lower()
     t = ((it.get("title") or "") + " " + (it.get("why") or "")).lower()
 
-    # Topic 01: Economy & Energy
-    if s == "economy" or any(w in t for w in ("energy", "power", "hydropower", "solar", "bess", "gas", "fpi", "rbi", "repo", "growth", "gdp")):
-        return ("01", "Economy & Energy")
-    # Topic 02: Science & Technology
-    if s in ("science_tech", "environment") or any(w in t for w in ("pathogen", "fungal", "candida", "species", "antarctica", "isea", "ai", "openai", "it act", "bitchat", "protein", "lactoferrin")):
-        return ("02", "Science & Technology")
-    # Topic 03: Defence & Security
-    if s == "security" or any(w in t for w in ("defence", "defense", "aircraft", "fighter", "squadron", "nuclear", "warhead", "missile", "exercise", "iaf", "hal", "triad")):
-        return ("03", "Defence & Security")
-    # Topic 05: International News
-    if s == "ir" or any(w in t for w in ("russia", "ukraine", "dhaka", "bangladesh", "seychelles", "summit", "foreign", "munich", "ceasefire", "diplomat", "high commissioner")):
-        return ("05", "International News")
-    # Topic 04: Polity, Governance & Schemes
-    return ("04", "Polity, Governance & Schemes")
+    # 05. Sports
+    if any(w in t for w in ("trophy", "cup", "medal", "champion", "olympic", "cricket", "fifa", "badminton", "chess", "tennis", "grand slam", "athletics", "hockey")):
+        return ("05", "Sports")
+    # 07. Awards & Honours
+    if any(w in t for w in ("award", "prize", "honour", "honor", "padma", "bharat ratna", "khel ratna", "nobel", "oscar", "booker", "saraswati samman")):
+        return ("07", "Awards & Honours")
+    # 06. Important Days
+    if any(w in t for w in ("day", "divas", "anniversary", "pakhwada", "week")) and any(w in t for w in ("observed", "celebrated", "theme", "commemorated")):
+        return ("06", "Important Days")
+    # 04. Appointments
+    if n in ("appointments", "person_post") or any(w in t for w in ("high commissioner", "ambassador", "appointed as", "assumes office", "took charge", "takes charge", "director general", "chief justice", "election commissioner", "governor")):
+        return ("04", "Appointments")
+    # 09. Books & Authors
+    if any(w in t for w in ("book", "authored by", "released a book", "memoir", "biography", "written by")):
+        return ("09", "Books & Authors")
+    # 08. Government Bills
+    if n in ("legislation", "act_bill") or any(w in t for w in ("information technology act", "section 69", "bill, 20", "amendment act", "ordinance", "passed by parliament")):
+        return ("08", "Government Bills")
+    # 03. Government Schemes
+    if n in ("schemes", "scheme") or any(w in t for w in ("scheme", "yojana", "mission", "vettri payanam", "subhadra", "pradhan mantri")):
+        return ("03", "Government Schemes")
+    # 11. Defence
+    if s == "security" or any(w in t for w in ("defence", "defense", "iaf", "squadron", "nuclear warhead", "nuclear triad", "missile", "exercise", "yudh abhyas", "hal", "drdo", "navy", "army")):
+        return ("11", "Defence")
+    # 13. International News
+    if s == "ir" or any(w in t for w in ("russia", "ukraine", "ceasefire", "summit", "munich", "seychelles", "unsc", "united nations", "bilateral")):
+        return ("13", "International News")
+    # 01. Science & Technology
+    if s in ("science_tech", "environment") or any(w in t for w in ("pathogen", "fungal", "candida", "isea", "antarctica", "bess", "battery storage", "ai security", "openai", "gpt", "protein", "lactoferrin", "isro", "nasa", "satellite")):
+        return ("01", "Science & Technology")
+    # 02. Reports & Rankings
+    if any(w in t for w in ("index", "rank", "ranking", "bulletin of the atomic scientists", "report")):
+        return ("02", "Reports & Rankings")
+    # 10. Union Budget & Economy
+    if s == "economy" or any(w in t for w in ("repo rate", "rbi", "gdp", "growth", "fpi", "fii", "inflation", "natural gas", "ppac", "hydropower", "sawalkot", "budget", "fiscal", "taxation")):
+        return ("10", "Union Budget & Economy")
+    # 12. National & State News
+    return ("12", "National & State News")
 
 
 SSC_CSS = """
@@ -530,6 +557,11 @@ h1{font:700 22px "Playfair Display",Georgia,serif;margin:0 0 16px}
 .stats{display:flex;background:var(--cream);border:1px solid var(--line);border-radius:4px;margin-bottom:8px}
 .stats div{flex:1;padding:10px 16px}.stats div+div{border-left:1px solid var(--line)}
 .stats b{font:700 20px "Playfair Display",serif;display:block;line-height:1.2}
+.stats .stats-mix{flex:2.2;display:flex;flex-direction:column;justify-content:space-between}
+.mix-chips{display:flex;flex-wrap:wrap;gap:4px 6px;align-items:center;margin-bottom:4px}
+.chip-mod{display:inline-flex;align-items:baseline;gap:3px;font-family:"IBM Plex Mono",monospace;font-size:10.5px;font-weight:600;color:var(--ink);background:#edebe6;border:1px solid #ddd9d0;padding:2px 6px;border-radius:3px;white-space:nowrap;line-height:1.3}
+.chip-mod .chip-code{color:var(--rust);font-weight:700}
+.chip-mod b{display:inline;font-family:"IBM Plex Mono",monospace;font-size:10.5px;font-weight:700;color:var(--rust)}
 h2{display:flex;justify-content:space-between;align-items:baseline;font:700 26px "Playfair Display",Georgia,serif;margin:34px 0 4px;padding-bottom:0}
 h2 small{font:500 10.5px "IBM Plex Mono",monospace;color:var(--mute);letter-spacing:.08em;text-transform:uppercase}
 .mod{display:block;margin-top:30px;color:var(--rust)}
@@ -557,6 +589,22 @@ sup{color:var(--rust);font-weight:700}
 .src{position:absolute;top:14px;right:14px;display:block;padding:2px 4px;font-size:15px;line-height:1;color:#b5b3ae;text-decoration:none}.src:hover{color:var(--rust);text-decoration:underline}.src[hidden]{display:none}
 """
 
+SHORT_MODULE_NAMES = {
+    "01": "Sci & Tech",
+    "02": "Reports & Rankings",
+    "03": "Govt Schemes",
+    "04": "Appointments",
+    "05": "Sports",
+    "06": "Imp Days",
+    "07": "Awards & Honours",
+    "08": "Govt Bills",
+    "09": "Books & Authors",
+    "10": "Budget & Economy",
+    "11": "Defence",
+    "12": "National & State",
+    "13": "International",
+}
+
 
 def ssc(p, items, total, lang="en"):
     # English-only SSC edition
@@ -565,12 +613,17 @@ def ssc(p, items, total, lang="en"):
         topic = _map_ssc_topic(it)
         groups.setdefault(topic, []).append(it)
 
-    date_str = p["first"].strftime("%A, %-d %B %Y")
-    h1_date = p["first"].strftime("%-d %B %Y")
-    date_key = p["key"]
+    d = p["first"]
+    date_str = f"{d.strftime('%A')}, {d.day} {d.strftime('%B %Y')}"
+    h1_date = f"{d.day} {d.strftime('%B %Y')}"
 
-    pm = paper_mix(items)
-    mix_str = " &nbsp; ".join(f"{pp} · {n}" for pp, n in pm)
+    mix_chips = []
+    for topic in sorted(groups.keys(), key=lambda x: x[0]):
+        code, name = topic
+        short = SHORT_MODULE_NAMES.get(code, name)
+        count = len(groups[topic])
+        mix_chips.append(f'<span class="chip-mod"><span class="chip-code">{code}</span> {e(short)} · <b>{count}</b></span>')
+    mix_chips_html = "".join(mix_chips)
 
     topics_html = []
     q_counter = 1
@@ -608,7 +661,7 @@ def ssc(p, items, total, lang="en"):
             q_counter += 1
 
         sec = (
-            f'<span class="mod mono">Topic {code}</span>\n'
+            f'<span class="mod mono">Module {code}</span>\n'
             f'<h2>{e(topic_title)} <small>{len(rows)} items</small></h2>\n'
             f'<div class="list">\n{"".join(rows)}\n</div>\n'
         )
@@ -629,15 +682,18 @@ def ssc(p, items, total, lang="en"):
 
 <div class="stats">
 <div><b>{len(items)}</b><span class="mono">Questions</span></div>
-<div><b>{len(groups)}</b><span class="mono">Topics</span></div>
-<div><b>{mix_str}</b><span class="mono">Paper mix</span></div>
+<div><b>{len(groups)}</b><span class="mono">Modules</span></div>
+<div class="stats-mix">
+<div class="mix-chips">{mix_chips_html}</div>
+<span class="mono">Module Mix</span>
+</div>
 </div>
 
 {"".join(topics_html)}
 
 <div class="cta"><b>Get it every morning on Telegram</b><span>Daily PDF + quiz at 5 AM · weekly review every Sunday · English · free, no sign-up.</span></div>
 
-<div class="foot mono"><span>Satyadheesh · SSC CGL Daily One-Liner · {date_key}</span><span>satyadheesh.in/upsc · <a href="https://t.me/satyadheesh">t.me/satyadheesh</a></span></div>
+<div class="foot mono"><span>Satyadheesh · SSC CGL Daily One-Liner · {h1_date}</span><span>satyadheesh.in/upsc · <a href="https://t.me/satyadheesh">t.me/satyadheesh</a></span></div>
 </div>
 """
     title = f"Satyadheesh · SSC CGL Daily One-Liner · {h1_date}"

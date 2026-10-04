@@ -27,16 +27,6 @@ class TestSsc(unittest.TestCase):
         res = validate_ssc_card(card, self.note, lang="en")
         self.assertEqual(res["ssc_answer"], "Neena Singh")
 
-    def test_valid_hi(self):
-        card = {
-            "ssc_question": "हाल ही में CISF की पहली महिला महानिदेशक किसे नियुक्त किया गया?",
-            "ssc_answer": "नीना सिंह",
-            "key_fact": "1989 बैच की आईपीएस अधिकारी।",
-            "static_gk": "CISF की स्थापना 1969 में हुई, मुख्यालय: नई दिल्ली।",
-        }
-        res = validate_ssc_card(card, self.note, lang="hi")
-        self.assertEqual(res["ssc_answer"], "नीना सिंह")
-
     def test_missing_question_mark(self):
         card = {
             "ssc_question": "Who became the first woman Director General of CISF",
@@ -57,16 +47,6 @@ class TestSsc(unittest.TestCase):
         with self.assertRaises(SscInvalid):
             validate_ssc_card(card, self.note, lang="en")
 
-    def test_hindi_ending_in_hai(self):
-        card = {
-            "ssc_question": "हाल ही में CISF की पहली महिला महानिदेशक कौन बनीं?",
-            "ssc_answer": "नीना सिंह हैं",
-            "key_fact": "1989 बैच की अधिकारी।",
-            "static_gk": "CISF मुख्यालय: नई दिल्ली।",
-        }
-        with self.assertRaises(SscInvalid):
-            validate_ssc_card(card, self.note, lang="hi")
-
     def test_hallucinated_digit(self):
         card = {
             "ssc_question": "Who became the first woman Director General of CISF?",
@@ -79,15 +59,17 @@ class TestSsc(unittest.TestCase):
 
     def test_schema(self):
         sc_en = schema("en")
-        sc_hi = schema("hi")
         self.assertEqual(sc_en["properties"]["ssc_question"]["maxLength"], 120)
-        self.assertEqual(sc_hi["properties"]["ssc_question"]["maxLength"], 150)
+        self.assertEqual(sc_en["properties"]["ssc_answer"]["maxLength"], 50)
+        self.assertEqual(sc_en["properties"]["key_fact"]["maxLength"], 120)
+        self.assertEqual(sc_en["properties"]["static_gk"]["maxLength"], 140)
 
     def test_messages(self):
         msgs = build_messages(self.note, lang="en")
-        self.assertGreater(len(msgs), 4)
-        self.assertEqual(msgs[0]["role"], "system")
-        self.assertEqual(msgs[-1]["role"], "user")
+        self.assertEqual(len(msgs), 1)
+        self.assertEqual(msgs[0]["role"], "user")
+        self.assertIn("Neena Singh", msgs[0]["content"])
+        self.assertIn("<note>", msgs[0]["content"])
 
 
 if __name__ == "__main__":

@@ -20,6 +20,9 @@ on:
       shards:
         description: 'Parallel runners'
         default: '8'
+      pick:
+        description: 'Preview only: judge just these (article ids or title words, comma separated)'
+        default: ''
   # schedule:            (enabled after the preview review)
   #   - cron: '7,37 * * * *'
 
@@ -57,6 +60,7 @@ jobs:
           DAYS: ${{ github.event.inputs.days || '2' }}
           BATCH: ${{ github.event.inputs.batch || '240' }}
           SHARDS: ${{ github.event.inputs.shards || '8' }}
+          PICK: ${{ github.event.inputs.preview == 'true' && github.event.inputs.pick || '' }}
         run: python -m sscca.select
 
   judge:

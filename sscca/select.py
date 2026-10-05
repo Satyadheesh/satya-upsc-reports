@@ -14,6 +14,8 @@ from .gate import GATE_VERSION
 SHARDS = int(os.environ.get("SHARDS") or 8)
 BATCH = int(os.environ.get("BATCH") or 240)
 DAYS = int(os.environ.get("DAYS") or 2)
+# Preview only: judge just these articles (ids, or words that must appear in the title), e.g. "131003,green energy,hdfc"
+PICK = [t.strip() for t in (os.environ.get("PICK") or "").split(",") if t.strip()]
 MAX_ATTEMPTS = 3
 ELIGIBLE = ("classified", "entity_processed", "processed")
 SKIP_CATEGORIES = {"crime"}
@@ -35,6 +37,12 @@ def main():
     ph = ",".join("?" * len(ELIGIBLE))
     arts = m.execute(f"SELECT id, category, cluster_id, scraped_at FROM articles WHERE id >= ? AND status IN ({ph}) "
                      f"AND rephrased_article IS NOT NULL ORDER BY id DESC", [fid, *ELIGIBLE]).rows
+    if PICK:
+        nums = {int(t) for t in PICK if t.isdigit()}
+        words = [t.lower() for t in PICK if not t.isdigit()]
+        titles = {int(r[0]): (r[1] or "").lower() for r in in_chunks(
+            m, "SELECT id, title FROM articles WHERE id IN ({ph})", [int(r[0]) for r in arts])} if words else {}
+        arts = [r for r in arts if int(r[0]) in nums or any(w in titles.get(int(r[0]), "") for w in words)]
     ids = [int(r[0]) for r in arts]
     seen = {int(r[0]): (r[1], r[2], r[3]) for r in in_chunks(
         up, "SELECT article_id, status, attempts, prompt_version FROM ssc_ca WHERE article_id IN ({ph})", ids)} if ids else {}
@@ -46,11 +54,11 @@ def main():
         if (cat or "").lower() in SKIP_CATEGORIES:
             continue
         st = seen.get(aid)
-        if st and st[0] in ("card", "skip") and st[2] == GATE_VERSION:
+        if st and st[0] in ("card", "skip") and st[2] == GATE_VERSION and not PICK:
             continue
         if st and st[0] == "failed" and (st[1] or 0) >= MAX_ATTEMPTS:
             continue
-        if cluster and cluster in carded and not (st and st[0] == "card"):
+        if cluster and cluster in carded and not (st and st[0] == "card") and not PICK:
             dup.append((aid, cluster, int(pub or now)))
             continue
         todo.append(aid)

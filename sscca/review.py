@@ -39,6 +39,9 @@ def main():
     L += ["", "### Said no (sample of 60)"]
     no = [r for r in rows if r.get("why") == "model: no" or str(r.get("why")).startswith("importance")]
     L += [f"- {r['title'][:120]} ({r['why']})" for r in no[:60]] or ["- none"]
+    L += ["", f"<details><summary>All {len(no)} said no (model topic · importance)</summary>", ""]
+    L += [f"- {r['title'][:120]} ({r.get('topic')} · {r.get('importance')}) ({r['id']})" for r in no]
+    L += ["", "</details>"]
     open(a.md, "w").write("\n".join(L) + "\n")
     print("\n".join(L[:12]))
 

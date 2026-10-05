@@ -152,5 +152,6 @@ jobs:
             gh workflow run reports.yml --repo "$GITHUB_REPOSITORY" --ref main -f scope=recent -f only=:ssc
           fi
           if [ "${{ needs.setup.outputs.more }}" = true ]; then
-            gh workflow run sscca.yml --repo "$GITHUB_REPOSITORY" --ref main -f days='${{ github.event.inputs.days || '2' }}'
+            gh workflow run sscca.yml --repo "$GITHUB_REPOSITORY" --ref main -f days='${{ github.event.inputs.days || '2' }}' \
+              -f batch='${{ github.event.inputs.batch || '240' }}' -f shards='${{ github.event.inputs.shards || '8' }}'
           fi

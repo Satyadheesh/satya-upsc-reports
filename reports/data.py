@@ -445,3 +445,40 @@ def editions(period, en_items, hi_items, ready=0.8):
         en_out.append({**en, "kit": ke})
         hi_out.append({**h, "title": hindi_title(h), "related": en["related"], "kit": ke, "kit_hi": kh})
     return en_out, hi_out, total, share
+
+
+
+SSC_CAP = {"daily": 40, "weekly": 90, "monthly": 160}
+
+
+def ssc_items(upsc, p):
+    """SSC cards of the period from the SSC runner (ssc_ca, judged from the raw news), best first, one per story:
+    same news cluster, same headline across papers (72 h) or the same answer on the same topic count as one."""
+    from sscca.gate import TOPICS
+    try:
+        rows = upsc.execute(
+            "SELECT article_id, published_at, cluster_id, topic, importance, title, question, answer, key_fact, static_gk, fact "
+            "FROM ssc_ca INDEXED BY idx_ssc_ca_status WHERE status = 'card' AND published_at >= ? AND published_at < ? "
+            "ORDER BY importance DESC, published_at DESC", [p["start"], p["end"]]).rows
+    except Exception as ex:  # table not created yet
+        print(f"SSC cards not available: {type(ex).__name__}")
+        return []
+    out, clusters, answers = [], set(), set()
+    for aid, pub, cl, topic, imp, title, q, ans, key, sgk, fact in rows:
+        if topic not in TOPICS or not q or not ans:
+            continue
+        akey = (topic, re.sub(r"[^a-z0-9]", "", (ans or "").lower()))
+        if (cl and cl in clusters) or akey in answers or any(
+                abs(o["published_at"] - pub) <= 3 * DAY and same_headline(o["title"], title or "") for o in out):
+            continue
+        clusters.add(cl)
+        answers.add(akey)
+        code, name, _ = TOPICS[topic]
+        out.append({"id": aid, "published_at": pub, "title": title or "", "why": fact or "", "fact_box": "", "pointers": [],
+                    "related": 0, "paper": "SSC", "subject": topic, "importance": imp, "ssc_topic": (code, name),
+                    "src_url": f"https://satyadheesh.in/news/{aid}",
+                    "ssc_kit": {"question_en": q, "answer_en": ans, "key_fact_en": key or "", "static_gk_en": sgk or ""}})
+        if len(out) >= SSC_CAP.get(p["kind"], 40):
+            break
+    # in the PDF: by module, and within a module most important first
+    return sorted(out, key=lambda i: (i["ssc_topic"][0], -(i["importance"] or 0), -i["published_at"]))

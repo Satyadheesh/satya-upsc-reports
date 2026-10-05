@@ -633,6 +633,9 @@ SHORT_MODULE_NAMES = {
     "11": "Defence",
     "12": "National & State",
     "13": "International",
+    "14": "Summits & Agreements",
+    "15": "Environment",
+    "16": "Obituaries",
 }
 
 
@@ -640,7 +643,7 @@ def ssc(p, items, total, lang="en"):
     # English-only SSC edition
     groups = {}
     for it in items:
-        topic = _map_ssc_topic(it)
+        topic = it.get("ssc_topic") or _map_ssc_topic(it)  # SSC runner's own topic; old notes: keyword mapping
         groups.setdefault(topic, []).append(it)
 
     d = p["first"]
@@ -677,7 +680,7 @@ def ssc(p, items, total, lang="en"):
                 more_parts.append(f'<p><span>Static GK</span>{e(fit(static_gk, 160))}</p>')
             more_html = "".join(more_parts)
 
-            src_url = f"https://satyadheesh.in/upsc/note/{it.get('id') or it.get('article_id')}"
+            src_url = it.get("src_url") or f"https://satyadheesh.in/upsc/note/{it.get('id') or it.get('article_id')}"
             row_html = (
                 f'<div class="row">'
                 f'<h3><i>{q_counter}</i>{e(q_text)}</h3>'
@@ -714,7 +717,7 @@ def ssc(p, items, total, lang="en"):
 <svg width="46" height="46" viewBox="0 0 46 46" aria-hidden="true"><rect x="2" y="2" width="42" height="42" rx="10" fill="#f8f6f2" stroke="#120f0b" stroke-width="2.5"/><g transform="rotate(-35 23 21)"><rect x="12" y="17" width="14" height="10" rx="2" fill="#bf4a07"/><rect x="26" y="20" width="9" height="4" rx="2" fill="#bf4a07"/></g><rect x="11" y="34" width="24" height="3" rx="1.5" fill="#8e8d8b"/></svg>
 <div><div class="word">SATYA<b>DHEESH</b></div><div class="dev">सत्याधीश</div></div>
 </div>
-<div><span class="pill">SSC CGL DAILY ONE-LINER REVISION</span></div>
+<div><span class="pill">SSC CGL {({"daily": "DAILY", "weekly": "WEEKLY", "monthly": "MONTHLY"}[p["kind"]])} ONE-LINER REVISION</span></div>
 <h1>Current Affairs · {h1_date}</h1>
 </div>
 

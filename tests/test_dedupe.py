@@ -89,3 +89,25 @@ class OddTopStories2(unittest.TestCase):
         self.assertEqual(demotion("IFCI, New India Assurance, other stocks drop up to 3% as NSE makes a muted market debut", None), 1)
         self.assertEqual(clean_title("Developing El NiÃ±o becomes strongest on record"), "Developing El Niño becomes strongest on record")
         self.assertEqual(clean_title("India’s bid"), "India’s bid")
+
+
+class SscItems(unittest.TestCase):
+    def test_one_card_per_story_best_first(self):
+        from reports import data
+
+        class C:
+            def execute(self, sql, args):
+                class R:
+                    rows = [
+                        (1, 1000, "c1", "award", 5, "X wins Nobel Prize in Physics", "Who won?", "X", "k", "", "f"),
+                        (2, 1100, "c1", "award", 5, "X wins the Nobel Prize in Physics", "Who won?", "X", "k", "", "f"),
+                        (3, 1200, None, "sports", 4, "India wins hockey Asia Cup", "Which country?", "India", "k", "", "f"),
+                        (4, 1300, None, "award", 3, "Y gets Booker", "Who got Booker?", "Y", "k", "", "f"),
+                        (5, 1300, None, "bogus", 5, "Z", "Q?", "A", "k", "", "f"),
+                    ]
+                return R()
+        p = {"kind": "daily", "start": 0, "end": 10 ** 6}
+        items = data.ssc_items(C(), p)
+        self.assertEqual([i["id"] for i in items], [3, 1, 4])  # sports 05 before awards 07; one Nobel card
+        self.assertEqual(items[0]["ssc_topic"], ("05", "Sports"))
+        self.assertTrue(items[1]["src_url"].endswith("/news/1"))

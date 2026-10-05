@@ -20,7 +20,7 @@ import time
 from common.db import close_all, main_db, translation_db, upsc_db
 
 from . import render
-from .data import Window, editions, select
+from .data import Window, editions, select, ssc_items
 from .periods import periods_for, parse
 
 REPORT_VERSION = 7          # bump when layout or selection changes: every PDF is rebuilt
@@ -154,17 +154,19 @@ def main():
             langs.append(("hi", chosen_hi, share))
         elif trans is not None:
             print(f"  {p['kind']}:{p['key']}:hi not ready ({share:.0%} translated)")
+        ssc = ssc_items(upsc, p)  # SSC edition: the SSC runner's cards from the raw news, not the UPSC notes
         for lang, items, _ in langs:
             for edition in ("brief", "detailed", "ssc"):
-                if edition == "ssc" and lang != "en":
+                if edition == "ssc" and (lang != "en" or not ssc):
                     continue
+                its = ssc if edition == "ssc" else items
                 key = f"{p['kind']}:{p['key']}:{lang}:{edition}"
                 if args.only and args.only not in key:
                     continue
-                h = content_hash(p, lang, edition, items)
+                h = content_hash(p, lang, edition, its)
                 if not args.force and not args.preview and stored.get(key) == h:
                     continue
-                jobs.append((key, p, lang, edition, items, total, h))
+                jobs.append((key, p, lang, edition, its, total, h))
     if not args.preview:
         drop_stale_hindi_ssc(upsc)
     print(f"{len(jobs)} reports to build")

@@ -55,6 +55,21 @@ def store(c, key, p, lang, h, items, pdf):
     c.batch(st)  # one transaction: the site never serves half a PDF
 
 
+def drop_stale_hindi_ssc(c):
+    """The SSC one-liner is built in English only (see the edition loop); Hindi SSC PDFs stored by earlier runs
+    (3-4 Oct 2026) would otherwise stay on the site, out of date."""
+    keys = [r[0] for r in c.execute("SELECT key FROM upsc_reports WHERE key LIKE '%:hi:ssc'").rows]
+    if not keys:
+        return
+    import libsql_client
+    st = []
+    for k in keys:
+        st += [libsql_client.Statement("DELETE FROM upsc_report_chunks WHERE key = ?", [k]),
+               libsql_client.Statement("DELETE FROM upsc_reports WHERE key = ?", [k])]
+    c.batch(st)
+    print(f"removed {len(keys)} stale Hindi SSC PDFs: {', '.join(keys)}")
+
+
 def content_hash(p, lang, edition, items):
     kit = (lambda i: (i.get("kit_hi") if lang == "hi" else i.get("kit")) or {})
     ssc = (lambda i: i.get("ssc_kit") or {})
@@ -150,6 +165,8 @@ def main():
                 if not args.force and not args.preview and stored.get(key) == h:
                     continue
                 jobs.append((key, p, lang, edition, items, total, h))
+    if not args.preview:
+        drop_stale_hindi_ssc(upsc)
     print(f"{len(jobs)} reports to build")
     if not jobs:
         return

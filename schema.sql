@@ -69,3 +69,30 @@ CREATE TABLE IF NOT EXISTS ssc_kit (
   updated_at      INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_ssc_kit_status ON ssc_kit(status, attempts);
+
+-- SSC CGL current affairs, judged from the raw news (sscca/): one row per article looked at.
+-- status: card (gate passed + valid card), skip (not SSC material / duplicate story), failed (retry later).
+CREATE TABLE IF NOT EXISTS ssc_ca (
+  article_id      INTEGER PRIMARY KEY,
+  published_at    INTEGER NOT NULL,
+  cluster_id      TEXT,
+  status          TEXT NOT NULL CHECK (status IN ('card','skip','failed')),
+  attempts        INTEGER NOT NULL DEFAULT 1,
+  topic           TEXT,
+  importance      INTEGER,
+  scope           TEXT,
+  fact            TEXT,
+  title           TEXT,
+  question        TEXT,
+  answer          TEXT,
+  key_fact        TEXT,
+  static_gk       TEXT,
+  reason          TEXT,
+  model           TEXT,
+  prompt_version  TEXT,
+  created_at      INTEGER NOT NULL,
+  updated_at      INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_ssc_ca_pub ON ssc_ca(published_at DESC);
+CREATE INDEX IF NOT EXISTS idx_ssc_ca_status ON ssc_ca(status, published_at DESC);
+CREATE INDEX IF NOT EXISTS idx_ssc_ca_cluster ON ssc_ca(cluster_id);

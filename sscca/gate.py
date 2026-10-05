@@ -8,7 +8,7 @@ A strict model call (default no) plus code checks. An article becomes an SSC car
 """
 import re
 
-GATE_VERSION = "sscg-2"
+GATE_VERSION = "sscg-3"
 
 TOPICS = {
     "appointment": ("04", "Appointments", "a person appointed, elected, sworn in or taking charge as head of a national or "
@@ -44,11 +44,13 @@ TOPICS = {
 
 TOPIC_WORDS = {
     "appointment": r"appoint\w*|became|becomes|replac\w*|elected|sworn|takes? (?:over|charge)|took (?:over|charge)|assume[sd]? (?:office|charge)|named|"
-                   r"new (?:chief|head|chairman|chairperson|governor|director)|re-?appointed|nominated|selected as|elevated",
+                   r"new (?:chief|head|chairman|chairperson|governor|director)|re-?appointed|nominated|selected as|elevated|"
+                   r"joins? as|joined (?:\w+ ){0,4}as|md (?:&|and) ceo|chief executive|ceo",
     "award": r"award\w*|prize\w*|honour\w*|honor\w*|medal\w*|conferred|felicitated with|ratna|padma|nobel|samman|puraskar|trophy",
     "sports": r"won|wins|win|winner|medal\w*|gold|silver|bronze|title|champion\w*|trophy|cup|record|defeat\w*|beat|final|"
               r"qualif\w*|tournament|olympic\w*|games|league|series|host\w*",
-    "scheme": r"scheme\w*|yojana|mission|portal|app\b|programme|program\b|initiative|abhiyan|launch\w*|outlay",
+    "scheme": r"scheme\w*|yojana|mission|portal|app\b|programme|program\b|initiative|abhiyan|launch\w*|outlay|"
+              r"corridor|phase|project|approv\w*|cabinet|sanction\w*",
     "law_verdict": r"bill|act\b|ordinance|amendment|notif\w*|passed|enacted|verdict|judgment|judgement|ruled|struck down|upheld|"
                    r"dismiss\w*|reject\w*|quash\w*|stay(?:ed)?|strength",
     "summit_agreement": r"summit|conference|meeting|agreement|mou|memorandum|treaty|pact|accord|signed|dialogue|forum",
@@ -74,6 +76,27 @@ NOT_FACT = re.compile(r"(?<![\w-])(?:warn(?:s|ed|ing)?|urge[sd]?|urging|allege[s
                       r"criticiz\w*|slam(?:s|med)?|demand(?:s|ed)?|expect(?:s|ed)?|likely to|could|might|predict\w*|"
                       r"forecast\w*|poll|analysts?|experts? (?:say|said|believe)|speculat\w*)(?![\w])", re.I)
 
+# From abroad only the big items: these topics need importance >= 4 when the scope is international.
+ABROAD_STRICT = {"appointment", "defence", "international", "law_verdict", "obituary", "economy"}
+# A foreign appointment counts only for a top post (head of state/government, an international body, a central bank).
+TOP_POST = re.compile(r"(?<![\w-])(?:president|prime minister|chancellor|premier|king|queen|monarch|pope|"
+                      r"secretary[- ]general|director[- ]general|managing director|chair(?:man|person|woman)?|"
+                      r"governor|chief justice|head of state|head of government)(?![\w])", re.I)
+INDIA = re.compile(r"(?<![\w-])(?:india|indian|indo|bharat)(?![\w])", re.I)
+# A low-importance "national" item that names an Indian state or city and nothing national is state news.
+PLACES = re.compile(r"(?<![\w-])(?:andhra|arunachal|assam|bihar|chhattisgarh|goa|gujarat|haryana|himachal|jharkhand|"
+                    r"karnataka|kerala|madhya pradesh|maharashtra|manipur|meghalaya|mizoram|nagaland|odisha|punjab|"
+                    r"rajasthan|sikkim|tamil nadu|telangana|tripura|uttar pradesh|uttarakhand|west bengal|"
+                    r"jammu|kashmir|ladakh|puducherry|chandigarh|delhi|mumbai|chennai|kolkata|bengaluru|bangalore|"
+                    r"hyderabad|ahmedabad|pune|lucknow|jaipur|bhopal|patna|vijayawada|visakhapatnam|amaravati|guntur|"
+                    r"tirupati|kochi|kottayam|thiruvananthapuram|kozhikode|malappuram|wayanad|madurai|coimbatore|"
+                    r"mysuru|mysore|mangaluru|warangal|nagpur|indore|surat|vadodara|kanpur|varanasi|guwahati|"
+                    r"bhubaneswar|ranchi|raipur|dehradun|shimla|srinagar|district|taluk|mandal|municipal\w*|"
+                    r"corporation|panchayat|constituency)(?![\w])", re.I)
+NATIONAL = re.compile(r"(?<![\w-])(?:centre|central|union|national|india'?s?|indian|ministry|prime minister|pm|"
+                      r"president|supreme court|parliament|niti|isro|drdo|rbi|iaf|army|navy|cabinet|nationwide|"
+                      r"all-india|first)(?![\w])", re.I)
+
 SYSTEM = """You select news for SSC CGL General Awareness (current affairs) — the direct-recall facts SSC papers ask:
 who was appointed, who won, which scheme, which exercise, which rank, which day, which book, who died, which first.
 
@@ -91,6 +114,8 @@ Answer ssc = false for:
 - state-level news unless it is an Indian first or record, or a state scheme with a name and an outlay that is big news;
 - election observers, district officials, party posts and other minor appointments;
 - science studies about risks or trends with no named first, mission or discovery.
+
+RBI's weekly forex reserves, GST collections, GDP, inflation, IIP and core-sector data count as economy.
 
 importance: 5 = certain to be asked (national appointment, major award, big sports title, central scheme, RBI decision);
 4 = likely; 3 = possible; 1-2 = unlikely (then answer ssc = false).
@@ -156,12 +181,21 @@ def check(model, title, body):
         out["why"] = f"importance {out['importance']}"
     elif out["scope"] == "state" and out["importance"] < 4:
         out["why"] = f"state news, importance {out['importance']}"
+    elif out["scope"] == "international" and topic in ABROAD_STRICT and out["importance"] < 4:
+        out["why"] = f"foreign news, importance {out['importance']}"
     elif len(fact.split()) < 5 or not quoted(fact, title, text):
         out["why"] = "fact not found word for word in the article"
     elif not TOPIC_RE[topic].search(fact) and not TOPIC_RE[topic].search(title or ""):
         out["why"] = f"fact has no {topic} words"
-    elif NOT_FACT.search(fact):
+    elif topic != "law_verdict" and NOT_FACT.search(fact):  # verdicts quote what a side claimed or demanded
         out["why"] = "fact is an opinion/warning/demand/forecast"
+    elif topic == "appointment" and out["scope"] == "international" and not INDIA.search(f"{title} {fact}") and not TOP_POST.search(fact):
+        out["why"] = "foreign appointment, not a top post"
+    elif topic == "defence" and out["scope"] == "international" and not INDIA.search(f"{title} {fact}"):
+        out["why"] = "foreign military news, India not involved"
+    elif (out["importance"] < 4 and out["scope"] != "international" and PLACES.search(f"{title} {fact}")
+          and not NATIONAL.search(f"{title} {fact}")):
+        out["why"] = f"local news, importance {out['importance']}"
     else:
         out.update(keep=True, why="kept")
     return out

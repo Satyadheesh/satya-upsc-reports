@@ -18,8 +18,8 @@ on:
         description: 'Scan the whole 30-day window, not just the last 3 days'
         type: boolean
         default: false
-  schedule:
-    - cron: '25 * * * *'   # runs hourly at :25
+  # schedule: off — replaced by the SSC current-affairs runner (sscca.yml), which judges the raw news itself
+  #   - cron: '25 * * * *'
 
 concurrency:
   group: ssc-kit

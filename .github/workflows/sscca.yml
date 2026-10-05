@@ -23,8 +23,8 @@ on:
       pick:
         description: 'Preview only: judge just these (article ids or title words, comma separated)'
         default: ''
-  # schedule:            (enabled after the preview review)
-  #   - cron: '7,37 * * * *'
+  schedule:
+    - cron: '7,37 * * * *'   # every 30 min: judge new articles, then rebuild the SSC PDFs
 
 concurrency:
   group: sscca
@@ -147,7 +147,10 @@ jobs:
       - env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh workflow run reports.yml --repo "$GITHUB_REPOSITORY" --ref main -f scope=recent -f only=:ssc
+          # scheduled runs leave the PDFs to reports.yml (every 2 h); a manual run (backfill) rebuilds them now
+          if [ "${{ github.event_name }}" = workflow_dispatch ]; then
+            gh workflow run reports.yml --repo "$GITHUB_REPOSITORY" --ref main -f scope=recent -f only=:ssc
+          fi
           if [ "${{ needs.setup.outputs.more }}" = true ]; then
             gh workflow run sscca.yml --repo "$GITHUB_REPOSITORY" --ref main -f days='${{ github.event.inputs.days || '2' }}'
           fi

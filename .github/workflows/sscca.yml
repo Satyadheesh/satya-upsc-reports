@@ -139,7 +139,8 @@ jobs:
 
   after:
     needs: [setup, judge]
-    if: ${{ !cancelled() && needs.judge.result == 'success' && github.event.inputs.preview != 'true' }}
+    # one failed shard must not stop the chain: its articles are simply judged again next run
+    if: ${{ !cancelled() && (needs.judge.result == 'success' || needs.judge.result == 'failure') && github.event.inputs.preview != 'true' }}
     runs-on: ubuntu-latest
     permissions:
       actions: write

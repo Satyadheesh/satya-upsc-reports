@@ -147,3 +147,9 @@ class Card(unittest.TestCase):
         c = {"ssc_question": "Which exercise did the Indian and UAE armies begin?", "ssc_answer": "Mountain Guardian"}
         f = "The Indian and UAE armies began ‘Exercise Mountain Guardian’ in Uttarakhand on Monday."
         self.assertEqual(gate.card_ok(c, f, "Exercise begins", f), "")
+
+
+    def test_union_ministry_is_indian(self):
+        art = "The Union Law Ministry published rules for the National Tribunals Commission to oversee 16 tribunals."
+        r = gate.check(M(ans(topic="law_verdict", importance=4, scope="national", fact=art)), "Tribunal rules notified", art)
+        self.assertTrue(r["keep"], r["why"])

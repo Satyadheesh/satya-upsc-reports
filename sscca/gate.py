@@ -52,7 +52,7 @@ TOPIC_WORDS = {
     "scheme": r"scheme\w*|yojana|mission|portal|app\b|programme|program\b|initiative|abhiyan|launch\w*|outlay|"
               r"corridor|phase|project|approv\w*|cabinet|sanction\w*",
     "law_verdict": r"bill|act\b|ordinance|amendment|notif\w*|passed|enacted|verdict|judgment|judgement|ruled|struck down|upheld|"
-                   r"dismiss\w*|reject\w*|quash\w*|stay(?:ed)?|strength",
+                   r"dismiss\w*|reject\w*|quash\w*|stay(?:ed)?|strength|rules|regulations|gazette|published|assent",
     "summit_agreement": r"summit|conference|meeting|agreement|mou|memorandum|treaty|pact|accord|signed|dialogue|forum",
     "defence": r"exercise|missile|test\w*|induct\w*|commission\w*|warship|submarine|aircraft|jets?|drdo|navy|naval|army|"
                r"air force|iaf|defence|defense|brahmos|agni|tejas",
@@ -187,7 +187,8 @@ def quoted(fact, title, text):
 
 INDIA_LINK = re.compile(r"(?<![\w-])(?:lok sabha|rajya sabha|niti aayog|rbi|reserve bank of india|isro|drdo|sebi|"
                         r"union (?:cabinet|government|minister|ministry|budget)|centre|central government|crore|lakh|"
-                        r"rs\.?|inr|iaf|indian army|indian navy|modi|delhi)(?![\w])|₹", re.I)
+                        r"rs\.?|inr|iaf|indian army|indian navy|modi|delhi|union \w+ ministry|ministry of \w+|national|"
+                        r"pm[- ]\w+|pradhan mantri|swadesh darshan|jal jeevan|ayushman|guinness)(?![\w])|₹", re.I)
 
 
 def rules(topic, importance, scope, fact, title, text):

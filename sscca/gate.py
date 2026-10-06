@@ -74,10 +74,27 @@ TOPIC_RE = {k: re.compile(r"(?<![\w-])(?:" + v + r")(?![\w])", re.I) for k, v in
 # Opinions, warnings, demands, allegations and forecasts are not facts an SSC paper asks about.
 NOT_FACT = re.compile(r"(?<![\w-])(?:warn(?:s|ed|ing)?|urge[sd]?|urging|allege[sd]?|alleging|claim(?:s|ed)?|criticis\w*|"
                       r"criticiz\w*|slam(?:s|med)?|demand(?:s|ed)?|expect(?:s|ed)?|likely to|could|might|predict\w*|"
-                      r"forecast\w*|poll|analysts?|experts? (?:say|said|believe)|speculat\w*)(?![\w])", re.I)
+                      r"forecast\w*|poll|analysts?|experts? (?:say|said|believe)|speculat\w*|achievable|needs? to|should|"
+                      r"consider(?:s|ed|ing)?|mulls?|mulling)(?![\w])", re.I)
 
 # From abroad only the big items: these topics need importance >= 4 when the scope is international.
-ABROAD_STRICT = {"appointment", "defence", "international", "law_verdict", "obituary", "economy"}
+ABROAD_STRICT = {"appointment", "defence", "international", "law_verdict", "obituary", "economy", "sports", "science_space"}
+# Topics that need importance >= 4 everywhere (a "possible" appointment or economy item was mostly noise in the first days)
+MIN4 = {"appointment", "economy"}
+# Topics whose words must be in the fact itself, not only in the headline
+FACT_WORDS_ONLY = {"appointment", "law_verdict"}
+# At importance 3 these topics are state news when they name a state or city, even if the Centre is mentioned
+# (a state's share of a central scheme, a state award, a state minister)
+STATE_SENSITIVE = {"scheme", "economy", "award", "law_verdict", "appointment"}
+# A sports item of importance 3 counts only from a big event
+BIG_EVENT = re.compile(r"(?<![\w-])(?:olympic\w*|paralympic\w*|asian games|commonwealth|world cup|world championships?|"
+                       r"khelo india|national games|grand slam|wimbledon|us open|french open|australian open|"
+                       r"thomas cup|uber cup|davis cup|ranji trophy|santosh trophy|durand cup|ipl|wpl|chess olympiad|"
+                       r"diamond league|hockey india|pro kabaddi|world record|national record|asian championships?)(?![\w])", re.I)
+MARKET = re.compile(r"(?<![\w-])(?:nifty\w*|sensex|shares?|stocks?|stock market|equities|mutual funds?|ipo)(?![\w])", re.I)
+# A role the question gives the answer must be in the article (a state minister is not a "Union Minister")
+ROLES = re.compile(r"(?<![\w-])(union minister|chief minister|prime minister|governor|president|chief justice|"
+                   r"chief election commissioner|cabinet minister|minister of state)(?![\w])", re.I)
 # A foreign appointment counts only for a top post (head of state/government, an international body, a central bank).
 TOP_POST = re.compile(r"(?<![\w-])(?:president|prime minister|chancellor|premier|king|queen|monarch|pope|"
                       r"secretary[- ]general|director[- ]general|managing director|chair(?:man|person|woman)?|"
@@ -164,6 +181,56 @@ def quoted(fact, title, text):
     return sum(b.size for b in blocks) / len(f) >= 0.9 and span <= len(f) * 1.3
 
 
+def rules(topic, importance, scope, fact, title, text):
+    """Code checks on the model's answer. -> reason it fails, or "" if it passes."""
+    where = f"{title} {fact}"
+    if importance < 3:
+        return f"importance {importance}"
+    if scope == "state" and importance < 4:
+        return f"state news, importance {importance}"
+    if topic in MIN4 and importance < 4:
+        return f"{topic} needs importance 4"
+    if scope == "international" and topic in ABROAD_STRICT and importance < 4:
+        return f"foreign news, importance {importance}"
+    if MARKET.search(title or ""):
+        return "market news"
+    if len(fact.split()) < 5 or not quoted(fact, title, text):
+        return "fact not found word for word in the article"
+    if not TOPIC_RE[topic].search(fact) and (topic in FACT_WORDS_ONLY or not TOPIC_RE[topic].search(title or "")):
+        return f"fact has no {topic} words"
+    if topic != "law_verdict" and NOT_FACT.search(fact):  # verdicts quote what a side claimed or demanded
+        return "fact is an opinion/warning/demand/forecast"
+    if topic == "appointment" and scope == "international" and not INDIA.search(where) and not TOP_POST.search(fact):
+        return "foreign appointment, not a top post"
+    if topic == "defence" and scope == "international" and not INDIA.search(where):
+        return "foreign military news, India not involved"
+    if topic == "sports" and importance < 4 and not BIG_EVENT.search(where):
+        return "sports, not a big event"
+    if importance < 4 and PLACES.search(where) and (topic in STATE_SENSITIVE or not NATIONAL.search(where)):
+        return f"local news, importance {importance}"
+    return ""
+
+
+def _words(s):
+    return [w for w in _toks(s) if w not in {"the", "a", "an", "of", "and", "in", "at", "on", "for", "to", "by"}]
+
+
+def card_ok(card, fact, title, text):
+    """The card must ask about this news: its answer is in the gate's fact or the headline (not static trivia such as
+    'who founded the Nobel Prize'), and any role the question gives ('Union Minister') is in the article."""
+    ans = _words(card.get("ssc_answer") or "")
+    if not ans:
+        return "card has no answer"
+    hay = set(_toks(f"{title} {fact}"))
+    if sum(w in hay for w in ans) < -(-len(ans) * 3 // 5):  # at least 60%, rounded up
+        return "card answer is not in the news fact"
+    low = _norm(f"{title} {text}")
+    for role in ROLES.findall(card.get("ssc_question") or ""):
+        if _norm(role) not in low:
+            return f"card question says '{role}', the article does not"
+    return ""
+
+
 def check(model, title, body):
     """-> dict(keep, topic, importance, scope, fact, why)."""
     text = (body or "")[:2500]
@@ -177,25 +244,7 @@ def check(model, title, body):
     out.update(topic=topic or "none", importance=int(r.get("importance") or 0), scope=r.get("scope") or "", fact=fact)
     if not r.get("ssc") or topic not in TOPICS:
         out["why"] = "model: no"
-    elif out["importance"] < 3:
-        out["why"] = f"importance {out['importance']}"
-    elif out["scope"] == "state" and out["importance"] < 4:
-        out["why"] = f"state news, importance {out['importance']}"
-    elif out["scope"] == "international" and topic in ABROAD_STRICT and out["importance"] < 4:
-        out["why"] = f"foreign news, importance {out['importance']}"
-    elif len(fact.split()) < 5 or not quoted(fact, title, text):
-        out["why"] = "fact not found word for word in the article"
-    elif not TOPIC_RE[topic].search(fact) and not TOPIC_RE[topic].search(title or ""):
-        out["why"] = f"fact has no {topic} words"
-    elif topic != "law_verdict" and NOT_FACT.search(fact):  # verdicts quote what a side claimed or demanded
-        out["why"] = "fact is an opinion/warning/demand/forecast"
-    elif topic == "appointment" and out["scope"] == "international" and not INDIA.search(f"{title} {fact}") and not TOP_POST.search(fact):
-        out["why"] = "foreign appointment, not a top post"
-    elif topic == "defence" and out["scope"] == "international" and not INDIA.search(f"{title} {fact}"):
-        out["why"] = "foreign military news, India not involved"
-    elif (out["importance"] < 4 and out["scope"] != "international" and PLACES.search(f"{title} {fact}")
-          and not NATIONAL.search(f"{title} {fact}")):
-        out["why"] = f"local news, importance {out['importance']}"
     else:
-        out.update(keep=True, why="kept")
+        out["why"] = rules(topic, out["importance"], out["scope"], fact, title, text) or "kept"
+        out["keep"] = out["why"] == "kept"
     return out

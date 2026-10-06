@@ -7,40 +7,15 @@ import argparse
 import json
 import os
 import time
-import zlib
 
-from common.db import close_all, in_chunks, main_db, upsc_db
+from common.db import close_all, in_chunks, upsc_db
 from kit.model import MODEL_NAME, Model, download
 from kit.run_ssc import generate_card
 
-from .gate import GATE_VERSION, TOPICS, check
+from .articles import load
+from .gate import GATE_VERSION, TOPICS, card_ok, check
 
 DEADLINE = int(os.environ.get("SHARD_DEADLINE_SEC") or 3000)
-
-
-def decode(blob):
-    if blob is None:
-        return ""
-    if isinstance(blob, (bytes, bytearray, memoryview)):
-        try:
-            return zlib.decompress(bytes(blob)).decode("utf-8")
-        except zlib.error:
-            return bytes(blob).decode("utf-8", "ignore")
-    return str(blob)
-
-
-def load(ids):
-    m = main_db()
-    arts = {}
-    for aid, title, orig, reph, content, cat, pub, cluster in in_chunks(
-            m, "SELECT id, rephrased_title, title, rephrased_article, content, category, scraped_at, cluster_id "
-               "FROM articles WHERE id IN ({ph})", ids):
-        body = decode(reph)
-        if len(body) < 400:
-            body = (body + "\n" + decode(content)).strip()
-        arts[int(aid)] = {"id": int(aid), "title": (title or orig or "").strip(), "original_title": (orig or "").strip(),
-                          "body": body, "category": cat, "published_at": int(pub or 0), "cluster_id": cluster}
-    return arts
 
 
 def save(up, a, status, attempts, gate=None, card=None, reason=None):
@@ -92,6 +67,8 @@ def main():
                 "subject": TOPICS[g["topic"]][1], "why_in_news": g["fact"], "fact_box": art["body"][:1500],
                 "prelims_pointers": [], "keywords": [], "mains_question": ""}
         card, err = generate_card(model, note)
+        if card and card_ok(card, g["fact"], art["title"], art["body"][:2500]):
+            err, card = card_ok(card, g["fact"], art["title"], art["body"][:2500]), None
         if card:
             cards += 1
             print(f"[{i}/{len(ids)}] {aid} CARD [{g['topic']}/{g['importance']}] {card['ssc_question'][:70]} -> {card['ssc_answer']}",

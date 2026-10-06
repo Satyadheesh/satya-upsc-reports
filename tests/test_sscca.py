@@ -64,9 +64,58 @@ class Gate(unittest.TestCase):
     def test_local_news(self):
         art = "Nine snakeboats will compete in the Champions Boat League on the Meenachil river in Kottayam on October 24."
         r = gate.check(M(ans(topic="sports", importance=3, scope="national", fact=art)), "Boat league", art)
-        self.assertEqual(r["why"], "local news, importance 3")
+        self.assertFalse(r["keep"])
 
     def test_verdict_may_quote_a_claim(self):
         art = "The Supreme Court dismissed the Centre's plea, which claimed the High Court had no jurisdiction, on Monday."
         r = gate.check(M(ans(topic="law_verdict", importance=4, scope="national", fact=art)), "SC verdict", art)
         self.assertTrue(r["keep"], r["why"])
+
+
+    def test_minor_foreign_sports(self):
+        art = "Novak Djokovic defeated top seed Alexander Zverev 6-4, 6-3 to reach the China Open semifinals on Sunday."
+        r = gate.check(M(ans(topic="sports", importance=3, scope="international", fact=art)), "Djokovic beats Zverev", art)
+        self.assertFalse(r["keep"])
+
+    def test_big_event_state_host_kept(self):
+        art = "Telangana will host the eighth edition of the Khelo India Youth Games with over 7,500 athletes in 27 sports."
+        r = gate.check(M(ans(topic="sports", importance=3, scope="national", fact=art)), "Khelo India Youth Games", art)
+        self.assertTrue(r["keep"], r["why"])
+
+    def test_state_share_of_central_scheme(self):
+        art = ("Chief Minister N. Chandrababu Naidu and Union Minister Shivraj Singh Chouhan launched the PMAY-G 2.0 "
+               "project for three lakh houses in Burripalem, Andhra Pradesh, on Saturday.")
+        r = gate.check(M(ans(topic="scheme", importance=3, scope="national", fact=art)), "PMAY-G 2.0 in Andhra", art)
+        self.assertEqual(r["why"], "local news, importance 3")
+
+    def test_speech_is_not_a_fact(self):
+        art = "Shaktikanta Das said Viksit Bharat by 2047 is achievable with 7.9 per cent annual growth, at the conclave."
+        r = gate.check(M(ans(topic="economy", importance=4, scope="national", fact=art)), "Das on growth", art)
+        self.assertFalse(r["keep"])
+
+    def test_market_news(self):
+        art = "The RBI's Monetary Policy Committee began its three-day meeting on October 5, the central bank said."
+        r = gate.check(M(ans(topic="economy", importance=5, scope="national", fact=art)),
+                       "Nifty 50 and Sensex open higher as RBI begins MPC meeting", art)
+        self.assertEqual(r["why"], "market news")
+
+
+class Card(unittest.TestCase):
+    def test_answer_from_the_news(self):
+        c = {"ssc_question": "Who won the 2026 Nobel Prize in Medicine?", "ssc_answer": "Karl Deisseroth, Peter Hegemann and Georg Nagel"}
+        self.assertEqual(gate.card_ok(c, ans()["fact"], "Medicine Nobel", ART), "")
+
+    def test_static_trivia_rejected(self):
+        c = {"ssc_question": "Who created the Nobel Prize?", "ssc_answer": "Alfred Nobel"}
+        f = "Nobel Prize winners will be announced this week, with each prize worth $1.21 million."
+        self.assertEqual(gate.card_ok(c, f, "Nobel winners to be announced", f), "card answer is not in the news fact")
+
+    def test_role_must_be_in_article(self):
+        c = {"ssc_question": "Who is the Union Minister for MSME who felicitated the team?", "ssc_answer": "Kondapalli Srinivas"}
+        f = "Kondapalli Srinivas, Minister for MSME, felicitated the Indian visually impaired T20 World Cup team."
+        self.assertIn("Union Minister", gate.card_ok(c, f, "Team felicitated", f))
+
+    def test_number_answer(self):
+        c = {"ssc_question": "What was the gross GST collection?", "ssc_answer": "₹12.46 lakh crore"}
+        f = "Gross GST collections reached ₹12.46 lakh crore in April-September, up 9.1%."
+        self.assertEqual(gate.card_ok(c, f, "GST collections", f), "")

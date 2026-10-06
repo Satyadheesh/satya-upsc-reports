@@ -7,6 +7,12 @@ on:
       script:
         description: 'Script in tools/'
         default: 'diag_kit.py'
+      urls:
+        description: 'seo_audit.py only: space-separated paths/URLs to audit (default set if empty)'
+        default: ''
+      sample:
+        description: 'seo_audit.py only: also audit this many random sitemap URLs'
+        default: '0'
 
 jobs:
   diag:
@@ -28,6 +34,8 @@ jobs:
           SATYA_DB_TOKEN: ${{ secrets.SATYA_DB_TOKEN }}
           SATYA_TRANSLATION_DB_URL: ${{ secrets.SATYA_TRANSLATION_DB_URL }}
           SATYA_TRANSLATION_DB_TOKEN: ${{ secrets.SATYA_TRANSLATION_DB_TOKEN }}
+          URLS: ${{ github.event.inputs.urls }}
+          SAMPLE: ${{ github.event.inputs.sample }}
         run: PYTHONPATH=. python "tools/${{ github.event.inputs.script }}" 2>&1 | tee /tmp/diag.md
       - name: Publish
         if: always()

@@ -92,6 +92,10 @@ class OddTopStories2(unittest.TestCase):
 
 
 class SscItems(unittest.TestCase):
+    def test_before_runner_start_uses_old_cards(self):
+        from reports import data
+        self.assertIsNone(data.ssc_items(None, {"kind": "monthly", "start": data.SSC_CA_FROM - 1, "end": data.SSC_CA_FROM + 9}))
+
     def test_one_card_per_story_best_first(self):
         from reports import data
 
@@ -106,7 +110,7 @@ class SscItems(unittest.TestCase):
                         (5, 1300, None, "bogus", 5, "Z", "Q?", "A", "k", "", "f"),
                     ]
                 return R()
-        p = {"kind": "daily", "start": 0, "end": 10 ** 6}
+        p = {"kind": "daily", "start": data.SSC_CA_FROM, "end": data.SSC_CA_FROM + 10 ** 6}
         items = data.ssc_items(C(), p)
         self.assertEqual([i["id"] for i in items], [3, 1, 4])  # sports 05 before awards 07; one Nobel card
         self.assertEqual(items[0]["ssc_topic"], ("05", "Sports"))

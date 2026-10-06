@@ -449,12 +449,18 @@ def editions(period, en_items, hi_items, ready=0.8):
 
 
 SSC_CAP = {"daily": 40, "weekly": 90, "monthly": 160}
+# The SSC runner covers news from 1 Oct 2026 (IST). Periods that start earlier keep the old SSC cards (ssc_kit on
+# the UPSC notes) so a month or week is never built from a few days only.
+SSC_CA_FROM = 1790793000  # 2026-10-01 00:00 IST
 
 
 def ssc_items(upsc, p):
     """SSC cards of the period from the SSC runner (ssc_ca, judged from the raw news), best first, one per story:
-    same news cluster, same headline across papers (72 h) or the same answer on the same topic count as one."""
+    same news cluster, same headline across papers (72 h) or the same answer on the same topic count as one.
+    None for periods before the runner's start (build the SSC PDF the old way)."""
     from sscca.gate import TOPICS
+    if p["start"] < SSC_CA_FROM:
+        return None
     try:
         rows = upsc.execute(
             "SELECT article_id, published_at, cluster_id, topic, importance, title, question, answer, key_fact, static_gk, fact "

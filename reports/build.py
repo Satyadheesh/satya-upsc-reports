@@ -157,9 +157,9 @@ def main():
         ssc = ssc_items(upsc, p)  # SSC edition: the SSC runner's cards from the raw news, not the UPSC notes
         for lang, items, _ in langs:
             for edition in ("brief", "detailed", "ssc"):
-                if edition == "ssc" and (lang != "en" or not ssc):
+                if edition == "ssc" and (lang != "en" or ssc == []):
                     continue
-                its = ssc if edition == "ssc" else items
+                its = ssc if edition == "ssc" and ssc is not None else items  # before the SSC runner: UPSC notes
                 key = f"{p['kind']}:{p['key']}:{lang}:{edition}"
                 if args.only and args.only not in key:
                     continue

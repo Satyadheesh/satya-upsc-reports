@@ -191,6 +191,11 @@ INDIA_LINK = re.compile(r"(?<![\w-])(?:lok sabha|rajya sabha|niti aayog|rbi|rese
                         r"pm[- ]\w+|pradhan mantri|swadesh darshan|jal jeevan|ayushman|guinness)(?![\w])|₹", re.I)
 
 
+FOREIGN = re.compile(r"(?<![\w-])(?:u\.?s\.?|usa|united states|american|america|white house|pentagon|congress(?:man|woman)|"
+                     r"britain|british|u\.?k\.?|england|china|chinese|beijing|pakistan\w*|russia\w*|ukrain\w*|"
+                     r"israel\w*|iran\w*|saudi|europe\w*|eu|canada|canadian|australia\w*|japan\w*)(?![\w])", re.I)
+
+
 def rules(topic, importance, scope, fact, title, text):
     """Code checks on the model's answer. -> reason it fails, or "" if it passes."""
     where = f"{title} {fact}"
@@ -205,6 +210,8 @@ def rules(topic, importance, scope, fact, title, text):
         return f"foreign news, importance {importance}"
     if topic in INDIA_REQUIRED and not (INDIA.search(where) or PLACES.search(where) or INDIA_LINK.search(where)):
         return "no Indian link"
+    if topic in INDIA_REQUIRED and FOREIGN.search(where) and not INDIA.search(where):
+        return "foreign news, no Indian link"
     if MARKET.search(title or ""):
         return "market news"
     if len(fact.split()) < 5 or not quoted(fact, title, text):

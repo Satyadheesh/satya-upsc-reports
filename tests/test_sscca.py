@@ -153,3 +153,9 @@ class Card(unittest.TestCase):
         art = "The Union Law Ministry published rules for the National Tribunals Commission to oversee 16 tribunals."
         r = gate.check(M(ans(topic="law_verdict", importance=4, scope="national", fact=art)), "Tribunal rules notified", art)
         self.assertTrue(r["keep"], r["why"])
+
+
+    def test_us_national_act(self):
+        art = "Saving the home helped President Johnson sign the National Historic Preservation Act in the United States."
+        r = gate.check(M(ans(topic="law_verdict", importance=3, scope="national", fact=art)), "US preservation law", art)
+        self.assertFalse(r["keep"])

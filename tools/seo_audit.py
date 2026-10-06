@@ -101,7 +101,7 @@ def audit(path):
     print(f"\n### {path}\n- status **{st}** in {secs:.1f}s" + (f" → {final}" if final != url else ""))
     if st != 200:
         print(f"- body: {body[:200]!r}")
-        return
+        return []
     p = P()
     p.feed(body)
     meta = {(m.get("name") or m.get("property") or "").lower(): m.get("content", "") for m in p.metas}
@@ -120,12 +120,17 @@ def audit(path):
     print(f"- JSON-LD: {types}" + (f" · **{errs} parse errors**" if errs else ""))
     print(f"- og:title: {meta.get('og:title', '-')[:90]} · og:image: {meta.get('og:image', '-')[:90]}")
     print(f"- words: {words} · internal links: {len(internal)} · cache-control: {hd.get('Cache-Control', hd.get('cache-control', '-'))}")
+    og = meta.get("og:image")
+    if og and os.environ.get("CHECK_OG"):
+        st2, _, h2, _, s2 = fetch(og)
+        print(f"- og:image fetch: {st2} {h2.get('Content-Type', h2.get('content-type', ''))} in {s2:.1f}s")
+    return internal
 
 
 def sitemap(url, sample=6):
-    st, _, _, body, _ = fetch(url)
+    st, _, _, body, secs = fetch(url, timeout=240)
     locs = re.findall(r"<loc>([^<]+)</loc>", body)
-    print(f"\n### sitemap {url}\n- status {st}, {len(locs)} URLs")
+    print(f"\n### sitemap {url}\n- status {st} in {secs:.1f}s, {len(locs)} URLs" + (f" · {body[:150]!r}" if st != 200 else ""))
     kinds = {}
     for l in locs:
         k = re.sub(r"\d{4}-\d{2}(-\d{2})?|W\d+|\d+", "#", l.replace(SITE, ""))[:60]
@@ -147,8 +152,14 @@ def main():
     week = next((re.search(r"week/([\w-]+)", l).group(1) for l in locs if "/week/" in l), "2026-W40")
     month = next((re.search(r"month/([\w-]+)", l).group(1) for l in locs if "/month/" in l), "2026-09")
     paths = (os.environ.get("URLS") or "").split() or DEFAULT
+    follow = [f for f in (os.environ.get("FOLLOW") or "").split() if f]
     for p in paths:
-        audit(p.replace("__LATEST__", day).replace("__WEEK__", week).replace("__MONTH__", month))
+        links = audit(p.replace("__LATEST__", day).replace("__WEEK__", week).replace("__MONTH__", month)) or []
+        for f in follow:  # also audit the first link on the page that contains this text
+            hit = next((l for l in links if f in l), None)
+            if hit:
+                audit(hit)
+                follow = [x for x in follow if x != f]
     extra = int(os.environ.get("SAMPLE") or 0)
     if extra:
         import random

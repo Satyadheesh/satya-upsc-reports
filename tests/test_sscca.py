@@ -119,3 +119,31 @@ class Card(unittest.TestCase):
         c = {"ssc_question": "What was the gross GST collection?", "ssc_answer": "₹12.46 lakh crore"}
         f = "Gross GST collections reached ₹12.46 lakh crore in April-September, up 9.1%."
         self.assertEqual(gate.card_ok(c, f, "GST collections", f), "")
+
+
+    def test_foreign_law_needs_indian_link(self):
+        art = "California became the first US state to pass the No Robo Bosses Act, limiting AI in hiring decisions."
+        r = gate.check(M(ans(topic="law_verdict", importance=3, scope="national", fact=art)), "California AI law", art)
+        self.assertEqual(r["why"], "no Indian link")
+
+    def test_hearing_is_not_a_verdict(self):
+        art = "The Supreme Court on Monday struck a note of caution as it hears a challenge to the Vande Mataram Act."
+        r = gate.check(M(ans(topic="law_verdict", importance=3, scope="national", fact=art)),
+                       "Supreme Court hears challenge to Vande Mataram law", art)
+        self.assertFalse(r["keep"])
+
+    def test_india_in_foreign_sports_kept(self):
+        art = "India and Pakistan will face off for the Asian Games 2026 men's cricket gold medal in Japan on Sunday."
+        r = gate.check(M(ans(topic="sports", importance=3, scope="international", fact=art)), "India v Pakistan final", art)
+        self.assertTrue(r["keep"], r["why"])
+
+    def test_claim_in_headline(self):
+        art = "The ₹1-lakh-crore Global Horticulture Hub was launched at Madanapalle on Saturday by the Chief Minister."
+        r = gate.check(M(ans(topic="scheme", importance=4, scope="national", fact=art)),
+                       "Jairam Ramesh claims crowd shouted for jobs at horticulture hub launch", art)
+        self.assertFalse(r["keep"])
+
+    def test_quoted_name_in_answer(self):
+        c = {"ssc_question": "Which exercise did the Indian and UAE armies begin?", "ssc_answer": "Mountain Guardian"}
+        f = "The Indian and UAE armies began ‘Exercise Mountain Guardian’ in Uttarakhand on Monday."
+        self.assertEqual(gate.card_ok(c, f, "Exercise begins", f), "")

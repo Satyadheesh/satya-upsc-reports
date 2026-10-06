@@ -64,7 +64,7 @@ TOPIC_WORDS = {
     "environment": r"species|reserve|sanctuary|national park|ramsar|wetland|tiger|elephant|iucn|conservation|wildlife|"
                    r"forest|biodiversity|released|climate|discover\w*",
     "important_day": r"day\b|diwas|week\b|observed|celebrated|commemorat\w*|theme",
-    "book_author": r"book|author\w*|written|novel|memoir|autobiography|biography|released|launched",
+    "book_author": r"author\w*|written by|penned|novel|memoir|autobiography|biography",
     "obituary": r"passed away|died|dies|demise|death|no more|breathed (?:his|her) last",
     "first_record": r"first|largest|highest|biggest|record|gi tag|geographical indication|unesco|only",
     "international": r"elected|sworn|president|prime minister|joins|joined|member\w*|withdraw\w*|treaty|united nations|un\b|"
@@ -82,7 +82,9 @@ ABROAD_STRICT = {"appointment", "defence", "international", "law_verdict", "obit
 # Topics that need importance >= 4 everywhere (a "possible" appointment or economy item was mostly noise in the first days)
 MIN4 = {"appointment", "economy"}
 # Topics whose words must be in the fact itself, not only in the headline
-FACT_WORDS_ONLY = {"appointment", "law_verdict"}
+FACT_WORDS_ONLY = {"appointment", "law_verdict", "book_author"}
+# These topics count only with an Indian link (the model sometimes calls a US law or a Gulf meeting "national")
+INDIA_REQUIRED = {"law_verdict", "scheme", "economy", "defence", "summit_agreement", "first_record"}
 # At importance 3 these topics are state news when they name a state or city, even if the Centre is mentioned
 # (a state's share of a central scheme, a state award, a state minister)
 STATE_SENSITIVE = {"scheme", "economy", "award", "law_verdict", "appointment"}
@@ -91,6 +93,8 @@ BIG_EVENT = re.compile(r"(?<![\w-])(?:olympic\w*|paralympic\w*|asian games|commo
                        r"khelo india|national games|grand slam|wimbledon|us open|french open|australian open|"
                        r"thomas cup|uber cup|davis cup|ranji trophy|santosh trophy|durand cup|ipl|wpl|chess olympiad|"
                        r"diamond league|hockey india|pro kabaddi|world record|national record|asian championships?)(?![\w])", re.I)
+HEARING = re.compile(r"(?<![\w-])(?:hears?|hearing|issues? notice|notices? to|to examine|seeks?|sought|petition filed|"
+                     r"pleas? filed|adjourn\w*|reserves? (?:its )?(?:verdict|order|judgment))(?![\w])", re.I)
 MARKET = re.compile(r"(?<![\w-])(?:nifty\w*|sensex|shares?|stocks?|stock market|equities|mutual funds?|ipo)(?![\w])", re.I)
 # A role the question gives the answer must be in the article (a state minister is not a "Union Minister")
 ROLES = re.compile(r"(?<![\w-])(union minister|chief minister|prime minister|governor|president|chief justice|"
@@ -181,6 +185,11 @@ def quoted(fact, title, text):
     return sum(b.size for b in blocks) / len(f) >= 0.9 and span <= len(f) * 1.3
 
 
+INDIA_LINK = re.compile(r"(?<![\w-])(?:lok sabha|rajya sabha|niti aayog|rbi|reserve bank of india|isro|drdo|sebi|"
+                        r"union (?:cabinet|government|minister|ministry|budget)|centre|central government|crore|lakh|"
+                        r"rs\.?|inr|iaf|indian army|indian navy|modi|delhi)(?![\w])|₹", re.I)
+
+
 def rules(topic, importance, scope, fact, title, text):
     """Code checks on the model's answer. -> reason it fails, or "" if it passes."""
     where = f"{title} {fact}"
@@ -190,16 +199,21 @@ def rules(topic, importance, scope, fact, title, text):
         return f"state news, importance {importance}"
     if topic in MIN4 and importance < 4:
         return f"{topic} needs importance 4"
-    if scope == "international" and topic in ABROAD_STRICT and importance < 4:
+    if scope == "international" and topic in ABROAD_STRICT and importance < 4 and not (
+            topic in ("sports", "science_space") and INDIA.search(where)):
         return f"foreign news, importance {importance}"
+    if topic in INDIA_REQUIRED and not (INDIA.search(where) or PLACES.search(where) or INDIA_LINK.search(where)):
+        return "no Indian link"
     if MARKET.search(title or ""):
         return "market news"
     if len(fact.split()) < 5 or not quoted(fact, title, text):
         return "fact not found word for word in the article"
     if not TOPIC_RE[topic].search(fact) and (topic in FACT_WORDS_ONLY or not TOPIC_RE[topic].search(title or "")):
         return f"fact has no {topic} words"
-    if topic != "law_verdict" and NOT_FACT.search(fact):  # verdicts quote what a side claimed or demanded
-        return "fact is an opinion/warning/demand/forecast"
+    if topic != "law_verdict" and (NOT_FACT.search(fact) or NOT_FACT.search(title or "")):
+        return "fact is an opinion/warning/demand/forecast"  # verdicts may quote what a side claimed or demanded
+    if topic == "law_verdict" and HEARING.search(where):
+        return "court hearing or notice, not a verdict"
     if topic == "appointment" and scope == "international" and not INDIA.search(where) and not TOP_POST.search(fact):
         return "foreign appointment, not a top post"
     if topic == "defence" and scope == "international" and not INDIA.search(where):
@@ -212,7 +226,7 @@ def rules(topic, importance, scope, fact, title, text):
 
 
 def _words(s):
-    return [w for w in _toks(s) if w not in {"the", "a", "an", "of", "and", "in", "at", "on", "for", "to", "by"}]
+    return [w.strip("'\"") for w in _toks(s) if w.strip("'\"") not in {"the", "a", "an", "of", "and", "in", "at", "on", "for", "to", "by"}]
 
 
 def card_ok(card, fact, title, text):
@@ -221,7 +235,7 @@ def card_ok(card, fact, title, text):
     ans = _words(card.get("ssc_answer") or "")
     if not ans:
         return "card has no answer"
-    hay = set(_toks(f"{title} {fact}"))
+    hay = {w.strip("'\"") for w in _toks(f"{title} {fact}")}
     if sum(w in hay for w in ans) < -(-len(ans) * 3 // 5):  # at least 60%, rounded up
         return "card answer is not in the news fact"
     low = _norm(f"{title} {text}")

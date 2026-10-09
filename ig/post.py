@@ -127,6 +127,9 @@ def render(day, stories, quiz, lang, folder, is_today=True):
 def push_media(files_by_dir, branch, msg):
     """Commit the slides to a branch of this (public) repo; returns the raw URL prefix."""
     repo, tok = os.environ.get("GITHUB_REPOSITORY"), os.environ.get("GITHUB_TOKEN")
+    if branch != "ig-media" and os.environ.get("CORE_TOKEN") and repo:
+        # dry-run previews go to the private code repo; only ig-media must be public (Instagram fetches from it)
+        repo, tok = f"{repo}-core", os.environ["CORE_TOKEN"]
     if not repo or not tok:
         raise SystemExit("GITHUB_REPOSITORY / GITHUB_TOKEN missing (run inside the workflow)")
     wt = pathlib.Path("/tmp/ig_wt")

@@ -13,7 +13,7 @@ import time
 import urllib.request
 from html.parser import HTMLParser
 
-SITE = "https://satyadheesh.in"
+SITE = (os.environ.get("SITE") or "https://satyadheesh.in").rstrip("/")
 UA = "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)"
 DEFAULT = [
     "/", "/upsc", "/upsc?lang=hi", "/upsc?paper=GS2", "/upsc/current-affairs", "/upsc/reports",
@@ -97,8 +97,12 @@ def ld_types(blobs):
 
 def audit(path):
     url = path if path.startswith("http") else SITE + path
+    if os.environ.get("REPEAT"):  # warm the cache first, then measure the second (cached) fetch
+        fetch(url)
     st, final, hd, body, secs = fetch(url)
-    print(f"\n### {path}\n- status **{st}** in {secs:.1f}s" + (f" → {final}" if final != url else ""))
+    h = {k.lower(): v for k, v in hd.items()}
+    print(f"\n### {path}\n- status **{st}** in {secs:.1f}s" + (f" → {final}" if final != url else "")
+          + f" · x-vercel-cache: {h.get('x-vercel-cache', '-')} · age: {h.get('age', '-')}")
     if st != 200:
         print(f"- body: {body[:200]!r}")
         return []

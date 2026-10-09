@@ -13,6 +13,12 @@ on:
       sample:
         description: 'seo_audit.py only: also audit this many random sitemap URLs'
         default: '0'
+      site:
+        description: 'seo_audit.py only: site to audit (default https://satyadheesh.in)'
+        default: ''
+      repeat:
+        description: 'seo_audit.py only: fetch each page twice and report the second (cache check)'
+        default: ''
 
 jobs:
   diag:
@@ -36,6 +42,8 @@ jobs:
           SATYA_TRANSLATION_DB_TOKEN: ${{ secrets.SATYA_TRANSLATION_DB_TOKEN }}
           URLS: ${{ github.event.inputs.urls }}
           SAMPLE: ${{ github.event.inputs.sample }}
+          SITE: ${{ github.event.inputs.site }}
+          REPEAT: ${{ github.event.inputs.repeat }}
           FOLLOW: '/upsc/note/ /ssc/current-affairs/ /ssc/topic/'
           CHECK_OG: '1'
         run: PYTHONPATH=. python "tools/${{ github.event.inputs.script }}" 2>&1 | tee /tmp/diag.md

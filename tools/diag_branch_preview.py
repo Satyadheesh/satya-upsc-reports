@@ -15,16 +15,18 @@ only = opts.get("only", "")
 out = pathlib.Path("/tmp/diag_out"); out.mkdir(exist_ok=True)
 
 
-def run(cmd, **kw):
+def run(cmd, timeout=600, **kw):
     print("$", cmd if isinstance(cmd, str) else " ".join(cmd), flush=True)
-    r = subprocess.run(cmd, shell=isinstance(cmd, str), capture_output=True, text=True, **kw)
-    print((r.stdout or "")[-6000:], (r.stderr or "")[-3000:], flush=True)
-    return r.returncode
+    try:  # output straight through (the diag log), never buffered until the end
+        return subprocess.run(cmd, shell=isinstance(cmd, str), timeout=timeout, stdout=sys.stdout, stderr=sys.stdout, **kw).returncode
+    except subprocess.TimeoutExpired:
+        print(f"timed out after {timeout}s", flush=True)
+        return 1
 
 
 run(f"git fetch -q origin {branch} && rm -rf /tmp/br && git worktree add -f /tmp/br FETCH_HEAD")
 run(f"{sys.executable} -m pip install -q -r /tmp/br/requirements.txt playwright")
-run(f"{sys.executable} -m playwright install --with-deps chromium > /tmp/pw.log 2>&1; tail -2 /tmp/pw.log")
+run(f"{sys.executable} -m playwright install --with-deps chromium > /tmp/pw.log 2>&1; tail -1 /tmp/pw.log")
 runner = r'''
 import sys, os
 sys.path.insert(0, "/tmp/br")
@@ -44,8 +46,12 @@ if os.environ.get("RECHECK") == "1":
         return not why or why.startswith(("state news", "foreign news", "local news"))  # scope is not stored here
     data.SSC_CARD_FILTER = keep
 from reports import build
+from common.db import close_all
 sys.argv = ["build", "--period", os.environ["PERIODS"], "--preview", "/tmp/diag_out"] + (["--only", os.environ["ONLY"]] if os.environ.get("ONLY") else [])
-build.main()
+try:
+    build.main()
+finally:
+    close_all()  # the libsql client's thread would keep the process alive
 '''
 pathlib.Path("/tmp/run_prev.py").write_text(runner)
 env = {**os.environ, "PERIODS": periods, "ONLY": only, "RECHECK": opts.get("recheck", "1"), "PYTHONPATH": "/tmp/br"}

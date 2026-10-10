@@ -2,6 +2,7 @@
 URLS (space separated) overrides the default set; one event, minister and vaade page are taken from sitemap.xml."""
 import os
 import re
+import time
 import urllib.request
 
 SITE = "https://satyadheesh.in"
@@ -30,11 +31,13 @@ paths = os.environ.get("URLS", "").split() or [
     *extra, *[p.rstrip("/") + "/opengraph-image" for p in extra],
     "/upsc?utm_source=x", "/?fbclid=abc",
 ]
-print("| path | status | bytes | cache 1st | cache 2nd | age | cache-control |")
-print("|---|---|---|---|---|---|---|")
+print("| path | status | bytes | cache 1st | 2nd | 3rd (after 5 s) | age | cache-control |")
+print("|---|---|---|---|---|---|---|---|")
 for p in paths:
     a, b = get(p), get(p)
-    print(f"| {p} | {a[0]} | {a[1]:,} | {a[2]} | {b[2]} | {b[4]} | {b[3]} |")
+    time.sleep(5)
+    c = get(p)
+    print(f"| {p} | {a[0]} | {a[1]:,} | {a[2]} | {b[2]} | {c[2]} | {c[4]} | {c[3]} |")
 print("\n## robots.txt\n```")
 print(get("/robots.txt")[6].decode(errors="ignore")[:1500])
 print("```")

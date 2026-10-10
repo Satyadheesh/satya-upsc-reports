@@ -1,8 +1,6 @@
 name: Instagram posts
 
-# Today's top 5 UPSC stories as a carousel at 19:00 IST: English, then Hindi (when 4 of the 5 are translated).
-# Primary start: cron-job.org calls workflow_dispatch (mode=scheduled) ~20 min early. GitHub crons are the backup,
-# plus a 21:00 IST catch-up that posts only what is missing (usually a late Hindi carousel).
+# Six carousels a day: Number/Question of the day, SSC quiz and the UPSC top 5, each in English then Hindi.
 on:
   # No GitHub schedule: cron-job.org starts each of the six slots (08:30, 10:30, 13:00, 15:00, 19:00, 21:00 IST)
   # with mode=scheduled ~20 min early; a run posts whatever slot is due (35 min early to 2.5 h late) and exits.

@@ -14,7 +14,7 @@ from common.syllabus import SYLLABUS
 
 SITE = "https://satyadheesh.in"
 TELEGRAM = "https://t.me/satyadheesh"
-FEEDBACK_EMAIL = "thesatyadheesh@gmail.com"
+FEEDBACK_EMAIL = "contact@satyadheesh.in"
 
 
 def mail_href(subject):

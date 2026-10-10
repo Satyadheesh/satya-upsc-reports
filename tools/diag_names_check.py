@@ -51,7 +51,8 @@ def body_missing(name, text, words):
     initials = "".join(w[0] for w in name.split() if w.lower() not in NAME_GENERIC).upper()
     if len(initials) >= 2 and re.search(r"\b" + re.escape(initials) + r"\b", text):
         return False
-    # its words close together (any order, within 8 words), e.g. "Housing and Urban Affairs Ministry"
+    # its words close together in any order ("Housing and Urban Affairs Ministry"), not spread over a sentence
+    # ("International Criminal Court ... justice" is not the International Court of Justice)
     content = [w for w in _words(name) if not w[0].isdigit()]
     if not content:
         return True
@@ -62,7 +63,8 @@ def body_missing(name, text, words):
     if not all(w in pos for w in content):
         return True
     first = content[0]
-    return not any(all(any(abs(j - i) <= 8 for j in pos[w]) for w in content[1:]) for i in pos[first])
+    span = len(content) + 2
+    return not any(all(any(abs(j - i) < span for j in pos[w]) for w in content[1:]) for i in pos[first])
 
 
 def missing(names, text):

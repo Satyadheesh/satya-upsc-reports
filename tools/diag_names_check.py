@@ -51,8 +51,18 @@ def body_missing(name, text, words):
     initials = "".join(w[0] for w in name.split() if w.lower() not in NAME_GENERIC).upper()
     if len(initials) >= 2 and re.search(r"\b" + re.escape(initials) + r"\b", text):
         return False
+    # its words close together (any order, within 8 words), e.g. "Housing and Urban Affairs Ministry"
     content = [w for w in _words(name) if not w[0].isdigit()]
-    return not content or not all(w in words for w in content)
+    if not content:
+        return True
+    toks = [w[:6] for w in WORD_RE.findall(low)]
+    pos = {}
+    for i, w in enumerate(toks):
+        pos.setdefault(w, []).append(i)
+    if not all(w in pos for w in content):
+        return True
+    first = content[0]
+    return not any(all(any(abs(j - i) <= 8 for j in pos[w]) for w in content[1:]) for i in pos[first])
 
 
 def missing(names, text):
@@ -60,7 +70,7 @@ def missing(names, text):
     return [n for n in names if body_missing(n, text, ws)]
 
 
-DAYS = int(os.environ.get("DAYS") or 2)
+DAYS = int(os.environ.get("DAYS") or 3)
 try:
     up, m = upsc_db(), main_db()
     rows = up.execute("SELECT article_id, fact_box, prelims_pointers, why_in_news FROM upsc_articles WHERE published_at >= ? "
@@ -102,5 +112,6 @@ try:
     print(f"- pointers: {d_p} of {n_p} would be dropped")
     print(f"- why-in-news lines that would be retried: {d_w}\n")
     print("\n".join(ex[:150]))
+    print("\nPillay note 133529 fact box:", [n for n in body_names("She is currently a judge at the International Court of Justice and previously worked at the International Criminal Tribunal for Rwanda.")])
 finally:
     close_all()

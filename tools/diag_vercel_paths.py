@@ -5,7 +5,7 @@ import re
 import time
 import urllib.request
 
-SITE = "https://satyadheesh.in"
+SITE = os.environ.get("SITE") or "https://satyadheesh.in"
 
 
 def get(path, ua="Mozilla/5.0 (SatyaDiag)"):
@@ -22,7 +22,7 @@ def get(path, ua="Mozilla/5.0 (SatyaDiag)"):
 
 
 sm = get("/sitemap.xml")[6].decode(errors="ignore")
-locs = re.findall(r"<loc>https://satyadheesh\.in([^<]+)</loc>", sm)
+locs = re.findall(r"<loc>https://[^/<]+([^<]+)</loc>", sm)
 pick = lambda pre: next((l for l in locs if l.startswith(pre) and "lang=" not in l), None)
 extra = [p for p in (pick("/event/"), pick("/minister/"), pick("/vaade/")) if p]
 paths = os.environ.get("URLS", "").split() or [

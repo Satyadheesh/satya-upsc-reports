@@ -14,6 +14,12 @@ from common.syllabus import SYLLABUS
 
 SITE = "https://satyadheesh.in"
 TELEGRAM = "https://t.me/satyadheesh"
+FEEDBACK_EMAIL = "thesatyadheesh@gmail.com"
+
+
+def mail_href(subject):
+    from urllib.parse import quote
+    return f"mailto:{FEEDBACK_EMAIL}?subject={quote(subject)}"
 GAVEL = ('<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg"><rect x="1" y="1" width="62" height="62" rx="13" fill="#f8f6f2" stroke="#120f0b" stroke-width="2"/>'
          '<g transform="rotate(-38 32 30)"><rect x="17" y="18" width="16" height="24" rx="4" fill="#bf4a07"/><rect x="17" y="24" width="16" height="3" fill="#8f3a08"/>'
          '<rect x="33" y="27.5" width="16" height="6" rx="3" fill="#bf4a07"/></g><rect x="15" y="49" width="34" height="4" rx="2" fill="#a39c92"/></svg>')
@@ -55,6 +61,7 @@ T = {
         answers="ANSWERS", ask="Which of the statements given above is/are correct?",
         cta1="Get it every morning on <i>Telegram</i>", cta2="Daily PDF + quiz at 5 AM · weekly review every Sunday · English and Hindi · free, no sign-up.",
         qr_tg="Telegram", qr_site="Website",
+        fb="Spotted a mistake, or want a topic or format that would help you? Write to us, we read every mail:",
         disc="Notes are generated from SatyaDheesh’s news feed and mapped to the UPSC CSE syllabus. Verify facts with the original report or PIB before using them in an answer.",
         inside_b="<span><b>p.2</b> Key stories</span><span><b>»</b> In brief + places</span><span><b>»</b> Test yourself</span><span style=\"margin-left:auto\">P = Prelims · M = Mains</span>",
         contents="Contents", contents_h="Every note, grouped by paper", how_k="How each note reads",
@@ -79,6 +86,7 @@ T = {
         answers="उत्तर", ask="ऊपर दिए गए कथनों में से कौन-सा/से सही है/हैं?",
         cta1="हर सुबह <i>टेलीग्राम</i> पर पाएँ", cta2="रोज़ सुबह 5 बजे पीडीएफ + क्विज़ · हर रविवार साप्ताहिक · हिंदी और अंग्रेज़ी · मुफ़्त, बिना साइन-अप।",
         qr_tg="टेलीग्राम", qr_site="वेबसाइट",
+        fb="कोई गलती दिखे, या तैयारी के लिए कोई टॉपिक या फॉर्मेट चाहिए? हमें लिखें, हम हर मेल पढ़ते हैं:",
         disc="नोट्स सत्याधीश के समाचार फ़ीड से स्वचालित रूप से बनाए जाते हैं और यूपीएससी सीएसई पाठ्यक्रम से जुड़े हैं। उत्तर में उपयोग से पहले तथ्यों का मूल रिपोर्ट या पीआईबी से मिलान करें।",
         inside_b="<span><b>पृ.2</b> मुख्य ख़बरें</span><span><b>»</b> संक्षेप में</span><span><b>»</b> अभ्यास</span><span style=\"margin-left:auto\">P = प्रीलिम्स · M = मेन्स</span>",
         contents="विषय सूची", contents_h="सभी नोट्स, पेपर के अनुसार", how_k="हर नोट में",
@@ -225,7 +233,9 @@ def cta(lang):
     qrs = (f'<div class="qrs"><figure>{qr_svg(TELEGRAM)}<figcaption>{e(t["qr_tg"])}</figcaption></figure>'
            f'<figure>{qr_svg(site)}<figcaption>{e(t["qr_site"])}</figcaption></figure></div>')
     return (f'<div class="cta">{qrs}<div><div class="t1">{t["cta1"]}</div><div class="t2">{e(t["cta2"])}</div>'
-            f'<div class="t3">t.me/satyadheesh · satyadheesh.in/upsc/reports</div></div></div><p class="disc">{e(t["disc"])}</p>')
+            f'<div class="t3">t.me/satyadheesh · satyadheesh.in/upsc/reports</div>'
+            f'<div class="t2" style="margin-top:1.6mm">{e(t["fb"])} <a href="{mail_href("Correction / request: UPSC")}" style="color:#f0a46e">{FEEDBACK_EMAIL}</a></div>'
+            f'</div></div><p class="disc">{e(t["disc"])}</p>')
 
 
 def mcq_block(qs, lang):
@@ -497,10 +507,12 @@ def detailed(p, items, total, lang):
               + (f'<div class="kw"><em>{e(t["use"])}</em>{kw}</div>' if kw else "") + "</div>") if it.get("mains") else ""
         when = dt.datetime.fromtimestamp(it["published_at"] + 19800, dt.timezone.utc).date()
         src = f'{date_label(when, hi, short=True, year=False)}' + (f' · {e(it["source"])}' if it.get("source") else "")
+        report = mail_href(f"Correction: UPSC note {it['id']}")
         mergedc = f'<span class="merged">{e(t["reports_merged"].format(n=it["related"] + 1))}</span>' if it["related"] else ""
         return (f'<article class="dnote"><div class="top"><div class="chips"><span class="chip ex" style="border-color:transparent;background:var(--cream2)">'
                 f'{e(node_name(it["subject"], it["node"]))}</span>{exam_chips(it["exam"])}{mergedc}</div>'
-                f'<div class="src">{src} · <a href="{SITE}/upsc/note/{it["id"]}">satyadheesh.in/upsc/note/{it["id"]}</a></div></div>'
+                f'<div class="src">{src} · <a href="{SITE}/upsc/note/{it["id"]}">satyadheesh.in/upsc/note/{it["id"]}</a>'
+                f' · <a href="{report}">{"गलती बताएँ" if hi else "Report a mistake"}</a></div></div>'
                 f'<h4>{e((kit_of(it, lang) or {}).get("short_title") or it["title"])}</h4><p class="why"><b>{e(t["why_d"])}</b>{e(it["why"])}</p><dl class="facts">{dl}</dl>{mq}</article>')
 
     # all papers run on one after another: a paper with one note no longer leaves a mostly empty page
@@ -696,14 +708,14 @@ SSC_T = {
                answer_key="Answer key", q1="question", qn="questions",
                cta1="Every day’s SSC one-liner, <i>free</i>",
                cta2="Daily, weekly and monthly PDFs with every question by topic at satyadheesh.in/ssc. Daily current affairs on Telegram. No sign-up.",
-               qr_site="SSC page", foot="Satyadheesh · SSC CGL {kind} One-Liner · {when}", read="Read the news"),
+               qr_site="SSC page", fb="Spotted a mistake, or want something that would help you? Write to us, we read every mail:", foot="Satyadheesh · SSC CGL {kind} One-Liner · {when}", read="Read the news"),
     "hi": dict(vol="भाग I · एसएससी सीजीएल वन-लाइनर", pill="एसएससी सीजीएल {kind} वन-लाइनर रिवीज़न", ca="करेंट अफेयर्स",
                questions="प्रश्न", modules="मॉड्यूल", mix="मॉड्यूल मिश्रण", module="मॉड्यूल", item="प्रश्न", items="प्रश्न",
                key="मुख्य तथ्य", static="स्टैटिक GK", test="अभ्यास", test_h="इस पीडीएफ से {n}", test_aside="उत्तर कुंजी अंत में",
                answer_key="उत्तर कुंजी", q1="प्रश्न", qn="प्रश्न",
                cta1="हर दिन का एसएससी वन-लाइनर, <i>मुफ़्त</i>",
                cta2="दैनिक, साप्ताहिक और मासिक पीडीएफ, हर प्रश्न विषय के अनुसार: satyadheesh.in/ssc · रोज़ के करेंट अफेयर्स टेलीग्राम पर। कोई साइन-अप नहीं।",
-               qr_site="एसएससी पेज", foot="सत्याधीश · एसएससी सीजीएल {kind} वन-लाइनर · {when}", read="ख़बर पढ़ें"),
+               qr_site="एसएससी पेज", fb="कोई गलती दिखे, या कुछ और चाहिए? हमें लिखें, हम हर मेल पढ़ते हैं:", foot="सत्याधीश · एसएससी सीजीएल {kind} वन-लाइनर · {when}", read="ख़बर पढ़ें"),
 }
 KIND_HI = {"daily": "दैनिक", "weekly": "साप्ताहिक", "monthly": "मासिक"}
 _NUMERIC = re.compile(r"\d")
@@ -881,7 +893,9 @@ def ssc(p, items, total, lang="en"):
     cta_html = (f'<div class="ssc-cta"><div class="qrs"><figure>{qr_svg(TELEGRAM)}<figcaption>{T[lang]["qr_tg"]}</figcaption></figure>'
                 f'<figure>{qr_svg(site)}<figcaption>{L["qr_site"]}</figcaption></figure></div>'
                 f'<div><div class="t1">{L["cta1"]}</div><div class="t2">{e(L["cta2"])}</div>'
-                f'<div class="t3">satyadheesh.in/ssc · t.me/satyadheesh</div></div></div>')
+                f'<div class="t3">satyadheesh.in/ssc · t.me/satyadheesh</div>'
+                f'<div class="t2" style="margin-top:4px">{e(L["fb"])} <a href="{mail_href("Correction / request: SSC")}" style="color:#f0a46e">{FEEDBACK_EMAIL}</a></div>'
+                f'</div></div>')
 
     body = f"""
 <div class="page">

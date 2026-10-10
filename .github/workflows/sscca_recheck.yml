@@ -13,8 +13,10 @@ on:
         description: 'Look back this many days'
         default: '8'
 
+# Own group: it only touches stored cards, and in the shared 'sscca' group the self-chaining runner's next run
+# replaced (cancelled) a waiting recheck.
 concurrency:
-  group: sscca
+  group: sscca-recheck
   cancel-in-progress: false
 
 env:

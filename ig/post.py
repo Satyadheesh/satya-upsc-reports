@@ -241,8 +241,11 @@ class Builder:
 
     def qotd_post(self, lang):
         from .formats import qotd_caption, qotd_html, qotd_number, qotd_question
-        top, top_hi, _, _ = self.stories(self.yday)
-        en, hi = qotd_number([story(i, "en") for i in top], [story(i, "hi") for i in top_hi] if top_hi else None)
+        # the most telling number among yesterday's 10 best notes (same English/Hindi pairing as the PDFs)
+        p = self.yday
+        w = self.window(p)
+        en_ed, hi_ed, _, _ = editions(p, w.period(p, "en"), w.period(p, "hi"))
+        en, hi = qotd_number([story(i, "en") for i in en_ed[:10]], [story(i, "hi") for i in hi_ed[:10]] if hi_ed else None)
         if not en:  # no number today: the top SSC question
             cards_en, cards_hi = self.ssc_cards()
             if cards_en:

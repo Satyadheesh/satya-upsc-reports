@@ -74,3 +74,14 @@ class Formats(unittest.TestCase):
         self.assertEqual(len(SLOTS), 6)
         self.assertEqual(post_key("upsc", "2026-10-10", "en"), "ig:daily:2026-10-10:en")  # old key kept
         self.assertEqual(post_key("ssc", "2026-10-10", "hi"), "ig:ssc:2026-10-10:hi")
+
+
+class NumberScore(unittest.TestCase):
+    def test_telling_numbers_win(self):
+        from ig.formats import number_score
+        self.assertGreater(number_score("13.37 crore", "names deleted in the Special Intensive Revision"),
+                           number_score("5", "members of the committee"))
+        self.assertLess(number_score("2026", "the year of the Census"), 0)
+        self.assertLess(number_score("Article 201", "reservation of Bills"), 0)
+        self.assertGreaterEqual(number_score("9,000+ deaths", "total fatalities by March 2026"), 2)
+        self.assertGreaterEqual(number_score("891", "Asiatic lions, the highest count ever recorded", 3), 2)

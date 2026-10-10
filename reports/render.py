@@ -613,131 +613,227 @@ sup{color:var(--rust);font-weight:700}
   .more{margin-top:4px;row-gap:2px}
   .more p{font-size:11px;line-height:1.35}
   .more p span{font-size:8.5px}
-  .cta{margin-top:14px;padding:8px 12px;break-inside:avoid}
+  .ssc-cta{margin-top:14px;padding:8px 12px}
+  .quiz .qq{font-size:11.5px}
+  .quiz .opts{font-size:10.5px}
 }
+.ssc-cta{margin-top:22px;display:flex;gap:14px;align-items:center;background:var(--ink);color:#f8f6f2;border-radius:6px;padding:12px 16px;break-inside:avoid}
+.ssc-cta .qrs{display:flex;gap:10px;flex:none}
+.ssc-cta figure{margin:0;text-align:center}
+.ssc-cta svg.qr{width:62px;height:62px;background:#fff;padding:3px;border-radius:3px;display:block}
+.ssc-cta figcaption{font:600 8px "IBM Plex Mono",monospace;letter-spacing:.08em;text-transform:uppercase;color:#d9d2c8;margin-top:3px}
+.ssc-cta .t1{font:800 15px/1.25 "Inter","DM Sans",sans-serif}
+.ssc-cta .t1 i{font-style:normal;color:#f0a46e}
+.ssc-cta .t2{font:400 11.5px/1.45 "Inter","DM Sans",sans-serif;color:#d9d2c8;margin-top:3px}
+.ssc-cta .t3{font:500 10px "IBM Plex Mono",monospace;color:#f0a46e;margin-top:5px;letter-spacing:.04em}
+.ssc-foot{display:flex;flex-wrap:wrap;justify-content:space-between;gap:4px 12px;margin-top:14px;padding-top:8px;border-top:1px solid var(--line)}
+.ssc-foot span{white-space:nowrap}
+.ssc-foot a{color:var(--rust);text-decoration:none}
+.quiz{margin-top:8px;border:1px solid var(--line);border-radius:4px;padding:6px 14px 8px}
+.quiz ol{margin:0;padding-left:22px}
+.quiz li{padding:6px 0;border-top:1px solid var(--line);break-inside:avoid}
+.quiz li:first-child{border-top:0}
+.quiz .qq{font:600 13px/1.4 "Inter","DM Sans",sans-serif;color:#1c1917}
+.quiz .opts{display:grid;grid-template-columns:1fr 1fr;gap:2px 16px;margin-top:3px;font:500 12px/1.4 "Inter","DM Sans",sans-serif;color:#3a3732}
+.quiz .opts b{font-family:"IBM Plex Mono",monospace;color:var(--rust);margin-right:4px}
+.key{margin-top:8px;padding-top:6px;border-top:1px dashed var(--line);font:500 10.5px/1.7 "IBM Plex Mono",monospace;color:var(--mute)}
+.key b{color:var(--ink)}
 .src{position:absolute;top:14px;right:14px;display:block;padding:2px 4px;font-size:15px;line-height:1;color:#b5b3ae;text-decoration:none}.src:hover{color:var(--rust);text-decoration:underline}.src[hidden]{display:none}
 
 """
 
-SHORT_MODULE_NAMES = {
-    "01": "Sci & Tech",
-    "02": "Reports & Rankings",
-    "03": "Govt Schemes",
-    "04": "Appointments",
-    "05": "Sports",
-    "06": "Imp Days",
-    "07": "Awards & Honours",
-    "08": "Govt Bills",
-    "09": "Books & Authors",
-    "10": "Budget & Economy",
-    "11": "Defence",
-    "12": "National & State",
-    "13": "International",
-    "14": "Summits & Agreements",
-    "15": "Environment",
-    "16": "Obituaries",
-}
+# module names: the same in the "Module mix" chips and the headings (sscca.gate.TOPICS); old-pipeline codes 08/10/13
+# had other names
+MODULE_NAMES = {"08": "Laws, Bills & Verdicts", "10": "Economy & Budget", "13": "International"}
+KIND_EN = {"daily": "Daily", "weekly": "Weekly", "monthly": "Monthly"}
+_NUMERIC = re.compile(r"\d")
+_MONTH = re.compile(r"\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\b", re.I)
+
+
+def _answer_class(q, a, topic=""):
+    """What kind of answer: options in a quiz must all be of one kind (a name among names, an amount among amounts)."""
+    al = a.lower()
+    if _NUMERIC.search(a):
+        if _MONTH.search(a):
+            return "date"
+        if re.search(r"₹|\brs\b|\$|usd|crore|dollar|rupee", al):
+            return "money"
+        if re.search(r"%|per ?cent", al):
+            return "percent"
+        if re.fullmatch(r"\d+(?:st|nd|rd|th)", al.strip()):
+            return "rank"
+        return "number:" + (re.sub(r"[\d.,\s]+", " ", al).strip() or "plain")  # same unit: 'km', 'squadrons'
+    wh = re.match(r"^(?:(?:in|under|by|from|for|with|to|of|on|at)\s+)?(who|which|what|where|name)\b\s*(\w+)?", q.strip(), re.I)
+    if not wh:
+        return "other"
+    w1, w2 = wh.group(1).lower(), (wh.group(2) or "").lower()
+    if w1 == "who":
+        return "person"
+    if w1 == "where" or w2 in ("state", "city", "district", "country", "place", "venue", "region", "river"):
+        return "place:" + ("state" if w2 == "state" else "country" if w2 == "country" else "other")
+    # a name of a thing (scheme, exercise, ship, treaty, award): wrong options from the same module
+    return f"thing:{topic}"
+
+
+_TITLES = re.compile(r"^(?:justice|air marshal|air chief marshal|general|gen\.|lt\.? gen\.?|admiral|vice admiral|dr\.?|prof\.?|"
+                     r"shri|smt\.?|mr\.?|ms\.?|grandmaster|gm|captain|capt\.?)\s+", re.I)
+
+
+def ssc_quiz(items, n, seed, pool_cards=()):
+    """Up to n four-option questions from the PDF's own cards; wrong options are other cards' answers of the same kind
+    (this period's other laureates, amounts, states), so the quiz revises the period. -> [(q, options, correct_index)]"""
+    import random
+    rng = random.Random(seed)
+    cards = [((it.get("ssc_kit") or {}).get("question_en") or "", (it.get("ssc_kit") or {}).get("answer_en") or "",
+              (it.get("ssc_topic") or ("", ""))[0]) for it in items]
+    cards = [c for c in cards if c[0] and c[1] and len(c[1]) <= 45]
+    def words(s):  # 5.50% and 5.5 per cent are one option
+        nums = {re.sub(r"\.0+$|(\.\d*?)0+$", r"\1", x.replace(",", "")) for x in re.findall(r"\d[\d,]*(?:\.\d+)?", s)}
+        return {w for w in re.findall(r"[a-z]+", s.lower()) if len(w) > 2} | {"#" + x for x in nums}
+    pool = {}
+    # wrong options also from the cards of the days before (a daily PDF alone has too few of each kind)
+    for q, a, t in list(cards) + [c for c in pool_cards if c[0] and c[1] and len(c[1]) <= 45]:
+        lst = pool.setdefault(_answer_class(q, a, t), [])
+        if all(x[1] != a for x in lst):
+            lst.append((q, a, t))
+    per_class = {}
+    # round-robin over modules so the quiz covers the whole PDF, not one topic
+    by_topic = {}
+    for i in rng.sample(range(len(cards)), len(cards)):
+        by_topic.setdefault(cards[i][2], []).append(i)
+    order = []
+    while any(by_topic.values()):
+        for t in sorted(by_topic):
+            if by_topic[t]:
+                order.append(by_topic[t].pop(0))
+    out = []
+    for i in order:
+        if len(out) >= n:
+            break
+        q, a, t = cards[i]
+        cls = _answer_class(q, a, t)
+        others = [x for x in pool.get(cls, []) if x[1] != a and not (words(x[1]) & words(a))
+                  and x[1].lower() not in q.lower()]
+        uniq = []
+        for x in sorted(others, key=lambda x: (x[2] != t, rng.random())):
+            if all(not (words(x[1]) & words(u)) for u in uniq):
+                uniq.append(x[1])
+        if cls == "other" or len(uniq) < 3 or per_class.get(cls, 0) >= max(2, n * 2 // 5):
+            continue  # at most 40% "who" questions
+        per_class[cls] = per_class.get(cls, 0) + 1
+        opts = uniq[:3] + [a]
+        if cls == "person":  # "Justice X" among "Air Marshal Y" gives the answer away
+            opts = [_TITLES.sub("", o) for o in opts]
+        rng.shuffle(opts)
+        out.append((q, opts, opts.index(_TITLES.sub("", a) if cls == "person" else a)))
+    return out
 
 
 def ssc(p, items, total, lang="en"):
-    # English-only SSC edition
+    """SSC CGL one-liner revision PDF (English): cards by module, a 'Test yourself' quiz built from the same cards,
+    then the Telegram / website box."""
     groups = {}
     for it in items:
         topic = it.get("ssc_topic") or _map_ssc_topic(it)  # SSC runner's own topic; old notes: keyword mapping
         groups.setdefault(topic, []).append(it)
+    name_of = lambda code, name: MODULE_NAMES.get(code, name)
 
+    kind = KIND_EN[p["kind"]]
     d = p["first"]
-    date_str = f"{d.strftime('%A')}, {d.day} {d.strftime('%B %Y')}"
-    h1_date = f"{d.day} {d.strftime('%B %Y')}"
+    if p["kind"] == "daily":
+        right = f"{d.strftime('%A')}, {d.day} {d.strftime('%B %Y')}"
+        h1 = f"{d.day} {d.strftime('%B %Y')}"
+    else:
+        right = h1 = period_label(p, False)
+    short = h1 if p["kind"] == "daily" else (f"Week {p['week']}" if p["kind"] == "weekly" else h1)
 
-    mix_chips = []
-    for topic in sorted(groups.keys(), key=lambda x: x[0]):
-        code, name = topic
-        short = SHORT_MODULE_NAMES.get(code, name)
-        count = len(groups[topic])
-        mix_chips.append(f'<span class="chip-mod"><span class="chip-code">{code}</span> {e(short)} · <b>{count}</b></span>')
-    mix_chips_html = "".join(mix_chips)
+    def plural(n, word):
+        return f"{n} {word}{'' if n == 1 else 's'}"
 
-    topics_html = []
-    q_counter = 1
-    for topic in sorted(groups.keys(), key=lambda x: x[0]):
-        code, topic_title = topic
+    mix_chips = "".join(
+        f'<span class="chip-mod"><span class="chip-code">{code}</span> {e(name_of(code, name))} · <b>{len(groups[(code, name)])}</b></span>'
+        for code, name in sorted(groups, key=lambda x: x[0]))
+
+    topics_html, n = [], 1
+    for code, topic_title in sorted(groups, key=lambda x: x[0]):
         rows = []
-        for it in groups[topic]:
-            ssc_data = it.get("ssc_kit") or {}
-            q_text = ssc_data.get("question_en")
-            ans_text = ssc_data.get("answer_en")
-            key_text = ssc_data.get("key_fact_en") or ""
-            static_gk = ssc_data.get("static_gk_en") or ""
-
+        for it in groups[(code, topic_title)]:
+            k = it.get("ssc_kit") or {}
+            q_text, ans_text = k.get("question_en"), k.get("answer_en")
             if not (q_text and ans_text):
                 continue
-
-            more_parts = []
-            if key_text:
-                more_parts.append(f'<p><span>Key</span>{e(fit(key_text, 160))}</p>')
-            if static_gk:
-                more_parts.append(f'<p><span>Static GK</span>{e(fit(static_gk, 160))}</p>')
-            more_html = "".join(more_parts)
-
-            src_url = it.get("src_url") or f"https://satyadheesh.in/upsc/note/{it.get('id') or it.get('article_id')}"
-            row_html = (
-                f'<div class="row">'
-                f'<h3><i>{q_counter}</i>{e(q_text)}</h3>'
-                f'<div class="ans">{e(ans_text)}</div>'
-                f'<div class="more">'
-                f'{more_html}'
-                f'<a class="src" href="{src_url}" target="_blank" rel="noopener" title="Read note" aria-label="Read note">↗</a>'
-                f'</div></div>'
-            )
-            rows.append(row_html)
-            q_counter += 1
-
+            more = ""
+            if k.get("key_fact_en"):
+                more += f'<p><span>Key</span>{e(fit(k["key_fact_en"], 160))}</p>'
+            if k.get("static_gk_en"):
+                more += f'<p><span>Static GK</span>{e(fit(k["static_gk_en"], 160))}</p>'
+            when = dt.datetime.fromtimestamp((it.get("published_at") or 0) + 19800, dt.timezone.utc).date()
+            aid = it.get("id") or it.get("article_id")
+            src = (f"{SITE}/ssc/current-affairs/{when.isoformat()}#q{aid}" if it.get("ssc_topic")
+                   else it.get("src_url") or f"{SITE}/upsc/note/{aid}")
+            rows.append(f'<div class="row"><h3><i>{n}</i>{e(q_text)}</h3><div class="ans">{e(ans_text)}</div>'
+                        f'<div class="more">{more}<a class="src" href="{src}" target="_blank" rel="noopener" '
+                        f'title="Read the news" aria-label="Read the news">↗</a></div></div>')
+            n += 1
         if not rows:
             continue
+        cells = "".join(f"<tr><td>{r}</td></tr>" for r in rows)
+        topics_html.append(
+            f'<table class="mod-table">\n<thead><tr><th><span class="mod mono">Module {code}</span>\n'
+            f'<h2>{e(name_of(code, topic_title))} <small>{plural(len(rows), "item")}</small></h2>\n</th></tr></thead>\n'
+            f'<tbody>\n{cells}\n</tbody>\n</table>\n')
 
-        tr_cells = "".join(f"<tr><td>{r}</td></tr>" for r in rows)
-        sec = (
-            f'<table class="mod-table">\n'
-            f'<thead><tr><th>'
-            f'<span class="mod mono">Module {code}</span>\n'
-            f'<h2>{e(topic_title)} <small>{len(rows)} items</small></h2>\n'
-            f'</th></tr></thead>\n'
-            f'<tbody>\n{tr_cells}\n</tbody>\n'
-            f'</table>\n'
-        )
-        topics_html.append(sec)
+    nq = {"daily": 10, "weekly": 20, "monthly": 25}[p["kind"]]
+    quiz = ssc_quiz(items, nq, p["key"], getattr(items, "pool", ()))
+    quiz_html = ""
+    if len(quiz) >= 3:
+        lis = "".join(
+            f'<li><div class="qq">{e(q)}</div><div class="opts">'
+            + "".join(f'<span><b>{"abcd"[j]}</b>{e(o)}</span>' for j, o in enumerate(opts)) + "</div></li>"
+            for q, opts, _ in quiz)
+        key = " · ".join(f"<b>{i}</b> {'abcd'[c]}" for i, (_, _, c) in enumerate(quiz, 1))
+        quiz_html = (f'<span class="mod mono">Test yourself</span>'
+                     f'<h2>{plural(len(quiz), "question")} from this PDF <small>Answer key at the end</small></h2>'
+                     f'<div class="quiz"><ol>{lis}</ol><div class="key">Answer key: {key}</div></div>')
+
+    site = f"{SITE}/ssc"
+    cta_html = (f'<div class="ssc-cta"><div class="qrs"><figure>{qr_svg(TELEGRAM)}<figcaption>Telegram</figcaption></figure>'
+                f'<figure>{qr_svg(site)}<figcaption>SSC page</figcaption></figure></div>'
+                f'<div><div class="t1">Every day’s SSC one-liner, <i>free</i></div>'
+                f'<div class="t2">Daily, weekly and monthly PDFs with every question by topic at satyadheesh.in/ssc. '
+                f'Daily current affairs on Telegram. No sign-up.</div>'
+                f'<div class="t3">satyadheesh.in/ssc · t.me/satyadheesh</div></div></div>')
 
     body = f"""
 <div class="page">
-<div class="meta mono"><span>Vol. I · SSC CGL One-Liner</span><span>{date_str}</span></div>
+<div class="meta mono"><span>Vol. I · SSC CGL One-Liner</span><span>{e(right)}</span></div>
 
 <div class="brand">
 <div class="logo">
 <svg width="46" height="46" viewBox="0 0 46 46" aria-hidden="true"><rect x="2" y="2" width="42" height="42" rx="10" fill="#f8f6f2" stroke="#120f0b" stroke-width="2.5"/><g transform="rotate(-35 23 21)"><rect x="12" y="17" width="14" height="10" rx="2" fill="#bf4a07"/><rect x="26" y="20" width="9" height="4" rx="2" fill="#bf4a07"/></g><rect x="11" y="34" width="24" height="3" rx="1.5" fill="#8e8d8b"/></svg>
 <div><div class="word">SATYA<b>DHEESH</b></div><div class="dev">सत्याधीश</div></div>
 </div>
-<div><span class="pill">SSC CGL {({"daily": "DAILY", "weekly": "WEEKLY", "monthly": "MONTHLY"}[p["kind"]])} ONE-LINER REVISION</span></div>
-<h1>Current Affairs · {h1_date}</h1>
+<div><span class="pill">SSC CGL {kind.upper()} ONE-LINER REVISION</span></div>
+<h1>Current Affairs · {e(h1)}</h1>
 </div>
 
 <div class="stats">
-<div><b>{len(items)}</b><span class="mono">Questions</span></div>
+<div><b>{n - 1}</b><span class="mono">Questions</span></div>
 <div><b>{len(groups)}</b><span class="mono">Modules</span></div>
 <div class="stats-mix">
-<div class="mix-chips">{mix_chips_html}</div>
+<div class="mix-chips">{mix_chips}</div>
 <span class="mono">Module Mix</span>
 </div>
 </div>
 
 {"".join(topics_html)}
+{quiz_html}
+{cta_html}
 
-<div class="cta"><b>Get it every morning on Telegram</b><span>Daily PDF + quiz at 5 AM · weekly review every Sunday · English · free, no sign-up.</span></div>
-
-<div class="foot mono"><span>Satyadheesh · SSC CGL Daily One-Liner · {h1_date}</span><span>satyadheesh.in/upsc · <a href="https://t.me/satyadheesh">t.me/satyadheesh</a></span></div>
+<div class="ssc-foot mono"><span>Satyadheesh · SSC CGL {kind} One-Liner · {e(short)}</span><span>satyadheesh.in/ssc · <a href="{TELEGRAM}">t.me/satyadheesh</a></span></div>
 </div>
 """
-    title = f"Satyadheesh · SSC CGL Daily One-Liner · {h1_date}"
+    title = f"Satyadheesh · SSC CGL {kind} One-Liner · {h1}"
     return (
         f'<!doctype html><html lang="en"><head><meta charset="utf-8"><title>{e(title)}</title>'
         f'<link rel="stylesheet" href="base.css">'
@@ -745,4 +841,3 @@ def ssc(p, items, total, lang="en"):
         f'<style>{SSC_CSS}</style>'
         f'</head><body>{body}</body></html>'
     )
-

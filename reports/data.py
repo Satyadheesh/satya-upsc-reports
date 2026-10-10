@@ -454,37 +454,84 @@ SSC_CAP = {"daily": 40, "weekly": 90, "monthly": 160}
 SSC_CA_FROM = 1790793000  # 2026-10-01 00:00 IST
 
 
+SIDE_Q = re.compile(r"^(?:who is the current|who was the .{0,40}who announced|who founded)\b", re.I)
+DEATH_Q = re.compile(r"\b(?:died|dies|passed away|death|demise)\b", re.I)  # an obituary card should ask who died
+SSC_LOOKBACK = 6 * DAY  # a daily PDF leaves out stories already carded in the six days before it
+GENERIC_KEY = {"sanction", "sanctioned", "amount", "award", "awarded", "appointed", "appoint", "development", "develop",
+               "modernization", "modernisation", "recent", "recently", "announced", "approved", "total"}
+
+
+def key_adds(q, a, key):
+    """A KEY line must add something the question and answer don't already say ('Sanctioned amount is ₹45 crore'
+    under 'Under which scheme was ₹45 crore sanctioned?' adds nothing)."""
+    from sscca.dedupe import _stem
+    tok = lambda s: {_stem(w) for w in re.findall(r"[a-z0-9]+", (s or "").lower()) if len(w) >= 3 or w.isdigit()}
+    from sscca.dedupe import STOP
+    new = tok(key) - tok(f"{q} {a}") - {_stem(w) for w in STOP} - {_stem(w) for w in GENERIC_KEY}
+    return bool(new)
+
+
+class SscCards(list):
+    """The PDF's cards, plus .pool: every card of the window (wrong options for the quiz)."""
+    pool = ()
+
+
 def ssc_items(upsc, p):
-    """SSC cards of the period from the SSC runner (ssc_ca, judged from the raw news), best first, one per story:
-    same news cluster, same headline across papers (72 h) or the same answer on the same topic count as one.
-    None for periods before the runner's start (build the SSC PDF the old way)."""
+    """SSC cards of the period from the SSC runner (ssc_ca, judged from the raw news), one per story
+    (sscca.dedupe: same cluster, or the same story from another outlet or day), best first.
+    A daily PDF skips stories already carded in the six days before; the weekly and monthly have each story once.
+    Static GK comes from the current verified table (kit.ssc_guard) and is shown once per PDF; a KEY line that only
+    repeats the question is left out. None for periods before the runner's start (build the SSC PDF the old way)."""
+    from kit.ssc_guard import choose_static_gk
+    from sscca.dedupe import group, sig, _ov
     from sscca.gate import TOPICS
     if p["start"] < SSC_CA_FROM:
         return None
+    since = max(SSC_CA_FROM, p["start"] - (SSC_LOOKBACK if p["kind"] == "daily" else 0))
     try:
         rows = upsc.execute(
             "SELECT article_id, published_at, cluster_id, topic, importance, title, question, answer, key_fact, static_gk, fact "
-            "FROM ssc_ca INDEXED BY idx_ssc_ca_status WHERE status = 'card' AND published_at >= ? AND published_at < ? "
-            "ORDER BY importance DESC, published_at DESC", [p["start"], p["end"]]).rows
+            "FROM ssc_ca INDEXED BY idx_ssc_ca_status WHERE status = 'card' AND published_at >= ? AND published_at < ?",
+            [since, p["end"]]).rows
     except Exception as ex:  # table not created yet
         print(f"SSC cards not available: {type(ex).__name__}")
         return []
-    out, clusters, answers = [], set(), set()
-    for aid, pub, cl, topic, imp, title, q, ans, key, sgk, fact in rows:
-        if topic not in TOPICS or not q or not ans:
-            continue
-        akey = (topic, re.sub(r"[^a-z0-9]", "", (ans or "").lower()))
-        if (cl and cl in clusters) or akey in answers or any(
-                abs(o["published_at"] - pub) <= 3 * DAY and same_headline(o["title"], title or "") for o in out):
-            continue
-        clusters.add(cl)
-        answers.add(akey)
-        code, name, _ = TOPICS[topic]
-        out.append({"id": aid, "published_at": pub, "title": title or "", "why": fact or "", "fact_box": "", "pointers": [],
-                    "related": 0, "paper": "SSC", "subject": topic, "importance": imp, "ssc_topic": (code, name),
-                    "src_url": f"https://satyadheesh.in/news/{aid}",
-                    "ssc_kit": {"question_en": q, "answer_en": ans, "key_fact_en": key or "", "static_gk_en": sgk or ""}})
-        if len(out) >= SSC_CAP.get(p["kind"], 40):
-            break
+    cards = [dict(zip(("article_id", "published_at", "cluster_id", "topic", "importance", "title", "question", "answer",
+                       "key_fact", "static_gk", "fact"), r)) for r in rows]
+    cards = [c for c in cards if c["topic"] in TOPICS and c["question"] and c["answer"]]
+    picks = []
+    for g in group(cards):
+        if int(g[0]["published_at"] or 0) < p["start"]:
+            continue  # the story was in an earlier daily PDF
+        inside = [c for c in g if c["published_at"] >= p["start"]]
+        sigs = [sig(c)["all"] for c in inside]
+        # the best telling: not a side question ("who is the current Governor", an obituary card that doesn't ask who
+        # died), most important, then the one closest
+        # to the others (the consensus answer), then earliest
+        central = [sum(_ov(s, o) for o in sigs) for s in sigs]
+        side = [bool(SIDE_Q.match(c["question"] or "")) or (
+            c["topic"] == "obituary" and not DEATH_Q.search(c["question"] or "")) for c in inside]
+        best = max(range(len(inside)), key=lambda k: (not side[k], int(inside[k]["importance"] or 0), central[k],
+                                                      -inside[k]["published_at"]))
+        picks.append({**inside[best], "importance": max(int(c["importance"] or 0) for c in inside)})  # the story's rank
+    picks.sort(key=lambda c: (-c["importance"], -c["published_at"]))
+    picks = picks[:SSC_CAP.get(p["kind"], 40)]
     # in the PDF: by module, and within a module most important first
-    return sorted(out, key=lambda i: (i["ssc_topic"][0], -(i["importance"] or 0), -i["published_at"]))
+    picks.sort(key=lambda c: (TOPICS[c["topic"]][0], -c["importance"], -c["published_at"]))
+    out, seen_gk = SscCards(), set()
+    out.pool = [(c["question"], c["answer"], TOPICS[c["topic"]][0]) for c in cards]  # quiz options (render.ssc_quiz)
+    for c in picks:
+        q, ans, key = c["question"], c["answer"], c["key_fact"] or ""
+        sgk, _ = choose_static_gk({"ssc_question": q, "ssc_answer": ans, "key_fact": key})
+        if sgk in seen_gk:
+            sgk = ""
+        seen_gk.add(sgk)
+        if key and not key_adds(q, ans, key):
+            key = ""
+        code, name, _ = TOPICS[c["topic"]]
+        aid = c["article_id"]
+        out.append({"id": aid, "published_at": c["published_at"], "title": c["title"] or "", "why": c["fact"] or "",
+                    "fact_box": "", "pointers": [], "related": 0, "paper": "SSC", "subject": c["topic"],
+                    "importance": c["importance"], "ssc_topic": (code, name), "src_url": f"https://satyadheesh.in/news/{aid}",
+                    "ssc_kit": {"question_en": q, "answer_en": ans, "key_fact_en": key, "static_gk_en": sgk}})
+    return out

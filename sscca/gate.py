@@ -4,11 +4,12 @@ A strict model call (default no) plus code checks. An article becomes an SSC car
   1. the model says ssc = true with a topic and importance >= 3;
   2. its fact is a sentence found word for word in the article;
   3. the fact contains words of that topic (an award story names an award, a sports story a result ...);
-  4. the fact is not an opinion, warning, demand, allegation or forecast.
+  4. the fact is not an opinion, warning, demand, allegation or forecast;
+  5. (card_ok) the card asks about the story in the headline, not a side mention in the article.
 """
 import re
 
-GATE_VERSION = "sscg-3"
+GATE_VERSION = "sscg-4"
 
 TOPICS = {
     "appointment": ("04", "Appointments", "a person appointed, elected, sworn in or taking charge as head of a national or "
@@ -47,26 +48,32 @@ TOPIC_WORDS = {
                    r"new (?:chief|head|chairman|chairperson|governor|director)|re-?appointed|nominated|selected as|elevated|"
                    r"joins? as|joined (?:\w+ ){0,4}as|md (?:&|and) ceo|chief executive|ceo",
     "award": r"award\w*|prize\w*|honour\w*|honor\w*|medal\w*|conferred|felicitated with|ratna|padma|nobel|samman|puraskar|trophy",
-    "sports": r"won|wins|win|winner|medal\w*|gold|silver|bronze|title|champion\w*|trophy|cup|record|defeat\w*|beat|final|"
+    "sports": r"won|wins|win|winner|medal\w*|golds?|silvers?|bronzes?|clinch\w*|title|champion\w*|trophy|cup|record|defeat\w*|beat|final|"
               r"qualif\w*|tournament|olympic\w*|games|league|series|host\w*",
-    "scheme": r"scheme\w*|yojana|mission|portal|app\b|programme|program\b|initiative|abhiyan|launch\w*|outlay|"
+    "scheme": r"scheme\w*|yojana|mission|portal|app\b|apps|application|platform|tool|dashboard|roadmap|programme|program\b|"
+              r"initiative|abhiyan|launch\w*|unveil\w*|rolled out|outlay|drive|"
               r"corridor|phase|project|approv\w*|cabinet|sanction\w*",
     "law_verdict": r"bill|act\b|ordinance|amendment|notif\w*|passed|enacted|verdict|judgment|judgement|ruled|struck down|upheld|"
-                   r"dismiss\w*|reject\w*|quash\w*|stay(?:ed)?|strength|rules|regulations|gazette|published|assent",
-    "summit_agreement": r"summit|conference|meeting|agreement|mou|memorandum|treaty|pact|accord|signed|dialogue|forum",
+                   r"dismiss\w*|reject\w*|quash\w*|stay(?:ed)?|strength|rules|regulations|gazette|published|assent|"
+                   r"lift\w* (?:a |the )?ban|permit\w*|guidelines|norms",
+    "summit_agreement": r"summit|conference|congress|meeting|agreement|mou|memorandum|treaty|pact|accord|signed|dialogue|"
+                        r"forum|host\w*|plenipotentiary|partnership",
     "defence": r"exercise|missile|test\w*|induct\w*|commission\w*|warship|submarine|aircraft|jets?|drdo|navy|naval|army|"
                r"air force|iaf|defence|defense|brahmos|agni|tejas",
     "report_index": r"report|index|rank\w*|survey|ranking|indicator\w*|released|published",
     "economy": r"rbi|reserve bank|repo|gdp|gst|forex|reserves|inflation|cpi|wpi|nso|cabinet|ministry|council|sebi|outlay|"
-               r"budget|crore|lakh crore|approved|collection\w*|deficit|growth",
+               r"budget|crore|lakh crore|approved|collection\w*|deficit|growth|finance commission|grants?|devolution|"
+               r"notif\w*|norms|msp|minimum support price",
     "science_space": r"isro|space|satellite|launch\w*|mission|rocket|orbit|discover\w*|scientists?|developed|first|nasa|esa|"
-                     r"gaganyaan|chandrayaan|technology|research",
+                     r"gaganyaan|chandrayaan|technology|research|cern|competition|won|wins|telecommunication",
     "environment": r"species|reserve|sanctuary|national park|ramsar|wetland|tiger|elephant|iucn|conservation|wildlife|"
-                   r"forest|biodiversity|released|climate|discover\w*",
+                   r"forest|biodiversity|released|climate|discover\w*|lions?|tigers?|leopards?|cheetahs?|rhinos?|"
+                   r"bustards?|vultures?|population|census|estimat\w*",
     "important_day": r"day\b|diwas|week\b|observed|celebrated|commemorat\w*|theme",
     "book_author": r"author\w*|written by|penned|novel|memoir|autobiography|biography",
     "obituary": r"passed away|died|dies|demise|death|no more|breathed (?:his|her) last",
-    "first_record": r"first|largest|highest|biggest|record|gi tag|geographical indication|unesco|only",
+    "first_record": r"first|largest|highest|biggest|longest|tallest|youngest|oldest|fastest|driest|wettest|hottest|"
+                    r"lowest|record|gi tag|geographical indication|unesco|only",
     "international": r"elected|sworn|president|prime minister|joins|joined|member\w*|withdraw\w*|treaty|united nations|un\b|"
                      r"summit|elections?|vote[sd]?|polls?|round|won|wins|beat|defeated|host\w*",
 }
@@ -103,6 +110,16 @@ ROLES = re.compile(r"(?<![\w-])(union minister|chief minister|prime minister|gov
 TOP_POST = re.compile(r"(?<![\w-])(?:president|prime minister|chancellor|premier|king|queen|monarch|pope|"
                       r"secretary[- ]general|director[- ]general|managing director|chair(?:man|person|woman)?|"
                       r"governor|chief justice|head of state|head of government)(?![\w])", re.I)
+# An award from abroad is SSC material only if it is a world-level award or an Indian wins it
+# (a US Presidential Medal of Freedom or National Medal of Science is not asked).
+GLOBAL_AWARD = re.compile(r"(?<![\w-])(?:nobel|booker|pulitzer|oscars?|academy awards?|grammy|bafta|cannes|golden globe|"
+                          r"magsaysay|abel prize|fields medal|turing award|templeton|world food prize|earthshot|"
+                          r"right livelihood|wolf prize|kyoto prize|champions of the earth|ballon d'or|laureus|"
+                          r"unesco|united nations|un |fifa|icc |olympic|international booker|dadasaheb|padma|bharat ratna)", re.I)
+# Winner not known yet: "will announce", "to be announced", "nominated for", "shortlisted" ("X to be conferred
+# the Phalke award" is fine: the winner is named)
+NOT_YET = re.compile(r"(?<![\w-])(?:will (?:be )?announce\w*|to be announced|nominated for|shortlist\w*|longlist\w*|"
+                     r"finalists?|in the running|frontrunners?)(?![\w])", re.I)
 INDIA = re.compile(r"(?<![\w-])(?:india|indian|indo|bharat)(?![\w])", re.I)
 # A low-importance "national" item that names an Indian state or city and nothing national is state news.
 PLACES = re.compile(r"(?<![\w-])(?:andhra|arunachal|assam|bihar|chhattisgarh|goa|gujarat|haryana|himachal|jharkhand|"
@@ -140,7 +157,9 @@ RBI's weekly forex reserves, GST collections, GDP, inflation, IIP and core-secto
 
 importance: 5 = certain to be asked (national appointment, major award, big sports title, central scheme, RBI decision);
 4 = likely; 3 = possible; 1-2 = unlikely (then answer ssc = false).
-fact: copy ONE sentence from the article, word for word, that contains the askable fact.
+fact: copy ONE sentence from the article, word for word, that contains the askable fact. The fact must be the
+story of the headline itself. If the article only mentions an askable fact on the side (a Nobel Prize in a story
+about a logo, a medal in a story about a speech), answer ssc = false.
 scope: national, international or state.
 When unsure, answer ssc = false."""
 
@@ -226,6 +245,11 @@ def rules(topic, importance, scope, fact, title, text):
         return "foreign appointment, not a top post"
     if topic == "defence" and scope == "international" and not INDIA.search(where):
         return "foreign military news, India not involved"
+    if topic == "award" and NOT_YET.search(fact):
+        return "award not given yet"
+    if topic == "award" and not INDIA.search(where) and not GLOBAL_AWARD.search(where) and (
+            scope == "international" or FOREIGN.search(where)):
+        return "foreign national award"
     if topic == "sports" and importance < 4 and not BIG_EVENT.search(where):
         return "sports, not a big event"
     if importance < 4 and PLACES.search(where) and (topic in STATE_SENSITIVE or not NATIONAL.search(where)):
@@ -237,12 +261,26 @@ def _words(s):
     return [w.strip("'\"") for w in _toks(s) if w.strip("'\"") not in {"the", "a", "an", "of", "and", "in", "at", "on", "for", "to", "by"}]
 
 
+def on_story(card, fact, title):
+    """The card is about the headline's story: the question and answer share a word with the headline, and with the
+    gate's fact they share two (stemmed, without stop words). Catches a Nobel card from a story about a logo."""
+    from .dedupe import words
+    t = words(title)
+    if len(t) < 3 or _norm(title)[:60] in _norm(fact):  # too short to judge, or the "headline" is the fact sentence
+        return True
+    qa = words(f"{card.get('ssc_question') or ''} {card.get('ssc_answer') or ''}")
+    return bool(t & qa) and len(t & (qa | words(fact))) >= 2
+
+
 def card_ok(card, fact, title, text):
     """The card must ask about this news: its answer is in the gate's fact or the headline (not static trivia such as
-    'who founded the Nobel Prize'), and any role the question gives ('Union Minister') is in the article."""
+    'who founded the Nobel Prize'), it is about the headline's story, and any role the question gives
+    ('Union Minister') is in the article."""
     ans = _words(card.get("ssc_answer") or "")
     if not ans:
         return "card has no answer"
+    if not on_story(card, fact, title):
+        return "card is not about the headline story"
     hay = {w.strip("'\"") for w in _toks(f"{title} {fact}")}
     if sum(w in hay for w in ans) < -(-len(ans) * 3 // 5):  # at least 60%, rounded up
         return "card answer is not in the news fact"

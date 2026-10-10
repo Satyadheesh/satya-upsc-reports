@@ -29,7 +29,7 @@ CHUNK = 400 * 1024
 HERE = pathlib.Path(__file__).parent
 FOOTER = ('<div style="width:100%;font:7px Helvetica,Arial,sans-serif;color:#857d75;padding:0 12mm;display:flex;'
           'justify-content:space-between;letter-spacing:.08em"><span><b style="color:#120f0b;letter-spacing:.18em">SATYADHEESH</b>'
-          '&nbsp;&nbsp;·&nbsp;&nbsp;{label}</span><span>satyadheesh.in/upsc&nbsp;&nbsp;·&nbsp;&nbsp;<b style="color:#229ED9">t.me/satyadheesh</b>&nbsp;&nbsp;·&nbsp;&nbsp;'
+          '&nbsp;&nbsp;·&nbsp;&nbsp;{label}</span><span>satyadheesh.in/{section}&nbsp;&nbsp;·&nbsp;&nbsp;<b style="color:#229ED9">t.me/satyadheesh</b>&nbsp;&nbsp;·&nbsp;&nbsp;'
           '<span class="pageNumber"></span> / <span class="totalPages"></span></span></div>')
 
 
@@ -196,7 +196,8 @@ def main():
                 page.evaluate("document.fonts.ready")
                 page.wait_for_timeout(200)
                 pdf = page.pdf(format="A4", print_background=True, prefer_css_page_size=True, display_header_footer=True,
-                               header_template="<div></div>", footer_template=FOOTER.format(label=label(p, lang, edition)))
+                               header_template="<div></div>", footer_template=FOOTER.format(label=label(p, lang, edition),
+                                                                                       section="ssc" if edition == "ssc" else "upsc"))
                 f.unlink(missing_ok=True)
                 pages = pdf.count(b"/Type /Page") - pdf.count(b"/Type /Pages")
                 if out:

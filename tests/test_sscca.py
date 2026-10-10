@@ -159,3 +159,41 @@ class Card(unittest.TestCase):
         art = "Saving the home helped President Johnson sign the National Historic Preservation Act in the United States."
         r = gate.check(M(ans(topic="law_verdict", importance=3, scope="national", fact=art)), "US preservation law", art)
         self.assertFalse(r["keep"])
+
+
+class OnStory(unittest.TestCase):
+    def test_side_mention_rejected(self):
+        card = {"ssc_question": "Who won the 2026 Nobel Prize in Chemistry?", "ssc_answer": "Henri Kagan and Kenso Soai"}
+        fact = "Henri Kagan and Kenso Soai won the 2026 Nobel Prize in Chemistry for chiral catalysis."
+        self.assertEqual(gate.card_ok(card, fact, "Jessica Hische's new AI logo for Meta sparks public anger", fact),
+                         "card is not about the headline story")
+        self.assertEqual(gate.card_ok(card, fact, "Kagan and Soai win Chemistry Nobel for chiral catalysis", fact), "")
+
+    def test_foreign_national_award_and_not_yet(self):
+        f = "Donald Trump announced that Roger Clemens would receive the Presidential Medal of Freedom at the White House."
+        self.assertEqual(gate.rules("award", 4, "international", f, "Trump names Medal of Freedom winners", f),
+                         "foreign national award")
+        f2 = "The Norwegian Nobel Committee will announce the Nobel Peace Prize on October 9 in Oslo."
+        self.assertEqual(gate.rules("award", 4, "international", f2, "Nobel Peace Prize on Friday", f2), "award not given yet")
+
+
+class Quiz(unittest.TestCase):
+    def test_options_same_kind_no_duplicates(self):
+        from reports.render import ssc_quiz, ssc
+        from reports.periods import parse
+        its = [{"ssc_kit": {"question_en": "What is the repo rate?", "answer_en": "5.5%"}, "ssc_topic": ("10", "Economy")},
+               {"ssc_kit": {"question_en": "Who won the Nobel Peace Prize 2026?", "answer_en": "Navi Pillay"},
+                "ssc_topic": ("07", "Awards")}]
+        pool = [("a", "5.50%", "10"), ("b", "4%", "10"), ("c", "8.2%", "10"), ("d", "6.25%", "10"),
+                ("Who won e?", "Anne Carson", "07"), ("Who won f?", "Francis Halzen", "07"), ("Who won g?", "Justice Karl Deisseroth", "07")]
+        q = ssc_quiz(its, 5, "k", pool)
+        self.assertEqual(len(q), 2)
+        rate = [x for x in q if "repo" in x[0]][0]
+        self.assertNotIn("5.50%", rate[1])
+        self.assertEqual(rate[1][rate[2]], "5.5%")
+        who = [x for x in q if "Nobel" in x[0]][0]
+        self.assertIn("Karl Deisseroth", who[1])  # titles stripped
+        html = ssc(parse("weekly", "2026-W41"), its, 2)
+        self.assertIn("Week 41", html)
+        self.assertIn("satyadheesh.in/ssc", html)
+        self.assertIn("1 item<", html)

@@ -96,22 +96,57 @@ class SscItems(unittest.TestCase):
         from reports import data
         self.assertIsNone(data.ssc_items(None, {"kind": "monthly", "start": data.SSC_CA_FROM - 1, "end": data.SSC_CA_FROM + 9}))
 
-    def test_one_card_per_story_best_first(self):
+    def _items(self, rows, kind="daily", start_off=0):
         from reports import data
+        T0 = data.SSC_CA_FROM
 
         class C:
             def execute(self, sql, args):
                 class R:
-                    rows = [
-                        (1, 1000, "c1", "award", 5, "X wins Nobel Prize in Physics", "Who won?", "X", "k", "", "f"),
-                        (2, 1100, "c1", "award", 5, "X wins the Nobel Prize in Physics", "Who won?", "X", "k", "", "f"),
-                        (3, 1200, None, "sports", 4, "India wins hockey Asia Cup", "Which country?", "India", "k", "", "f"),
-                        (4, 1300, None, "award", 3, "Y gets Booker", "Who got Booker?", "Y", "k", "", "f"),
-                        (5, 1300, None, "bogus", 5, "Z", "Q?", "A", "k", "", "f"),
-                    ]
+                    pass
+                R.rows = [(r[0], T0 + r[1], *r[2:]) for r in rows if args[0] <= T0 + r[1] < args[1]]
                 return R()
-        p = {"kind": "daily", "start": data.SSC_CA_FROM, "end": data.SSC_CA_FROM + 10 ** 6}
-        items = data.ssc_items(C(), p)
+        p = {"kind": kind, "start": T0 + start_off, "end": T0 + start_off + 86400}
+        return data.ssc_items(C(), p)
+
+    def test_one_card_per_story_best_first(self):
+        items = self._items([
+            (1, 1000, "c1", "award", 5, "X wins Nobel Prize in Physics", "Who won?", "X", "k", "", "f"),
+            (2, 1100, "c1", "award", 5, "X wins the Nobel Prize in Physics", "Who won?", "X", "k", "", "f"),
+            (3, 1200, None, "sports", 4, "India wins hockey Asia Cup", "Which country?", "India", "k", "", "f"),
+            (4, 1300, None, "award", 3, "Y gets Booker", "Who got Booker?", "Y", "k", "", "f"),
+            (5, 1300, None, "bogus", 5, "Z", "Q?", "A", "k", "", "f"),
+        ])
         self.assertEqual([i["id"] for i in items], [3, 1, 4])  # sports 05 before awards 07; one Nobel card
         self.assertEqual(items[0]["ssc_topic"], ("05", "Sports"))
         self.assertTrue(items[1]["src_url"].endswith("/news/1"))
+
+    def test_same_story_other_outlet_and_day_left_out(self):
+        nobel = ("Francis Halzen wins 2026 Nobel Prize in Physics for IceCube neutrino work",
+                 "Who won the 2026 Nobel Prize in Physics?", "Francis Halzen")
+        items = self._items([
+            (1, 3600, "a", "award", 5, *nobel, "", "", "f"),  # day 1
+            (2, 86400 + 3600, "b", "award", 5, nobel[0].replace("wins", "bags"), "Who won the Physics Nobel 2026?",
+             "Francis Halzen", "", "", "f"),  # day 2, another outlet
+            (3, 86400 + 7200, "c", "economy", 5, "RBI raises repo rate by 25 bps to 5.5%",
+             "By how many basis points did RBI raise the repo rate?", "25 bps", "", "", "f"),
+        ], start_off=86400)
+        self.assertEqual([i["id"] for i in items], [3])
+
+    def test_static_gk_once_and_empty_key_dropped(self):
+        items = self._items([
+            (1, 100, None, "award", 5, "A wins Nobel Prize in Physics", "Who won the Nobel Prize in Physics?", "A",
+             "Awarded for neutrino astronomy", "", "f"),
+            (2, 200, None, "scheme", 4, "Rs 45 crore sanctioned for Tadepalligudem station under Amrit Bharat",
+             "Under which scheme was ₹45 crore sanctioned for Tadepalligudem station?", "Amrit Bharat Station Scheme",
+             "Sanctioned amount is ₹45 crore", "", "f"),
+            (3, 300, None, "science_space", 4, "ISRO tests Gaganyaan crew module parachutes at Babina range",
+             "Where did ISRO test the Gaganyaan crew module parachutes?", "Babina", "Integrated main parachute test", "", "f"),
+            (4, 400, None, "science_space", 4, "ISRO launches PSLV-C62 carrying EOS-10 from Sriharikota",
+             "Which satellite did ISRO's PSLV-C62 carry?", "EOS-10", "Launched from the first launch pad", "", "f"),
+        ])
+        k = {i["id"]: i["ssc_kit"] for i in items}
+        self.assertIn("Raman", k[1]["static_gk_en"])
+        self.assertEqual(sorted(bool(k[i]["static_gk_en"]) for i in (3, 4)), [False, True])  # ISRO line once
+        self.assertEqual(k[2]["key_fact_en"], "")   # repeats the question
+        self.assertEqual(k[1]["key_fact_en"], "Awarded for neutrino astronomy")

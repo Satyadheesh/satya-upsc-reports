@@ -483,7 +483,8 @@ SSC_CA_FROM = 1790793000  # 2026-10-01 00:00 IST
 
 SIDE_Q = re.compile(r"^(?:who is the current|who was the .{0,40}who announced|who founded)\b", re.I)
 DEATH_Q = re.compile(r"\b(?:died|dies|passed away|death|demise)\b", re.I)  # an obituary card should ask who died
-SSC_LOOKBACK = 6 * DAY  # a daily PDF leaves out stories already carded in the six days before it
+SSC_LOOKBACK = 6 * DAY
+SSC_CARD_FILTER = None  # a daily PDF leaves out stories already carded in the six days before it
 GENERIC_KEY = {"sanction", "sanctioned", "amount", "award", "awarded", "appointed", "appoint", "development", "develop",
                "modernization", "modernisation", "recent", "recently", "announced", "approved", "total"}
 
@@ -526,6 +527,8 @@ def ssc_items(upsc, p):
     cards = [dict(zip(("article_id", "published_at", "cluster_id", "topic", "importance", "title", "question", "answer",
                        "key_fact", "static_gk", "fact"), r)) for r in rows]
     cards = [c for c in cards if c["topic"] in TOPICS and c["question"] and c["answer"]]
+    if SSC_CARD_FILTER:  # previews only: drop cards the current code checks would drop (as sscca.recheck --apply would)
+        cards = [c for c in cards if SSC_CARD_FILTER(c)]
     picks = []
     for g in group(cards):
         if int(g[0]["published_at"] or 0) < p["start"]:

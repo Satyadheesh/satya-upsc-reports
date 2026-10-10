@@ -197,3 +197,43 @@ class Quiz(unittest.TestCase):
         self.assertIn("Week 41", html)
         self.assertIn("satyadheesh.in/ssc", html)
         self.assertIn("1 item<", html)
+
+
+class HindiSsc(unittest.TestCase):
+    def _en(self):
+        from reports.data import SscCards
+        its = SscCards([
+            {"id": 1, "published_at": 1790900000, "ssc_topic": ("07", "Awards & Honours"), "importance": 5, "title": "t",
+             "ssc_kit": {"question_en": "Who won the Nobel Peace Prize 2026?", "answer_en": "Navi Pillay", "key_fact_en": "k",
+                         "static_gk_en": "The Nobel Peace Prize is awarded in Oslo; Indian laureates: Mother Teresa (1979), Kailash Satyarthi (2014)"}},
+            {"id": 2, "published_at": 1790900000, "ssc_topic": ("10", "Economy & Budget"), "importance": 5, "title": "t",
+             "ssc_kit": {"question_en": "What is the repo rate?", "answer_en": "5.5%", "key_fact_en": "", "static_gk_en": ""}}])
+        return its
+
+    def _trans(self, rows):
+        class T:
+            def execute(self, sql, args):
+                class R:
+                    pass
+                R.rows = [r for r in rows if r[0] in args]
+                return R()
+        return T()
+
+    def test_ready_and_static_hindi(self):
+        from reports.data import ssc_items_hi
+        from reports.periods import parse
+        from reports.render import ssc
+        tr = self._trans([(1, "2026 का नोबेल शांति पुरस्कार किसे मिला?", "नवनेथम पिल्लै", "कुंजी", "Who won the Nobel Peace Prize 2026?"),
+                          (2, "रेपो दर कितनी है?", "5.5%", "", "What is the repo rate?")])
+        hi, share = ssc_items_hi(self._en(), tr)
+        self.assertEqual(share, 1.0)
+        self.assertIn("ओस्लो", hi[0]["ssc_kit"]["static_gk_hi"])
+        html = ssc(parse("daily", "2026-10-09"), hi, 2, "hi")
+        self.assertIn("नवनेथम पिल्लै", html)
+        self.assertIn("एसएससी सीजीएल", html)
+        self.assertNotIn("Navi Pillay", html)
+
+    def test_not_ready_or_stale(self):
+        from reports.data import ssc_items_hi
+        tr = self._trans([(1, "प्रश्न?", "उत्तर", "", "An older question?")])  # card rewritten since
+        self.assertEqual(ssc_items_hi(self._en(), tr), (None, 0.0))

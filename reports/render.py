@@ -91,8 +91,13 @@ SIZE = {  # per edition kind: top, cards, in-brief lines, mcqs, mains
     "daily": (5, 8, 24, 5, 1), "weekly": (6, 10, 36, 8, 2), "monthly": (6, 12, 54, 10, 3)}
 
 
+# a model sometimes glues an article to the next word ("Theentity responsible for ...")
+_GLUED = re.compile(r"\b(The|the|A|An)(entity|body|scheme|government|ministry|court|state|centre|country|company|bill|act|"
+                    r"agency|organisation|organization|programme|project|report|index|mission|tribunal|commission)\b")
+
+
 def e(s):
-    return html.escape(str(s or ""), quote=False)
+    return html.escape(_GLUED.sub(r"\1 \2", str(s or "")), quote=False)
 
 
 def clip(s, n):
@@ -278,7 +283,28 @@ _COMMON = {"India", "Indian", "Supreme", "Court", "Union", "Government", "Minist
 
 def _salient(it):
     t = it.get("title_en") or it["title"]
-    return {w for w in _PROPER.findall(t) if w not in _COMMON}
+    return {w.lower() for w in _PROPER.findall(t) if w not in _COMMON and w.capitalize() not in _COMMON}  # Brics = BRICS
+
+
+_GEO = re.compile(r"\b(?:strait|sea|ocean|gulf|bay|river|lake|island|islands|pass|plateau|mountains?|hills|range|ghats|"
+                  r"desert|national park|sanctuary|tiger reserve|biosphere|wetland|ramsar|glacier|valley|delta|peninsula|"
+                  r"canal|port|dam|basin|archipelago|volcano|border|coast|tributary)\b", re.I)
+_GEO_DESC = re.compile(r"\b(?:located|lies|borders?|bordering|capital|coast\w*|connects|flows|tributary|between|"
+                       r"north|south|east|west|state of|union territory|district)\b", re.I)
+_VENUE = re.compile(r"\b(?:centre|center|hall|stadium|bhavan|auditorium|hotel|airport|exhibition|convention|campus|office|"
+                    r"station|hospital|college|university|school|temple|headquarters|secretariat|residence|sewerage|"
+                    r"project|plant|complex)\b", re.I)
+_EVENT_DESC = re.compile(r"\b(?:where .{0,40}(?:held|hosted|landed|took place|met|was signed)|venue|host(?:ed|s)? the)\b", re.I)
+
+
+def place_score(name, desc):
+    """Places in news is map work: rivers, straits, parks, islands, borders (2), or a place whose fact says where it
+    is (1); never a venue, a building or a local works project, or a place that is only where something happened."""
+    if _VENUE.search(name or "") or _EVENT_DESC.search(desc or ""):
+        return 0
+    if _GEO.search(name or "") or _GEO.search(desc or ""):
+        return 2
+    return 1 if _GEO_DESC.search(desc or "") else 0
 
 
 def pick_cards(items, n, kind):
@@ -373,8 +399,8 @@ def brief(p, items, total, lang):
         kw = "".join(f"<span>{e(x)}</span>" for x in it["keywords"][:4]) if not hi else ""
         angle = (f'<div class="angle"><div class="q"><b>{e(t["angle"])}</b>{e(fit(it["mains"], 220))}</div>'
                  + (f'<div class="kw"><em>{e(t["use"])}</em>{kw}</div>' if kw else "")
-                 + f'<div class="more">{e(t["full"])} satyadheesh.in/news/{it["id"]}</div></div>') if it.get("mains") else \
-            f'<div class="angle"><div class="more">{e(t["full"])} satyadheesh.in/news/{it["id"]}</div></div>'
+                 + f'<div class="more"><a href="{SITE}/upsc/note/{it["id"]}">{e(t["full"])} satyadheesh.in/upsc/note/{it["id"]}</a></div></div>') if it.get("mains") else \
+            f'<div class="angle"><div class="more"><a href="{SITE}/upsc/note/{it["id"]}">{e(t["full"])} satyadheesh.in/upsc/note/{it["id"]}</a></div></div>'
         return (f'<article class="card"><div class="in"><div class="chips">{chip(it["paper"], subject_name(it["subject"], hi))}'
                 f'{exam_chips(it["exam"])}</div><h3>{e(k.get("short_title") or it["title"])}</h3>'
                 f'<p class="why"><b>{e(t["why"])}</b> {e(fit(it["why"], 260))}</p>'
@@ -399,14 +425,16 @@ def brief(p, items, total, lang):
                 else:
                     li.append(f'<li>{e(fit(it["title"], 150))}</li>')
             groups.append(f'<div class="grp">{chip(paper, (PAPER_HINT[paper][1] if hi else PAPER_HINT[paper][0]))}<ul>{"".join(li)}</ul></div>')
-        places, seen = [], set()
+        cands, seen = [], set()
         for it in items:
             for fe, f in facts_both(it):
-                name_e = split_fact(fe["text"])[0]
+                name_e, desc_e = split_fact(fe["text"])
                 name, desc = split_fact(f["text"])
-                if fe["label"] == "Place" and name_e and name_e.lower() not in seen and len(places) < 5:
+                score = place_score(name_e, desc_e) if fe["label"] == "Place" and name_e else 0
+                if score and name_e.lower() not in seen:
                     seen.add(name_e.lower())
-                    places.append(f'<tr><td>{e(name or name_e)}</td><td>{e(fit(desc, 140))}</td></tr>')
+                    cands.append((-score, len(cands), f'<tr><td>{e(name or name_e)}</td><td>{e(fit(desc, 140))}</td></tr>'))
+        places = [row for _, _, row in sorted(cands)[:5]]
         pl = (f'<div class="places"><div class="kicker">{e(t["k_places"])}</div><h2 class="sec" style="font-size:13pt;margin:.4mm 0 1.6mm">'
               f'{e(t["places"])}</h2><table>{"".join(places)}</table></div>') if len(places) >= 3 else ""
         p3 = (f'<section class="page">{sec_head(t["k_brief"], t["inbrief_h"], t["brief_aside"].format(n=len(rest)))}'
@@ -442,9 +470,11 @@ def detailed(p, items, total, lang):
         if paper not in groups:
             continue
         n = sum(len(v) for v in groups[paper].values())
-        rows.append(f'<tr class="paper"><td>{chip(paper)} &nbsp;{e(PAPER_HINT[paper][1 if hi else 0])}</td><td class="n">{e(t["ptot"].format(n=n))}</td></tr>')
+        # contents rows link to their section (tap to jump in a PDF reader)
+        rows.append(f'<tr class="paper"><td><a href="#{paper.lower()}">{chip(paper)} &nbsp;{e(PAPER_HINT[paper][1 if hi else 0])}</a></td>'
+                    f'<td class="n">{e(t["ptot"].format(n=n))}</td></tr>')
         for s in sorted(groups[paper], key=lambda x: SUBJ_ORDER.index(x) if x in SUBJ_ORDER else 99):
-            rows.append(f'<tr><td>{e(subject_name(s, hi))}</td><td class="n">{len(groups[paper][s])}</td></tr>')
+            rows.append(f'<tr><td><a href="#{paper.lower()}-{s}">{e(subject_name(s, hi))}</a></td><td class="n">{len(groups[paper][s])}</td></tr>')
     if mcqs:
         rows.append(f'<tr class="paper"><td>{e(t["practice"])} — {len(mcqs)} {e(t["mcqs"])}</td><td class="n"></td></tr>')
     cover = (masthead(p, lang, "detailed") + glance(cells, paper_mix(items), t["mix"])
@@ -470,22 +500,25 @@ def detailed(p, items, total, lang):
         mergedc = f'<span class="merged">{e(t["reports_merged"].format(n=it["related"] + 1))}</span>' if it["related"] else ""
         return (f'<article class="dnote"><div class="top"><div class="chips"><span class="chip ex" style="border-color:transparent;background:var(--cream2)">'
                 f'{e(node_name(it["subject"], it["node"]))}</span>{exam_chips(it["exam"])}{mergedc}</div>'
-                f'<div class="src">{src} · satyadheesh.in/news/{it["id"]}</div></div>'
+                f'<div class="src">{src} · <a href="{SITE}/upsc/note/{it["id"]}">satyadheesh.in/upsc/note/{it["id"]}</a></div></div>'
                 f'<h4>{e((kit_of(it, lang) or {}).get("short_title") or it["title"])}</h4><p class="why"><b>{e(t["why_d"])}</b>{e(it["why"])}</p><dl class="facts">{dl}</dl>{mq}</article>')
 
+    # all papers run on one after another: a paper with one note no longer leaves a mostly empty page
     body = ""
     for paper in ("GS1", "GS2", "GS3", "GS4"):
         if paper not in groups:
             continue
         n = sum(len(v) for v in groups[paper].values())
-        sec = (f'<div class="band {paper.lower()}"><div class="pp">{paper}</div><div class="tt"><b>{e(PAPER_HINT[paper][1 if hi else 0])}</b>'
+        sec = (f'<div class="band {paper.lower()}" id="{paper.lower()}"><div class="pp">{paper}</div><div class="tt"><b>{e(PAPER_HINT[paper][1 if hi else 0])}</b>'
                f'<span>{e(t["ptot"].format(n=n))}</span></div></div>')
         for s in sorted(groups[paper], key=lambda x: SUBJ_ORDER.index(x) if x in SUBJ_ORDER else 99):
             its = groups[paper][s]
             if p["kind"] != "daily":
                 its = sorted(its, key=lambda x: x["published_at"])
-            sec += f'<h3 class="subj2">{e(subject_name(s, hi))}<span>{len(its)}</span></h3>' + "".join(note(x) for x in its)
-        body += f'<section class="page">{sec}</section>'
+            sec += (f'<h3 class="subj2" id="{paper.lower()}-{s}">{e(subject_name(s, hi))}<span>{len(its)}</span></h3>'
+                    + "".join(note(x) for x in its))
+        body += f'<div class="paper-run">{sec}</div>'
+    body = f'<section class="page">{body}</section>'
     qs, keys = mcq_block(mcqs, lang)
     tail = (f'<section class="page">{sec_head(t["practice"], t["test"].format(n=len(mcqs)), t["test_aside"])}{qs}{keys}{cta(lang)}</section>'
             if mcqs else f'<section>{cta(lang)}</section>')
@@ -642,27 +675,67 @@ sup{color:var(--rust);font-weight:700}
 
 """
 
+# Hindi edition: Devanagari text in Noto Sans Devanagari (base.css), a little more line height for the matras
+SSC_HI_CSS = """
+body,.row h3,.ans,.more p,.quiz .qq,.quiz .opts,.ssc-cta .t1,.ssc-cta .t2,h1,h2{font-family:"Inter","Noto Sans Devanagari",sans-serif}
+.row h3{line-height:1.55}.more p{line-height:1.55}.mono{letter-spacing:.04em}
+"""
+
 # module names: the same in the "Module mix" chips and the headings (sscca.gate.TOPICS); old-pipeline codes 08/10/13
 # had other names
 MODULE_NAMES = {"08": "Laws, Bills & Verdicts", "10": "Economy & Budget", "13": "International"}
 KIND_EN = {"daily": "Daily", "weekly": "Weekly", "monthly": "Monthly"}
+MODULE_HI = {"01": "विज्ञान एवं प्रौद्योगिकी", "02": "रिपोर्ट एवं रैंकिंग", "03": "सरकारी योजनाएँ", "04": "नियुक्तियाँ", "05": "खेल",
+             "06": "महत्वपूर्ण दिवस", "07": "पुरस्कार एवं सम्मान", "08": "कानून, विधेयक एवं निर्णय", "09": "पुस्तकें एवं लेखक",
+             "10": "अर्थव्यवस्था एवं बजट", "11": "रक्षा", "12": "राष्ट्रीय एवं राज्य समाचार", "13": "अंतरराष्ट्रीय",
+             "14": "शिखर सम्मेलन एवं समझौते", "15": "पर्यावरण एवं वन्यजीव", "16": "निधन"}
+SSC_T = {
+    "en": dict(vol="Vol. I · SSC CGL One-Liner", pill="SSC CGL {kind} ONE-LINER REVISION", ca="Current Affairs",
+               questions="Questions", modules="Modules", mix="Module Mix", module="Module", item="item", items="items",
+               key="Key", static="Static GK", test="Test yourself", test_h="{n} from this PDF", test_aside="Answer key at the end",
+               answer_key="Answer key", q1="question", qn="questions",
+               cta1="Every day’s SSC one-liner, <i>free</i>",
+               cta2="Daily, weekly and monthly PDFs with every question by topic at satyadheesh.in/ssc. Daily current affairs on Telegram. No sign-up.",
+               qr_site="SSC page", foot="Satyadheesh · SSC CGL {kind} One-Liner · {when}", read="Read the news"),
+    "hi": dict(vol="भाग I · एसएससी सीजीएल वन-लाइनर", pill="एसएससी सीजीएल {kind} वन-लाइनर रिवीज़न", ca="करेंट अफेयर्स",
+               questions="प्रश्न", modules="मॉड्यूल", mix="मॉड्यूल मिश्रण", module="मॉड्यूल", item="प्रश्न", items="प्रश्न",
+               key="मुख्य तथ्य", static="स्टैटिक GK", test="अभ्यास", test_h="इस पीडीएफ से {n}", test_aside="उत्तर कुंजी अंत में",
+               answer_key="उत्तर कुंजी", q1="प्रश्न", qn="प्रश्न",
+               cta1="हर दिन का एसएससी वन-लाइनर, <i>मुफ़्त</i>",
+               cta2="दैनिक, साप्ताहिक और मासिक पीडीएफ, हर प्रश्न विषय के अनुसार: satyadheesh.in/ssc · रोज़ के करेंट अफेयर्स टेलीग्राम पर। कोई साइन-अप नहीं।",
+               qr_site="एसएससी पेज", foot="सत्याधीश · एसएससी सीजीएल {kind} वन-लाइनर · {when}", read="ख़बर पढ़ें"),
+}
+KIND_HI = {"daily": "दैनिक", "weekly": "साप्ताहिक", "monthly": "मासिक"}
 _NUMERIC = re.compile(r"\d")
 _MONTH = re.compile(r"\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\b", re.I)
+
+
+_MONTH_HI = re.compile("जनवरी|फ़रवरी|फरवरी|मार्च|अप्रैल|मई|जून|जुलाई|अगस्त|सितंबर|अक्टूबर|नवंबर|दिसंबर")
+
+
+def _answer_class_hi(q, a, topic):
+    if re.search(r"(?:^|\s)(?:किसे|किसको|किसने)(?:\s|$)", q) or re.match(r"^कौन(?!\s*-?\s*स[ाीे])", q.strip()):
+        return "person"
+    if re.search(r"किस (?:राज्य|देश|शहर|जिले|ज़िले|स्थान)|कहाँ|कहां", q):
+        return "place:" + ("state" if "राज्य" in q else "country" if "देश" in q else "other")
+    return f"thing:{topic}"
 
 
 def _answer_class(q, a, topic=""):
     """What kind of answer: options in a quiz must all be of one kind (a name among names, an amount among amounts)."""
     al = a.lower()
     if _NUMERIC.search(a):
-        if _MONTH.search(a):
+        if _MONTH.search(a) or _MONTH_HI.search(a):
             return "date"
-        if re.search(r"₹|\brs\b|\$|usd|crore|dollar|rupee", al):
+        if re.search(r"₹|\brs\b|\$|usd|crore|dollar|rupee|करोड़|रुपये|डॉलर", al):
             return "money"
-        if re.search(r"%|per ?cent", al):
+        if re.search(r"%|per ?cent|प्रतिशत", al):
             return "percent"
         if re.fullmatch(r"\d+(?:st|nd|rd|th)", al.strip()):
             return "rank"
         return "number:" + (re.sub(r"[\d.,\s]+", " ", al).strip() or "plain")  # same unit: 'km', 'squadrons'
+    if re.search(r"[\u0900-\u097F]", q):
+        return _answer_class_hi(q, a, topic)
     wh = re.match(r"^(?:(?:in|under|by|from|for|with|to|of|on|at)\s+)?(who|which|what|where|name)\b\s*(\w+)?", q.strip(), re.I)
     if not wh:
         return "other"
@@ -689,7 +762,7 @@ def ssc_quiz(items, n, seed, pool_cards=()):
     cards = [c for c in cards if c[0] and c[1] and len(c[1]) <= 45]
     def words(s):  # 5.50% and 5.5 per cent are one option
         nums = {re.sub(r"\.0+$|(\.\d*?)0+$", r"\1", x.replace(",", "")) for x in re.findall(r"\d[\d,]*(?:\.\d+)?", s)}
-        return {w for w in re.findall(r"[a-z]+", s.lower()) if len(w) > 2} | {"#" + x for x in nums}
+        return {w for w in re.findall(r"[a-z\u0900-\u097F]+", s.lower()) if len(w) > 2} | {"#" + x for x in nums}
     pool = {}
     # wrong options also from the cards of the days before (a daily PDF alone has too few of each kind)
     for q, a, t in list(cards) + [c for c in pool_cards if c[0] and c[1] and len(c[1]) <= 45]:
@@ -730,24 +803,29 @@ def ssc_quiz(items, n, seed, pool_cards=()):
 
 
 def ssc(p, items, total, lang="en"):
-    """SSC CGL one-liner revision PDF (English): cards by module, a 'Test yourself' quiz built from the same cards,
-    then the Telegram / website box."""
+    """SSC CGL one-liner revision PDF (English or Hindi): cards by module, a 'Test yourself' quiz built from the same
+    cards, then the Telegram / website box. Hindi: each card's question_hi / answer_hi / key_fact_hi / static_gk_hi."""
+    hi = lang == "hi"
+    L = SSC_T[lang]
+    f = lambda k, field: k.get(f"{field}_{lang}") or ""
     groups = {}
     for it in items:
         topic = it.get("ssc_topic") or _map_ssc_topic(it)  # SSC runner's own topic; old notes: keyword mapping
         groups.setdefault(topic, []).append(it)
-    name_of = lambda code, name: MODULE_NAMES.get(code, name)
+    name_of = lambda code, name: MODULE_HI.get(code, name) if hi else MODULE_NAMES.get(code, name)
 
-    kind = KIND_EN[p["kind"]]
+    kind = KIND_HI[p["kind"]] if hi else KIND_EN[p["kind"]]
     d = p["first"]
     if p["kind"] == "daily":
-        right = f"{d.strftime('%A')}, {d.day} {d.strftime('%B %Y')}"
-        h1 = f"{d.day} {d.strftime('%B %Y')}"
+        right = f"{DAYS_HI[d.weekday()]}, {date_label(d, True)}" if hi else f"{d.strftime('%A')}, {d.day} {d.strftime('%B %Y')}"
+        h1 = date_label(d, True) if hi else f"{d.day} {d.strftime('%B %Y')}"
     else:
-        right = h1 = period_label(p, False)
-    short = h1 if p["kind"] == "daily" else (f"Week {p['week']}" if p["kind"] == "weekly" else h1)
+        right = h1 = period_label(p, hi)
+    short = h1 if p["kind"] != "weekly" else (f"सप्ताह {p['week']}" if hi else f"Week {p['week']}")
 
     def plural(n, word):
+        if hi:
+            return f"{n} {L['item']}"
         return f"{n} {word}{'' if n == 1 else 's'}"
 
     mix_chips = "".join(
@@ -759,32 +837,34 @@ def ssc(p, items, total, lang="en"):
         rows = []
         for it in groups[(code, topic_title)]:
             k = it.get("ssc_kit") or {}
-            q_text, ans_text = k.get("question_en"), k.get("answer_en")
+            q_text, ans_text = f(k, "question"), f(k, "answer")
             if not (q_text and ans_text):
                 continue
             more = ""
-            if k.get("key_fact_en"):
-                more += f'<p><span>Key</span>{e(fit(k["key_fact_en"], 160))}</p>'
-            if k.get("static_gk_en"):
-                more += f'<p><span>Static GK</span>{e(fit(k["static_gk_en"], 160))}</p>'
+            if f(k, "key_fact"):
+                more += f'<p><span>{L["key"]}</span>{e(fit(f(k, "key_fact"), 160))}</p>'
+            if f(k, "static_gk"):
+                more += f'<p><span>{L["static"]}</span>{e(fit(f(k, "static_gk"), 170))}</p>'
             when = dt.datetime.fromtimestamp((it.get("published_at") or 0) + 19800, dt.timezone.utc).date()
             aid = it.get("id") or it.get("article_id")
-            src = (f"{SITE}/ssc/current-affairs/{when.isoformat()}#q{aid}" if it.get("ssc_topic")
+            src = (f"{SITE}/ssc/current-affairs/{when.isoformat()}{'?lang=hi' if hi else ''}#q{aid}" if it.get("ssc_topic")
                    else it.get("src_url") or f"{SITE}/upsc/note/{aid}")
             rows.append(f'<div class="row"><h3><i>{n}</i>{e(q_text)}</h3><div class="ans">{e(ans_text)}</div>'
                         f'<div class="more">{more}<a class="src" href="{src}" target="_blank" rel="noopener" '
-                        f'title="Read the news" aria-label="Read the news">↗</a></div></div>')
+                        f'title="{L["read"]}" aria-label="{L["read"]}">↗</a></div></div>')
             n += 1
         if not rows:
             continue
         cells = "".join(f"<tr><td>{r}</td></tr>" for r in rows)
         topics_html.append(
-            f'<table class="mod-table">\n<thead><tr><th><span class="mod mono">Module {code}</span>\n'
+            f'<table class="mod-table">\n<thead><tr><th><span class="mod mono">{L["module"]} {code}</span>\n'
             f'<h2>{e(name_of(code, topic_title))} <small>{plural(len(rows), "item")}</small></h2>\n</th></tr></thead>\n'
             f'<tbody>\n{cells}\n</tbody>\n</table>\n')
 
     nq = {"daily": 10, "weekly": 20, "monthly": 25}[p["kind"]]
-    quiz = ssc_quiz(items, nq, p["key"], getattr(items, "pool", ()))
+    quiz = ssc_quiz([{**it, "ssc_kit": {"question_en": f(it.get("ssc_kit") or {}, "question"),
+                                        "answer_en": f(it.get("ssc_kit") or {}, "answer")}} for it in items],
+                    nq, p["key"], getattr(items, "pool", ()))
     quiz_html = ""
     if len(quiz) >= 3:
         lis = "".join(
@@ -792,37 +872,36 @@ def ssc(p, items, total, lang="en"):
             + "".join(f'<span><b>{"abcd"[j]}</b>{e(o)}</span>' for j, o in enumerate(opts)) + "</div></li>"
             for q, opts, _ in quiz)
         key = " · ".join(f"<b>{i}</b> {'abcd'[c]}" for i, (_, _, c) in enumerate(quiz, 1))
-        quiz_html = (f'<span class="mod mono">Test yourself</span>'
-                     f'<h2>{plural(len(quiz), "question")} from this PDF <small>Answer key at the end</small></h2>'
-                     f'<div class="quiz"><ol>{lis}</ol><div class="key">Answer key: {key}</div></div>')
+        nqs = f"{len(quiz)} {L['q1'] if len(quiz) == 1 else L['qn']}"
+        quiz_html = (f'<span class="mod mono">{L["test"]}</span>'
+                     f'<h2>{e(L["test_h"].format(n=nqs))} <small>{L["test_aside"]}</small></h2>'
+                     f'<div class="quiz"><ol>{lis}</ol><div class="key">{L["answer_key"]}: {key}</div></div>')
 
-    site = f"{SITE}/ssc"
-    cta_html = (f'<div class="ssc-cta"><div class="qrs"><figure>{qr_svg(TELEGRAM)}<figcaption>Telegram</figcaption></figure>'
-                f'<figure>{qr_svg(site)}<figcaption>SSC page</figcaption></figure></div>'
-                f'<div><div class="t1">Every day’s SSC one-liner, <i>free</i></div>'
-                f'<div class="t2">Daily, weekly and monthly PDFs with every question by topic at satyadheesh.in/ssc. '
-                f'Daily current affairs on Telegram. No sign-up.</div>'
+    site = f"{SITE}/ssc" + ("?lang=hi" if hi else "")
+    cta_html = (f'<div class="ssc-cta"><div class="qrs"><figure>{qr_svg(TELEGRAM)}<figcaption>{T[lang]["qr_tg"]}</figcaption></figure>'
+                f'<figure>{qr_svg(site)}<figcaption>{L["qr_site"]}</figcaption></figure></div>'
+                f'<div><div class="t1">{L["cta1"]}</div><div class="t2">{e(L["cta2"])}</div>'
                 f'<div class="t3">satyadheesh.in/ssc · t.me/satyadheesh</div></div></div>')
 
     body = f"""
 <div class="page">
-<div class="meta mono"><span>Vol. I · SSC CGL One-Liner</span><span>{e(right)}</span></div>
+<div class="meta mono"><span>{L["vol"]}</span><span>{e(right)}</span></div>
 
 <div class="brand">
 <div class="logo">
 <svg width="46" height="46" viewBox="0 0 46 46" aria-hidden="true"><rect x="2" y="2" width="42" height="42" rx="10" fill="#f8f6f2" stroke="#120f0b" stroke-width="2.5"/><g transform="rotate(-35 23 21)"><rect x="12" y="17" width="14" height="10" rx="2" fill="#bf4a07"/><rect x="26" y="20" width="9" height="4" rx="2" fill="#bf4a07"/></g><rect x="11" y="34" width="24" height="3" rx="1.5" fill="#8e8d8b"/></svg>
 <div><div class="word">SATYA<b>DHEESH</b></div><div class="dev">सत्याधीश</div></div>
 </div>
-<div><span class="pill">SSC CGL {kind.upper()} ONE-LINER REVISION</span></div>
-<h1>Current Affairs · {e(h1)}</h1>
+<div><span class="pill">{e(L["pill"].format(kind=kind.upper()))}</span></div>
+<h1>{L["ca"]} · {e(h1)}</h1>
 </div>
 
 <div class="stats">
-<div><b>{n - 1}</b><span class="mono">Questions</span></div>
-<div><b>{len(groups)}</b><span class="mono">Modules</span></div>
+<div><b>{n - 1}</b><span class="mono">{L["questions"]}</span></div>
+<div><b>{len(groups)}</b><span class="mono">{L["modules"]}</span></div>
 <div class="stats-mix">
 <div class="mix-chips">{mix_chips}</div>
-<span class="mono">Module Mix</span>
+<span class="mono">{L["mix"]}</span>
 </div>
 </div>
 
@@ -830,14 +909,14 @@ def ssc(p, items, total, lang="en"):
 {quiz_html}
 {cta_html}
 
-<div class="ssc-foot mono"><span>Satyadheesh · SSC CGL {kind} One-Liner · {e(short)}</span><span>satyadheesh.in/ssc · <a href="{TELEGRAM}">t.me/satyadheesh</a></span></div>
+<div class="ssc-foot mono"><span>{e(L["foot"].format(kind=kind, when=short))}</span><span>satyadheesh.in/ssc · <a href="{TELEGRAM}">t.me/satyadheesh</a></span></div>
 </div>
 """
-    title = f"Satyadheesh · SSC CGL {kind} One-Liner · {h1}"
+    title = L["foot"].format(kind=kind, when=h1)
     return (
-        f'<!doctype html><html lang="en"><head><meta charset="utf-8"><title>{e(title)}</title>'
+        f'<!doctype html><html lang="{lang}"><head><meta charset="utf-8"><title>{e(title)}</title>'
         f'<link rel="stylesheet" href="base.css">'
         f'<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400..800;1,9..40,400..800&family=IBM+Plex+Mono:wght@500;600;700&family=Inter:wght@400;500;600;700;800;900&family=Noto+Serif+Devanagari:wght@700&display=swap">'
-        f'<style>{SSC_CSS}</style>'
+        f'<style>{SSC_CSS}{SSC_HI_CSS if hi else ""}</style>'
         f'</head><body>{body}</body></html>'
     )

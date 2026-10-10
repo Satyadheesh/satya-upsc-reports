@@ -323,15 +323,42 @@ def by_importance(x):
     return (-(x["score"] - x.get("demote", 0)), -x["related"], -x["published_at"])
 
 
-def _same_story(a, b):
+COMMON_NAMES = {"india", "indian", "centre", "union", "government", "minister", "prime", "supreme", "court", "high",
+                "state", "states", "national", "president", "chief", "rbi", "modi", "trump", "pakistan", "china", "us", "un"}
+
+
+def _names(title):
+    """Capitalised words of a headline (not its first word), lower-cased and stemmed like sscca.dedupe.words."""
+    from sscca.dedupe import words
+    ws = re.findall(r"[A-Za-z][\w'’-]*", title or "")
+    return words(" ".join(w for w in ws[1:] if w[0].isupper() and w.lower() not in COMMON_NAMES))
+
+
+def _same_story(a, b, df=None):
     if (a.get("cluster") and a.get("cluster") == b.get("cluster")) or (
             abs(a["published_at"] - b["published_at"]) <= 3 * DAY and same_headline(a["title_en"], b["title_en"])):
         return True
+    if abs(a["published_at"] - b["published_at"]) <= 4 * DAY:
+        # the same story from two outlets, filed under different papers: title + why-in-news overlap strongly, or
+        # they share two rare names (Halzen, IceCube) and a good part of their words
+        from sscca.dedupe import words, _ov
+        ov = _ov(words(f"{a['title_en']} {a['why']}"), words(f"{b['title_en']} {b['why']}"))
+        rare_of = lambda t: {w for w in _names(t) if df is None or df.get(w, 0) <= 3}
+        ra, rb = rare_of(a["title_en"]), rare_of(b["title_en"])
+        if ov >= 0.55 or (len(ra & rb) >= 2 and ov >= 0.35):
+            return True
+        if ra and rb and not (ra & rb) and ov < 0.55:
+            return False  # different people or places in the headlines: Halzen's Nobel is not Kagan's
+    else:
+        ov = None
     if a["paper"] != b["paper"]:
         return False
     ka = {k.lower().strip() for k in a["keywords"]}
     kb = {k.lower().strip() for k in b["keywords"]}
-    if a["node"] == b["node"] and len(ka & kb) >= 2:
+    if ov is None:
+        from sscca.dedupe import words, _ov
+        ov = _ov(words(f"{a['title_en']} {a['why']}"), words(f"{b['title_en']} {b['why']}"))
+    if a["node"] == b["node"] and len(ka & kb) >= 2 and ov >= 0.3:  # shared keywords alone ("energy security") are not a story
         return True
 
     def jac(x, y):
@@ -348,9 +375,11 @@ def _same_story(a, b):
 
 
 def merge_stories(items):
+    from collections import Counter
+    df = Counter(w for it in items for w in _names(it["title_en"]))
     kept = []
     for it in sorted(items, key=by_importance):
-        twin = next((k for k in kept if _same_story(k, it)), None)
+        twin = next((k for k in kept if _same_story(k, it, df)), None)
         if twin:
             twin["related"] += it["related"] + 1
         else:
@@ -385,9 +414,7 @@ def hindi_title(it):
 def select(period, en_items, hi_items=None):
     """The notes a report carries (selection always on English, so both languages carry the same digest).
     Returns (chosen, total, hi_share)."""
-    pool = list(en_items)
-    if period["kind"] != "daily":
-        pool = merge_stories([i for i in pool if not LIVE_BLOG.search(i["title_en"])])
+    pool = merge_stories([i for i in en_items if not LIVE_BLOG.search(i["title_en"])])
     total = len(pool)
     if not total:
         return [], 0, 0.0
@@ -535,3 +562,35 @@ def ssc_items(upsc, p):
                     "importance": c["importance"], "ssc_topic": (code, name), "src_url": f"https://satyadheesh.in/news/{aid}",
                     "ssc_kit": {"question_en": q, "answer_en": ans, "key_fact_en": key, "static_gk_en": sgk}})
     return out
+
+
+def ssc_items_hi(en_items, trans, ready=0.8):
+    """The Hindi SSC PDF: the English edition's cards in Hindi (Hindi service, ssc_ca_translations; static GK from the
+    checked Hindi table). -> (items or None, share translated). None until `ready` of the cards have Hindi, so the
+    Hindi PDF never carries only half the day."""
+    from kit.ssc_guard import static_gk_hi
+    if not en_items or trans is None:
+        return None, 0.0
+    ids = [i["id"] for i in en_items]
+    pool_ids = list({*ids})
+    try:
+        rows = in_chunks(trans, "SELECT article_id, question_hi, answer_hi, key_fact_hi, question_en FROM ssc_ca_translations "
+                                "WHERE article_id IN ({ph})", pool_ids)
+    except Exception as ex:  # table not there until the Hindi service has run
+        print(f"Hindi SSC cards not available: {type(ex).__name__}")
+        return None, 0.0
+    hi = {r[0]: r for r in rows if r[1] and r[2] and DEVANAGARI.search(r[1])}
+    out = SscCards()
+    for it in en_items:
+        k = it["ssc_kit"]
+        h = hi.get(it["id"])
+        if not h or (h[4] and h[4] != k["question_en"]):  # translated before the card was rewritten
+            continue
+        key_hi = (h[3] or "") if k.get("key_fact_en") else ""
+        out.append({**it, "ssc_kit": {**k, "question_hi": h[1], "answer_hi": h[2], "key_fact_hi": key_hi,
+                                      "static_gk_hi": static_gk_hi(k.get("static_gk_en") or "")}})
+    share = len(out) / len(en_items)
+    if share < ready:
+        return None, share
+    out.pool = [(i["ssc_kit"]["question_hi"], i["ssc_kit"]["answer_hi"], i["ssc_topic"][0]) for i in out]  # quiz options
+    return out, share

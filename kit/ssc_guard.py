@@ -163,11 +163,26 @@ STATIC_GK = {
 }
 
 
-def static_gk_from_table(*texts: str) -> str:
+def static_gk_key(*texts: str) -> str:
+    """Key of the first table entry whose alias appears in the texts ('' if none)."""
     blob = " ".join(texts).lower()
-    for aliases, line in STATIC_GK.values():
+    for key, (aliases, _) in STATIC_GK.items():
         if any(re.search(rf"\b{re.escape(a)}\b", blob) for a in aliases):
-            return line
+            return key
+    return ""
+
+
+def static_gk_from_table(*texts: str) -> str:
+    k = static_gk_key(*texts)
+    return STATIC_GK[k][1] if k else ""
+
+
+def static_gk_hi(line_en: str) -> str:
+    """The checked Hindi version of a table line ('' if it has none)."""
+    from .ssc_static_hi import STATIC_GK_HI
+    for key, (_, line) in STATIC_GK.items():
+        if line == line_en:
+            return STATIC_GK_HI.get(key, "")
     return ""
 
 

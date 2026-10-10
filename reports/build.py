@@ -20,10 +20,10 @@ import time
 from common.db import close_all, main_db, translation_db, upsc_db
 
 from . import render
-from .data import Window, editions, select, ssc_items
+from .data import Window, editions, select, ssc_items, ssc_items_hi
 from .periods import periods_for, parse
 
-REPORT_VERSION = 7          # bump when layout or selection changes: every PDF is rebuilt
+REPORT_VERSION = 8          # bump when layout or selection changes: every PDF is rebuilt
 HI_READY = 0.8              # Hindi edition only once this share of the notes is translated
 CHUNK = 400 * 1024
 HERE = pathlib.Path(__file__).parent
@@ -53,21 +53,6 @@ def store(c, key, p, lang, h, items, pdf):
         "INSERT OR REPLACE INTO upsc_reports (key, kind, period, lang, hash, items, bytes, chunks, updated_at) "
         "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", [key, p["kind"], p["key"], lang, h, items, len(pdf), len(parts), int(time.time())]))
     c.batch(st)  # one transaction: the site never serves half a PDF
-
-
-def drop_stale_hindi_ssc(c):
-    """The SSC one-liner is built in English only (see the edition loop); Hindi SSC PDFs stored by earlier runs
-    (3-4 Oct 2026) would otherwise stay on the site, out of date."""
-    keys = [r[0] for r in c.execute("SELECT key FROM upsc_reports WHERE key LIKE '%:hi:ssc'").rows]
-    if not keys:
-        return
-    import libsql_client
-    st = []
-    for k in keys:
-        st += [libsql_client.Statement("DELETE FROM upsc_report_chunks WHERE key = ?", [k]),
-               libsql_client.Statement("DELETE FROM upsc_reports WHERE key = ?", [k])]
-    c.batch(st)
-    print(f"removed {len(keys)} stale Hindi SSC PDFs: {', '.join(keys)}")
 
 
 def content_hash(p, lang, edition, items):
@@ -155,11 +140,22 @@ def main():
         elif trans is not None:
             print(f"  {p['kind']}:{p['key']}:hi not ready ({share:.0%} translated)")
         ssc = ssc_items(upsc, p)  # SSC edition: the SSC runner's cards from the raw news, not the UPSC notes
+        # Hindi SSC: the same cards in Hindi (Hindi service), once HI_READY of them are translated
+        ssc_hi, ssc_share = ssc_items_hi(ssc, trans, HI_READY) if ssc else (None, 0.0)
+        if ssc and ssc_hi is None and trans is not None:
+            print(f"  {p['kind']}:{p['key']}:hi:ssc not ready ({ssc_share:.0%} translated)")
+        if ssc_hi is not None and chosen_hi is None:
+            langs.append(("hi", None, ssc_share))  # Hindi SSC even when the Hindi UPSC notes are not ready
         for lang, items, _ in langs:
             for edition in ("brief", "detailed", "ssc"):
-                if edition == "ssc" and (lang != "en" or ssc == []):
+                if edition == "ssc":
+                    if ssc == [] or (lang == "hi" and ssc_hi is None) or (lang == "hi" and ssc is None):
+                        continue
+                    its = ssc_hi if lang == "hi" else (ssc if ssc is not None else items)  # before the SSC runner: UPSC notes
+                elif items is None:
                     continue
-                its = ssc if edition == "ssc" and ssc is not None else items  # before the SSC runner: UPSC notes
+                else:
+                    its = items
                 key = f"{p['kind']}:{p['key']}:{lang}:{edition}"
                 if args.only and args.only not in key:
                     continue
@@ -167,8 +163,6 @@ def main():
                 if not args.force and not args.preview and stored.get(key) == h:
                     continue
                 jobs.append((key, p, lang, edition, its, total, h))
-    if not args.preview:
-        drop_stale_hindi_ssc(upsc)
     print(f"{len(jobs)} reports to build")
     if not jobs:
         return

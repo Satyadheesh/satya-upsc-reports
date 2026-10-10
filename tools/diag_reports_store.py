@@ -7,6 +7,11 @@ now = int(time.time())
 up = upsc_db()
 try:
     ago = lambda t: f"{(now - t) / 3600:.1f} h ago"
+    tot = up.execute("SELECT COUNT(*), SUM(bytes), MIN(period), MAX(period) FROM upsc_reports").rows[0]
+    print(f"== total: {tot[0]} PDFs, {(tot[1] or 0) / 1048576:.1f} MB, periods {tot[2]} .. {tot[3]}")
+    for kind, n, b in up.execute("SELECT kind, COUNT(*), SUM(bytes) FROM upsc_reports GROUP BY kind").rows:
+        print(f"   {kind:8} {n:>4} PDFs {(b or 0) / 1048576:7.1f} MB")
+    print()
     rows = up.execute("SELECT key, items, bytes, updated_at FROM upsc_reports ORDER BY updated_at DESC LIMIT 25").rows
     print("== newest 25 stored")
     for k, n, b, t in rows:

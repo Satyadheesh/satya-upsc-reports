@@ -1,19 +1,23 @@
-name: Instagram carousel
+name: Instagram posts
 
 # Today's top 5 UPSC stories as a carousel at 19:00 IST: English, then Hindi (when 4 of the 5 are translated).
 # Primary start: cron-job.org calls workflow_dispatch (mode=scheduled) ~20 min early. GitHub crons are the backup,
 # plus a 21:00 IST catch-up that posts only what is missing (usually a late Hindi carousel).
 on:
   schedule:
-    - cron: '10 13 * * *'   # 18:40 IST backup start
-    - cron: '30 15 * * *'   # 21:00 IST catch-up
+    # six slots a day (08:30, 10:30, 13:00, 15:00, 19:00, 21:00 IST); each run posts what is due (35 min early
+    # to 2.5 h late) and exits otherwise. cron-job.org is the reliable starter, these are the backup.
+    - cron: '25,55 2-15 * * *'
   workflow_dispatch:
     inputs:
       mode:
-        description: 'dry-run = render slides + captions to the previews branch; check-setup = verify the token; now = post now; scheduled = wait for 19:00 IST, then post (cron-job.org)'
+        description: 'dry-run = render slides + captions to the previews branch; check-setup = verify the token; now = post the chosen format now; scheduled = post whatever slot is due'
         type: choice
         options: [dry-run, check-setup, now, scheduled]
         default: dry-run
+      format:
+        description: 'now / dry-run: upsc, qotd (number or question of the day), ssc (quiz), or all'
+        default: 'all'
       langs:
         description: 'Languages'
         default: 'en,hi'
@@ -32,12 +36,13 @@ env:
 jobs:
   post:
     runs-on: ubuntu-latest
-    timeout-minutes: 300   # a scheduled run started early waits for 19:00 IST
+    timeout-minutes: 90    # a scheduled run started early waits up to 35 min for its slot
     permissions:
       contents: write     # slides go to the public ig-media branch (Instagram fetches images by URL)
     env:
       MODE: ${{ github.event.inputs.mode || 'scheduled' }}
       LANGS: ${{ github.event.inputs.langs || 'en,hi' }}
+      FORMAT: ${{ github.event.inputs.format || 'all' }}
       DAY: ${{ github.event.inputs.day || '' }}
       SATYA_DB_URL: ${{ secrets.SATYA_DB_URL }}
       SATYA_DB_TOKEN: ${{ secrets.SATYA_DB_TOKEN }}
@@ -86,9 +91,9 @@ jobs:
             echo "::notice::IG_TOKEN not set yet — skipping"; exit 0
           fi
           case "$MODE" in
-            dry-run)     python -m ig.post --dry-run --langs "$LANGS" ${DAY:+--day "$DAY"} 2>&1 | tee /tmp/out.txt ;;
+            dry-run)     python -m ig.post --dry-run --format "$FORMAT" --langs "$LANGS" ${DAY:+--day "$DAY"} 2>&1 | tee /tmp/out.txt ;;
             check-setup) python -m ig.post --check-setup 2>&1 | tee /tmp/out.txt ;;
-            now)         python -m ig.post --now --langs "$LANGS" ${DAY:+--day "$DAY"} 2>&1 | tee /tmp/out.txt ;;
-            *)           python -m ig.post --at 19:00 --langs "$LANGS" ${DAY:+--day "$DAY"} 2>&1 | tee /tmp/out.txt ;;
+            now)         python -m ig.post --now --format "$FORMAT" --langs "$LANGS" ${DAY:+--day "$DAY"} 2>&1 | tee /tmp/out.txt ;;
+            *)           python -m ig.post --scheduled --langs "$LANGS" 2>&1 | tee /tmp/out.txt ;;
           esac || { echo "::error title=Instagram $MODE failed::$(python3 -c "$TAIL")"; exit 1; }
           echo "::notice title=Instagram $MODE::$(python3 -c "$TAIL")"

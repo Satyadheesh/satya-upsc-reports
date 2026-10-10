@@ -14,12 +14,14 @@ L = {
                why="Why it matters", remember="Remember", quiz="Quick quiz", quiz_hint="Answer on the next slide",
                answer="Answer", ask="Which of the statements given above is/are correct?",
                cta1="Get the full PDF every morning", cta2="Brief + Detailed notes in English and Hindi, with a quiz, at 5 AM.",
-               cta3="Telegram  @satyadheesh", cta4="Save this post for revision", site="satyadheesh.in/upsc"),
+               cta3="Telegram  @satyadheesh", cta4="Save this post for revision", site="satyadheesh.in/upsc",
+               also="+ {n} more you can’t skip today"),
     "hi": dict(kicker="यूपीएससी करेंट अफेयर्स", today="आज की 5 ज़रूरी ख़बरें", day5="दिन की 5 ज़रूरी ख़बरें", swipe="नोट्स के लिए स्वाइप करें  →",
                why="क्यों ज़रूरी", remember="याद रखें", quiz="क्विज़", quiz_hint="उत्तर अगली स्लाइड पर",
                answer="उत्तर", ask="ऊपर दिए गए कथनों में से कौन-सा/से सही है/हैं?",
                cta1="पूरी पीडीएफ हर सुबह पाएँ", cta2="सार + विस्तृत नोट्स, हिंदी और अंग्रेज़ी में, क्विज़ के साथ, सुबह 5 बजे।",
-               cta3="टेलीग्राम  @satyadheesh", cta4="दोहराव के लिए यह पोस्ट सेव करें", site="satyadheesh.in/upsc"),
+               cta3="टेलीग्राम  @satyadheesh", cta4="दोहराव के लिए यह पोस्ट सेव करें", site="satyadheesh.in/upsc",
+               also="+ आज की {n} और ज़रूरी ख़बरें"),
 }
 
 CSS = """
@@ -59,6 +61,11 @@ ol.top { list-style: none; padding: 0; margin: 44px 0 0; display: flex; flex-dir
 ol.top li { display: grid; grid-template-columns: 64px 1fr; gap: 12px; align-items: start; font: 500 33px/1.32 var(--sans); }
 ol.top .n { font: 900 48px/1 var(--display); color: var(--accent); }
 ol.top .p { font: 600 20px var(--mono); color: var(--ink3); letter-spacing: .08em; margin-top: 6px; display: block; }
+h1.lead { font-size: 82px; line-height: 1.08; margin: 34px 0 44px; }
+:lang(hi) h1.lead { font-size: 72px; line-height: 1.3; }
+ol.top.more { margin-top: 12px; gap: 14px; }
+ol.top.more li { font: 500 29px/1.3 var(--sans); color: var(--ink2); grid-template-columns: 52px 1fr; }
+ol.top.more .n { font-size: 36px; }
 .swipe { margin-top: auto; font: 600 28px var(--mono); color: var(--accent); letter-spacing: .06em; }
 .chip { display: inline-block; font: 600 23px var(--mono); letter-spacing: .08em; padding: 8px 16px; border-radius: 8px;
         color: #fff; text-transform: uppercase; }
@@ -129,10 +136,12 @@ def slides_html(day, stories, quiz, lang, is_today=True):
     t, hi = L[lang], lang == "hi"
     n = 1 + len(stories) + (2 if quiz else 0) + 1
     out, i = [], 1
-    top = "".join(f'<li><span class="n">{k}</span><span>{e(s["title"])}<span class="p">{e(s["paper"])} · '
-                  f'{e(subject_name(s["subject"], hi))}</span></span></li>' for k, s in enumerate(stories, 1))
-    out.append(f'<section class="s"><div class="stripe"></div><div class="c">{_brand()}<div style="margin-top:56px" class="kicker">{e(t["kicker"])}</div>'
-               f'<div class="date">{e(_date(day, hi))}</div><div class="sub">{e(t["today"] if is_today else t["day5"])}</div><ol class="top">{top}</ol>'
+    # cover = a hook: the day's lead story big, the other four as "also today" (the old cover was a list of five)
+    lead, rest = stories[0], stories[1:]
+    more = "".join(f'<li><span class="n">{k}</span><span>{e(s["title"])}</span></li>' for k, s in enumerate(rest, 2))
+    out.append(f'<section class="s"><div class="stripe"></div><div class="c">{_brand()}<div style="margin-top:48px" class="kicker">'
+               f'{e(t["kicker"])} · {e(_date(day, hi))}</div><h1 class="lead">{e(lead["title"])}</h1>'
+               f'<div class="lbl">{e(t["also"].format(n=len(rest)))}</div><ol class="top more">{more}</ol>'
                f'<div class="swipe">{e(t["swipe"])}</div></div>{_foot(t, i, n)}</section>')
     for k, s in enumerate(stories, 1):
         i += 1

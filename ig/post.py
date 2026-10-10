@@ -1,13 +1,18 @@
-"""Post today's UPSC carousel to Instagram at an exact IST time (English, then Hindi).
+"""Instagram: six posts a day, each English post followed by its Hindi twin two hours later (IST):
 
-  python -m ig.post --at 19:00            (scheduled: waits for 19:00 IST)
-  python -m ig.post --dry-run             (render slides + captions to the previews branch, post nothing)
-  python -m ig.post --check-setup         (token + account check only)
+  08:30 / 10:30  Number (or Question) of the day   2 slides   (ig.formats, from yesterday's study kit / SSC cards)
+  13:00 / 15:00  SSC quiz, 5 questions             8 slides   (ig.formats, from the last 24 h of SSC cards)
+  19:00 / 21:00  UPSC "Today's 5"                  9 slides   (ig.slides, today's notes)
 
-cron-job.org starts the workflow ~20 min early (GitHub crons are the backup). Slides are rendered with Chromium,
-pushed to the public `ig-media` branch (Instagram fetches images from a public URL), and published with the
-Instagram API. Each language is recorded in ig_posts, so a rerun only posts what is missing; Hindi waits for
-4 of the 5 stories to be translated and is retried by the 21:00 IST catch-up run.
+  python -m ig.post --scheduled            (post whatever slot is due: due from 35 min before to 2.5 h after its time)
+  python -m ig.post --now --format ssc --langs en
+  python -m ig.post --dry-run [--format all] (render slides + captions to the previews branch, post nothing)
+  python -m ig.post --check-setup          (token + account check only)
+
+Runs start every 30 min (GitHub cron, cron-job.org as the reliable starter). Slides are rendered with Chromium,
+pushed to the public `ig-media` branch (Instagram fetches images from a public URL) and published with the
+Instagram API. Each post is recorded in ig_posts (key ig:<format>:<day>:<lang>; the UPSC carousel keeps its old
+key ig:daily:<day>:<lang>), so a rerun only posts what is missing. A Hindi post without Hindi content is skipped.
 """
 import argparse
 import datetime as dt
@@ -101,29 +106,6 @@ def quiz_of(stories, only_id=None):
     return None
 
 
-def render(day, stories, quiz, lang, folder, is_today=True):
-    from playwright.sync_api import sync_playwright
-    html, n = slides_html(day, stories, quiz, lang, is_today)
-    folder.mkdir(parents=True, exist_ok=True)
-    page_file = REPORTS / f"_ig_{lang}.html"   # next to reports/fonts so the bundled fonts load
-    page_file.write_text(html, encoding="utf-8")
-    files = []
-    with sync_playwright() as pw:
-        b = pw.chromium.launch()
-        pg = b.new_page(viewport={"width": 1080, "height": 1350}, device_scale_factor=1)
-        pg.goto(page_file.as_uri(), wait_until="load")
-        pg.evaluate("document.fonts.ready")
-        pg.wait_for_timeout(300)
-        pg.evaluate(FIT_JS)
-        for k in range(n):
-            f = folder / f"{k + 1:02d}.jpg"
-            pg.locator("section.s").nth(k).screenshot(path=str(f), type="jpeg", quality=92)
-            files.append(f)
-        b.close()
-    page_file.unlink()
-    return files
-
-
 def push_media(files_by_dir, branch, msg):
     """Commit the slides to a branch of this (public) repo; returns the raw URL prefix."""
     repo, tok = os.environ.get("GITHUB_REPOSITORY"), os.environ.get("GITHUB_TOKEN")
@@ -176,14 +158,173 @@ def posted(upsc, key):
     return bool(upsc.execute("SELECT 1 FROM ig_posts WHERE key = ?", [key]).rows)
 
 
+SLOTS = [("qotd", "en", "08:30"), ("qotd", "hi", "10:30"), ("ssc", "en", "13:00"), ("ssc", "hi", "15:00"),
+         ("upsc", "en", "19:00"), ("upsc", "hi", "21:00")]
+EARLY, LATE = 35 * 60, int(2.5 * 3600)
+
+
+def post_key(fmt, day, lang):
+    return f"ig:daily:{day}:{lang}" if fmt == "upsc" else f"ig:{fmt}:{day}:{lang}"
+
+
+def render_pages(html, n, lang, folder):
+    """Screenshot each <section class="s"> of `html` (1080x1350) to folder/NN.jpg."""
+    from playwright.sync_api import sync_playwright
+    folder.mkdir(parents=True, exist_ok=True)
+    page_file = REPORTS / f"_ig_{lang}.html"   # next to reports/fonts so the bundled fonts load
+    page_file.write_text(html, encoding="utf-8")
+    files = []
+    with sync_playwright() as pw:
+        b = pw.chromium.launch()
+        pg = b.new_page(viewport={"width": 1080, "height": 1350}, device_scale_factor=1)
+        pg.goto(page_file.as_uri(), wait_until="load")
+        pg.evaluate("document.fonts.ready")
+        pg.wait_for_timeout(300)
+        pg.evaluate(FIT_JS)
+        for k in range(n):
+            f = folder / f"{k + 1:02d}.jpg"
+            pg.locator("section.s").nth(k).screenshot(path=str(f), type="jpeg", quality=92)
+            files.append(f)
+        b.close()
+    page_file.unlink()
+    return files
+
+
+class Builder:
+    """Builds one post (slides html + caption) per format and language; data is loaded once per run."""
+
+    def __init__(self, upsc, now, day=None):
+        self.upsc, self.now = upsc, now
+        self.today = today_period(now, day)
+        self.yday = today_period(self.today["start"] - 3600)
+        self._w, self._ssc = {}, {}
+
+    def window(self, p):
+        if p["key"] not in self._w:
+            self._w[p["key"]] = Window(self.upsc, main_db(), p["start"], p["end"], translation_db())
+        return self._w[p["key"]]
+
+    def stories(self, p):
+        top, top_hi, quiz_en, quiz_hi = pick(p, self.window(p))
+        return top, top_hi, quiz_en, quiz_hi
+
+    def upsc_post(self, lang):
+        p = self.today
+        top, top_hi, quiz_en, quiz_hi = self.stories(p)
+        if len(top) < 3:
+            return None, f"only {len(top)} notes today"
+        q_en = quiz_of([story(quiz_en, "en")]) if quiz_en else None
+        q_hi = quiz_of([story(quiz_hi, "hi")]) if quiz_hi else None
+        if top_hi and not (q_en and q_hi):
+            q_en = q_hi = None  # the quiz runs in both carousels or in neither
+        if lang == "hi" and len(top_hi) < HI_MIN:
+            return None, f"Hindi: {len(top_hi)} of {len(top)} stories translated (needs {HI_MIN})"
+        st = [story(i, lang) for i in (top if lang == "en" else top_hi)]
+        is_today = p["first"] == ist_date(time.time())
+        html, n = slides_html(p["first"], st, q_en if lang == "en" else q_hi, lang, is_today)
+        return (html, n, caption(p["first"], st, bool(q_en if lang == "en" else q_hi), lang, is_today)), None
+
+    def ssc_cards(self, hours=24):
+        """SSC cards of the last `hours` (English, plus the Hindi ones the Hindi service has written)."""
+        if hours not in self._ssc:
+            from reports.data import ssc_items, ssc_items_hi
+            # today: the 24 h up to now; a past --day: that whole day
+            end = int(self.now) if self.today["key"] == ist_date(self.now).isoformat() else self.today["end"]
+            p = {"kind": "daily", "key": self.today["key"], "start": end - hours * 3600, "end": end, "first": self.today["first"]}
+            en = ssc_items(self.upsc, p) or []
+            try:
+                hi, _ = ssc_items_hi(en, translation_db(), ready=0.0)
+            except Exception:
+                hi = None
+            self._ssc[hours] = (en, hi or [])
+        return self._ssc[hours]
+
+    def qotd_post(self, lang):
+        from .formats import qotd_caption, qotd_html, qotd_number, qotd_question
+        top, top_hi, _, _ = self.stories(self.yday)
+        en, hi = qotd_number([story(i, "en") for i in top], [story(i, "hi") for i in top_hi] if top_hi else None)
+        if not en:  # no number today: the top SSC question
+            cards_en, cards_hi = self.ssc_cards()
+            if cards_en:
+                c = max(cards_en, key=lambda c: c["importance"] or 0)
+                h = next((x for x in cards_hi if x["id"] == c["id"]), None)
+                k = c["ssc_kit"]
+                en, hi = qotd_question({"question": k["question_en"], "answer": k["answer_en"], "key": k["key_fact_en"],
+                                        "title": c["title"]},
+                                       {"question": h["ssc_kit"]["question_hi"], "answer": h["ssc_kit"]["answer_hi"],
+                                        "key": h["ssc_kit"].get("key_fact_hi")} if h else None)
+        item = en if lang == "en" else hi
+        if not item:
+            return None, "no number or question with " + ("Hindi" if lang == "hi" else "content")
+        html, n = qotd_html(item, lang)
+        return (html, n, qotd_caption(item, lang)), None
+
+    def ssc_post(self, lang):
+        from reports.render import date_label
+        from .formats import ssc_caption, ssc_quiz_html
+        for hours in (24, 48):  # a quiet day: take the last two days
+            quiz, keys, cards = self._ssc_quiz(lang, hours)
+            if len(quiz) >= 5:
+                break
+        if len(quiz) < 5:
+            return None, f"only {len(quiz)} quiz questions from {len(cards)} {lang} SSC cards"
+        label = date_label(self.today["first"], lang == "hi")
+        html, n = ssc_quiz_html(quiz, keys, lang, label)
+        return (html, n, ssc_caption(quiz, lang, label)), None
+
+    def _ssc_quiz(self, lang, hours):
+        from reports.render import ssc_quiz
+        cards_en, cards_hi = self.ssc_cards(hours)
+        cards = cards_en if lang == "en" else cards_hi
+        if lang == "hi":  # the quiz reads question_en / answer_en: give it the Hindi text
+            cards = [{**c, "ssc_kit": {**c["ssc_kit"], "question_en": c["ssc_kit"]["question_hi"],
+                                       "answer_en": c["ssc_kit"]["answer_hi"], "key_fact_en": c["ssc_kit"].get("key_fact_hi") or ""}}
+                     for c in cards]
+        # wrong options: the other cards, plus (English) the week's cards before them
+        pool = [(c["ssc_kit"]["question_en"], c["ssc_kit"]["answer_en"], c["ssc_topic"][0]) for c in cards]
+        pool += list(getattr(cards_en, "pool", ())) if lang == "en" else []
+        quiz = ssc_quiz(cards, 5, f"ig:{self.today['key']}:{lang}", pool)
+        keys = [next((c["ssc_kit"].get("key_fact_en") or "" for c in cards if c["ssc_kit"]["question_en"] == q), "")
+                for q, _, _ in quiz]
+        return quiz, keys, cards
+
+    def build(self, fmt, lang):
+        return {"upsc": self.upsc_post, "qotd": self.qotd_post, "ssc": self.ssc_post}[fmt](lang)
+
+
+def publish(ig, upsc, built, fmt, day, lang, folder, target=None):
+    """Render, push to ig-media, wait for `target` (unix time), publish, record."""
+    html, n, cap = built
+    files = render_pages(html, n, lang, folder)
+    (folder / "caption.txt").write_text(cap, encoding="utf-8")
+    rel = f"ig/{day}/{fmt}-{lang}" if fmt != "upsc" else f"ig/{day}/{lang}"
+    base = push_media({rel: files + [folder / "caption.txt"]}, "ig-media", f"instagram slides {day} {fmt} {lang}")
+    urls = [f"{base}/{rel}/{f.name}" for f in files]
+    wait_public(urls)
+    if target and target > time.time():
+        print(f"waiting {(target - time.time()) / 60:.1f} min", flush=True)
+        time.sleep(target - time.time())
+    media_id = ig.carousel(urls, cap)
+    upsc.execute("INSERT OR REPLACE INTO ig_posts (key, media_id, posted_at) VALUES (?, ?, ?)",
+                 [post_key(fmt, day, lang), media_id, int(time.time())])
+    try:
+        link = ig.get(media_id, fields="permalink").get("permalink")
+    except Exception as ex:
+        link = f"media {media_id} (permalink lookup failed: {ex})"
+    print(f"posted {fmt} {lang} at {time.strftime('%H:%M:%S', time.gmtime(time.time() + 19800))} IST: {link}")
+    print(f"::notice title=Instagram {fmt} {lang}::{link}")
+
+
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--at", default="19:00")
+    ap.add_argument("--scheduled", action="store_true", help="post the slots due now (see SLOTS)")
+    ap.add_argument("--at", default="", help="old cron-job.org call (--at 19:00): same as --scheduled")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--now", action="store_true")
     ap.add_argument("--check-setup", action="store_true")
+    ap.add_argument("--format", default="upsc", help="upsc | qotd | ssc | all (with --now / --dry-run)")
     ap.add_argument("--langs", default="en,hi")
-    ap.add_argument("--day", default="", help="post this IST day's notes instead of today's (YYYY-MM-DD)")
+    ap.add_argument("--day", default="", help="this IST day instead of today (YYYY-MM-DD)")
     args = ap.parse_args()
     upsc = upsc_db()
 
@@ -194,74 +335,57 @@ def main():
             print(f"  recent: {m.get('timestamp')} {m.get('media_type')} {m.get('permalink')}")
         return
 
-    start = time.time()
-    p = today_period(start, args.day or None)
-    target = start if (args.now or args.dry_run) else target_ts(start, args.at)
-    if time.time() > target + LATE_LIMIT and not args.now:
-        print(f"::warning::more than {LATE_LIMIT // 3600} h past {args.at} IST; not posting")
-        return
+    now = time.time()
+    b = Builder(upsc, now, args.day or None)
+    day = b.today["key"]
     langs = [l for l in args.langs.split(",") if l in ("en", "hi")]
-    keys = {l: f"ig:daily:{p['key']}:{l}" for l in langs}
-    if not args.dry_run and all(posted(upsc, k) for k in keys.values()):
-        print("already posted, nothing to do")
-        return
-    if not args.dry_run:
-        ig = IG(current_token(upsc))   # fail early (bad token) before rendering
-        print(f"posting as @{ig.username}")
+    fmts = ["qotd", "ssc", "upsc"] if args.format == "all" else [args.format]
 
-    w = Window(upsc, main_db(), p["start"], p["end"], translation_db())
-    top, top_hi, quiz_en, quiz_hi = pick(p, w)
-    if len(top) < 3:
-        print(f"::warning::only {len(top)} notes today; nothing posted")
-        return
-    posts = {}
-    q_en = quiz_of([story(quiz_en, "en")]) if quiz_en else None
-    q_hi = quiz_of([story(quiz_hi, "hi")]) if quiz_hi else None
-    if top_hi and not (q_en and q_hi):
-        q_en = q_hi = None  # the quiz runs in both carousels or in neither
-    if "en" in langs:
-        posts["en"] = ([story(i, "en") for i in top], q_en)
-    if "hi" in langs:
-        if len(top_hi) >= HI_MIN:
-            posts["hi"] = ([story(i, "hi") for i in top_hi], q_hi)
-        else:
-            print(f"::warning::Hindi: {len(top_hi)} of {len(top)} stories translated (needs {HI_MIN}); the 21:00 IST catch-up retries")
-
-    rendered = {}
-    for lang, (st, q) in posts.items():
-        if not args.dry_run and posted(upsc, keys[lang]):
-            continue
-        is_today = p["first"] == ist_date(time.time())
-        files = render(p["first"], st, q, lang, OUT / p["key"] / lang, is_today)
-        cap = caption(p["first"], st, bool(q), lang, is_today)
-        (OUT / p["key"] / lang / "caption.txt").write_text(cap, encoding="utf-8")
-        rendered[lang] = (files, cap)
-        print(f"\n--- {lang}: {len(files)} slides, caption {len(cap)} chars\n{cap}")
-    if not rendered:
-        return
-
-    branch = "previews" if args.dry_run else "ig-media"
-    base = push_media({f"ig/{p['key']}/{l}": f + [OUT / p["key"] / l / "caption.txt"] for l, (f, _) in rendered.items()},
-                      branch, f"instagram {'preview' if args.dry_run else 'slides'} {p['key']}")
     if args.dry_run:
-        print(f"\npreview: {base}/ig/{p['key']}/")
+        out = {}
+        for fmt in fmts:
+            for lang in langs:
+                built, why = b.build(fmt, lang)
+                if not built:
+                    print(f"::warning::{fmt} {lang}: {why}")
+                    continue
+                folder = OUT / day / f"{fmt}-{lang}"
+                files = render_pages(built[0], built[1], lang, folder)
+                (folder / "caption.txt").write_text(built[2], encoding="utf-8")
+                out[f"ig/{day}/{fmt}-{lang}"] = files + [folder / "caption.txt"]
+                print(f"\n--- {fmt} {lang}: {len(files)} slides\n{built[2]}")
+        if out:
+            base = push_media(out, "previews", f"instagram preview {day}")
+            print(f"\npreview: {base}/ig/{day}/")
         return
 
-    for lang, (files, cap) in rendered.items():
-        urls = [f"{base}/ig/{p['key']}/{lang}/{f.name}" for f in files]
-        wait_public(urls)
-        left = target - time.time()
-        if left > 0:
-            print(f"waiting {left / 60:.1f} min for {args.at} IST", flush=True)
-            time.sleep(left)
-        media_id = ig.carousel(urls, cap)
-        upsc.execute("INSERT OR REPLACE INTO ig_posts (key, media_id, posted_at) VALUES (?, ?, ?)", [keys[lang], media_id, int(time.time())])
+    if args.now:
+        due = [(f, l, None) for f in fmts for l in langs]
+    else:  # scheduled: slots from 35 min before to 2.5 h after their time, earliest first
+        due = []
+        for fmt, lang, hhmm in SLOTS:
+            t = target_ts(now, hhmm)
+            if t - EARLY <= now <= t + LATE and lang in langs:
+                due.append((fmt, lang, t))
+    due = [(f, l, t) for f, l, t in due if not posted(upsc, post_key(f, day, l))]
+    if not due:
+        print("nothing due")
+        return
+    ig = IG(current_token(upsc))   # fail early (bad token) before rendering
+    print(f"posting as @{ig.username}: {', '.join(f'{f}/{l}' for f, l, _ in due)}")
+    failed = 0
+    for fmt, lang, t in due:
         try:
-            link = ig.get(media_id, fields="permalink").get("permalink")
-        except Exception as ex:
-            link = f"media {media_id} (permalink lookup failed: {ex})"
-        print(f"posted {lang} carousel at {time.strftime('%H:%M:%S', time.gmtime(time.time() + 19800))} IST: {link}")
-        print(f"::notice title=Instagram {lang}::{link}")
+            built, why = b.build(fmt, lang)
+            if not built:
+                print(f"::warning::{fmt} {lang} skipped: {why}")
+                continue
+            publish(ig, upsc, built, fmt, day, lang, OUT / day / f"{fmt}-{lang}", t)
+        except Exception as ex:  # one failed post must not stop the next
+            failed += 1
+            print(f"::warning::{fmt} {lang} failed: {type(ex).__name__}: {str(ex)[:300]}")
+    if failed:
+        sys.exit(1)
 
 
 if __name__ == "__main__":

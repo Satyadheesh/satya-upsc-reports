@@ -722,6 +722,8 @@ _NUMERIC = re.compile(r"\d")
 _MONTH = re.compile(r"\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\b", re.I)
 
 
+MEDALS = {"gold", "silver", "bronze"}
+MEDALS_HI = {"स्वर्ण", "रजत", "कांस्य"}
 _MONTH_HI = re.compile("जनवरी|फ़रवरी|फरवरी|मार्च|अप्रैल|मई|जून|जुलाई|अगस्त|सितंबर|अक्टूबर|नवंबर|दिसंबर")
 
 
@@ -736,11 +738,15 @@ def _answer_class_hi(q, a, topic):
 def _answer_class(q, a, topic=""):
     """What kind of answer: options in a quiz must all be of one kind (a name among names, an amount among amounts)."""
     al = a.lower()
+    if al.strip() in MEDALS or a.strip() in MEDALS_HI:
+        return "medal"
     if _NUMERIC.search(a):
         if _MONTH.search(a) or _MONTH_HI.search(a):
             return "date"
-        if re.search(r"₹|\brs\b|\$|usd|crore|dollar|rupee|करोड़|रुपये|डॉलर", al):
-            return "money"
+        if re.search(r"\$|usd|dollar|डॉलर|billion|million", al):
+            return "money:usd"  # $734.6 billion among ₹ amounts gives the answer away
+        if re.search(r"₹|\brs\b|crore|rupee|करोड़|रुपये|लाख", al):
+            return "money:inr"
         if re.search(r"%|per ?cent|प्रतिशत", al):
             return "percent"
         if re.fullmatch(r"\d+(?:st|nd|rd|th)", al.strip()):
@@ -797,6 +803,12 @@ def ssc_quiz(items, n, seed, pool_cards=()):
             break
         q, a, t = cards[i]
         cls = _answer_class(q, a, t)
+        if cls == "medal":  # the options are always the three medals and "no medal"
+            hi_ = a.strip() in MEDALS_HI
+            opts = ["स्वर्ण", "रजत", "कांस्य", "कोई पदक नहीं"] if hi_ else ["Gold", "Silver", "Bronze", "No medal"]
+            right = next(j for j, o in enumerate(opts) if o.lower() == a.strip().lower())
+            out.append((q, opts, right))
+            continue
         others = [x for x in pool.get(cls, []) if x[1] != a and not (words(x[1]) & words(a))
                   and x[1].lower() not in q.lower()]
         uniq = []

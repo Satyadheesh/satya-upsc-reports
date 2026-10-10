@@ -23,11 +23,11 @@ try:
     try:
         print("ssc_ca hi_state:", up.execute("SELECT hi_state, COUNT(*) FROM ssc_ca WHERE status = 'card' GROUP BY 1").rows)
     except Exception as e:
-        print("ssc_ca hi_state: n/a", type(e).__name__)
+        print("ssc_ca hi_state: n/a", type(e).__name__, str(e)[:200])
     try:
         print("ssc_ca_translations rows:", tr.execute("SELECT COUNT(*), MAX(translated_at) FROM ssc_ca_translations").rows[0])
     except Exception as e:
-        print("ssc_ca_translations: n/a", type(e).__name__)
+        print("ssc_ca_translations: n/a", type(e).__name__, str(e)[:200])
     print("Hindi SSC PDFs:", up.execute("SELECT key, items, updated_at FROM upsc_reports WHERE key LIKE '%:hi:ssc' ORDER BY updated_at DESC LIMIT 5").rows)
 finally:
     close_all()

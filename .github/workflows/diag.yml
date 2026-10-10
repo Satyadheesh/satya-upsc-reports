@@ -1,0 +1,69 @@
+name: Diagnostics (read-only)
+
+# Runs a read-only script from tools/ and publishes its output to the previews branch (diag/latest.md).
+on:
+  workflow_dispatch:
+    inputs:
+      script:
+        description: 'Script in tools/'
+        default: 'diag_kit.py'
+      urls:
+        description: 'seo_audit.py only: space-separated paths/URLs to audit (default set if empty)'
+        default: ''
+      sample:
+        description: 'seo_audit.py only: also audit this many random sitemap URLs'
+        default: '0'
+      site:
+        description: 'seo_audit.py only: site to audit (default https://satyadheesh.in)'
+        default: ''
+      repeat:
+        description: 'seo_audit.py only: fetch each page twice and report the second (cache check)'
+        default: ''
+
+env:
+  CORE_TOKEN: ${{ secrets.CORE_TOKEN }}
+  PYTHONPATH: ${{ github.workspace }}/.ci
+
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository }}-core
+          token: ${{ secrets.CORE_TOKEN }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - run: pip install libsql-client qrcode
+      - name: Run
+        env:
+          SATYA_UPSC_DB_URL: ${{ secrets.SATYA_UPSC_DB_URL }}
+          SATYA_UPSC_DB_TOKEN: ${{ secrets.SATYA_UPSC_DB_TOKEN }}
+          SATYA_DB_URL: ${{ secrets.SATYA_DB_URL }}
+          SATYA_DB_TOKEN: ${{ secrets.SATYA_DB_TOKEN }}
+          SATYA_TRANSLATION_DB_URL: ${{ secrets.SATYA_TRANSLATION_DB_URL }}
+          SATYA_TRANSLATION_DB_TOKEN: ${{ secrets.SATYA_TRANSLATION_DB_TOKEN }}
+          URLS: ${{ github.event.inputs.urls }}
+          SAMPLE: ${{ github.event.inputs.sample }}
+          SITE: ${{ github.event.inputs.site }}
+          REPEAT: ${{ github.event.inputs.repeat }}
+          FOLLOW: '/upsc/note/ /ssc/current-affairs/ /ssc/topic/'
+          CHECK_OG: '1'
+        run: PYTHONPATH=. python "tools/${{ github.event.inputs.script }}" 2>&1 | tee /tmp/diag.md
+      - name: Publish
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+          mkdir /tmp/wt && cd /tmp/wt && git init -q
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git remote add origin "https://x-access-token:${CORE_TOKEN}@github.com/${GITHUB_REPOSITORY}-core.git"
+          if git fetch -q --depth 1 origin previews; then git checkout -q -b previews FETCH_HEAD; else git checkout -q --orphan previews; fi
+          mkdir -p diag && cp /tmp/diag.md diag/latest.md && cp /tmp/diag_out/* diag/ 2>/dev/null || true
+          git add -A && git commit -qm "diag ${GITHUB_RUN_ID}" && git push -q origin HEAD:previews

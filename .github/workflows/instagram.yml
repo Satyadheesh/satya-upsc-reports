@@ -1,0 +1,94 @@
+name: Instagram carousel
+
+# Today's top 5 UPSC stories as a carousel at 19:00 IST: English, then Hindi (when 4 of the 5 are translated).
+# Primary start: cron-job.org calls workflow_dispatch (mode=scheduled) ~20 min early. GitHub crons are the backup,
+# plus a 21:00 IST catch-up that posts only what is missing (usually a late Hindi carousel).
+on:
+  schedule:
+    - cron: '10 13 * * *'   # 18:40 IST backup start
+    - cron: '30 15 * * *'   # 21:00 IST catch-up
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'dry-run = render slides + captions to the previews branch; check-setup = verify the token; now = post now; scheduled = wait for 19:00 IST, then post (cron-job.org)'
+        type: choice
+        options: [dry-run, check-setup, now, scheduled]
+        default: dry-run
+      langs:
+        description: 'Languages'
+        default: 'en,hi'
+      day:
+        description: "Post this day's notes instead of today's (YYYY-MM-DD, optional)"
+        default: ''
+
+concurrency:
+  group: instagram
+  cancel-in-progress: false
+
+env:
+  CORE_TOKEN: ${{ secrets.CORE_TOKEN }}
+  PYTHONPATH: ${{ github.workspace }}/.ci
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300   # a scheduled run started early waits for 19:00 IST
+    permissions:
+      contents: write     # slides go to the public ig-media branch (Instagram fetches images by URL)
+    env:
+      MODE: ${{ github.event.inputs.mode || 'scheduled' }}
+      LANGS: ${{ github.event.inputs.langs || 'en,hi' }}
+      DAY: ${{ github.event.inputs.day || '' }}
+      SATYA_DB_URL: ${{ secrets.SATYA_DB_URL }}
+      SATYA_DB_TOKEN: ${{ secrets.SATYA_DB_TOKEN }}
+      SATYA_UPSC_DB_URL: ${{ secrets.SATYA_UPSC_DB_URL }}
+      SATYA_UPSC_DB_TOKEN: ${{ secrets.SATYA_UPSC_DB_TOKEN }}
+      SATYA_TRANSLATION_DB_URL: ${{ secrets.SATYA_TRANSLATION_DB_URL }}
+      SATYA_TRANSLATION_DB_TOKEN: ${{ secrets.SATYA_TRANSLATION_DB_TOKEN }}
+      IG_TOKEN: ${{ secrets.IG_TOKEN }}
+      GITHUB_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository }}-core
+          token: ${{ secrets.CORE_TOKEN }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: pw-chromium-${{ runner.os }}-v1
+      - name: Install
+        run: |
+          pip install libsql-client playwright qrcode requests
+          python -m playwright install --with-deps chromium
+      - run: python -m unittest discover -s tests -t . -p 'test_ig.py'
+      - name: Migrate schema (idempotent)
+        run: python migrate.py
+      - name: Post
+        shell: bash
+        env:
+          # The end of the output (from the last Traceback, if any), whole characters and under ~3 KB: GitHub drops or
+          # truncates longer annotations, and a Hindi character cut in half dropped the whole error on 5 Oct.
+          PYTHONUNBUFFERED: "1"   # keep stdout and stderr in order in /tmp/out.txt (the error was printed before buffered output)
+          TAIL: |
+            import sys
+            t = open('/tmp/out.txt', encoding='utf-8', errors='replace').read()
+            i = t.rfind('Traceback')
+            seg = "\n".join((t[i:] if i >= 0 else t).splitlines()[-25:])
+            while len(seg.encode()) > 3000:
+                seg = seg[200:]
+            sys.stdout.write(seg.replace('%', '%25').replace('\r', '').replace('\n', '%0A'))
+        run: |
+          set -o pipefail
+          if [ "$MODE" != dry-run ] && [ -z "$IG_TOKEN" ]; then
+            echo "::notice::IG_TOKEN not set yet — skipping"; exit 0
+          fi
+          case "$MODE" in
+            dry-run)     python -m ig.post --dry-run --langs "$LANGS" ${DAY:+--day "$DAY"} 2>&1 | tee /tmp/out.txt ;;
+            check-setup) python -m ig.post --check-setup 2>&1 | tee /tmp/out.txt ;;
+            now)         python -m ig.post --now --langs "$LANGS" ${DAY:+--day "$DAY"} 2>&1 | tee /tmp/out.txt ;;
+            *)           python -m ig.post --at 19:00 --langs "$LANGS" ${DAY:+--day "$DAY"} 2>&1 | tee /tmp/out.txt ;;
+          esac || { echo "::error title=Instagram $MODE failed::$(python3 -c "$TAIL")"; exit 1; }
+          echo "::notice title=Instagram $MODE::$(python3 -c "$TAIL")"

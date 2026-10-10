@@ -1,0 +1,63 @@
+name: SSC cards recheck (no model)
+
+# Re-applies the SSC runner's current code checks to stored cards. Dry run publishes previews/sscca/recheck.md;
+# apply also turns failing cards into skips and rebuilds the SSC PDFs.
+on:
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: 'Apply (turn failing cards into skips) — otherwise a dry run'
+        type: boolean
+        default: false
+      days:
+        description: 'Look back this many days'
+        default: '8'
+
+concurrency:
+  group: sscca
+  cancel-in-progress: false
+
+env:
+  CORE_TOKEN: ${{ secrets.CORE_TOKEN }}
+  PYTHONPATH: ${{ github.workspace }}/.ci
+
+jobs:
+  recheck:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: write
+    env:
+      SATYA_DB_URL: ${{ secrets.SATYA_DB_URL }}
+      SATYA_DB_TOKEN: ${{ secrets.SATYA_DB_TOKEN }}
+      SATYA_UPSC_DB_URL: ${{ secrets.SATYA_UPSC_DB_URL }}
+      SATYA_UPSC_DB_TOKEN: ${{ secrets.SATYA_UPSC_DB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository }}-core
+          token: ${{ secrets.CORE_TOKEN }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - run: pip install libsql-client pytest
+      - run: python -m pytest -q tests
+      - name: Recheck
+        run: python -m sscca.recheck --days "${{ github.event.inputs.days }}" ${{ github.event.inputs.apply == 'true' && '--apply' || '' }} --md recheck.md
+      - name: Publish to previews branch
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+          rm -rf /tmp/wt && mkdir /tmp/wt && cd /tmp/wt && git init -q
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git remote add origin "https://x-access-token:${CORE_TOKEN}@github.com/${GITHUB_REPOSITORY}-core.git"
+          if git fetch -q --depth 1 origin previews; then git checkout -q -b previews FETCH_HEAD; else git checkout -q --orphan previews; fi
+          mkdir -p sscca && cp "$GITHUB_WORKSPACE"/recheck.md sscca/recheck.md
+          git add -A && git commit -qm "sscca recheck ${GITHUB_RUN_ID}" && git push -q origin HEAD:previews
+      - name: Rebuild SSC PDFs
+        if: ${{ github.event.inputs.apply == 'true' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh workflow run reports.yml --repo "$GITHUB_REPOSITORY" --ref main -f scope=all -f only=:ssc

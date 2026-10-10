@@ -1,0 +1,169 @@
+name: SSC current affairs (Gemma 4 12B)
+
+# Separate SSC CGL runner over the raw news (not the UPSC notes): each new article is judged by a strict SSC gate
+# (sscca/gate.py: topic, importance, a word-for-word fact, code checks) and the kept ones get an SSC card
+# (kit.run_ssc.generate_card: question/answer checks, LLM judge, verified static GK). Results: ssc_ca table.
+# The daily/weekly/monthly SSC PDFs are built from ssc_ca. Runs every 30 min and chains itself while work remains.
+on:
+  workflow_dispatch:
+    inputs:
+      preview:
+        description: 'Preview only: judge, write nothing, publish a review to the previews branch (sscca/review.md)'
+        type: boolean
+        default: false
+      days:
+        description: 'Look back this many days'
+        default: '2'
+      batch:
+        description: 'Articles per run'
+        default: '240'
+      shards:
+        description: 'Parallel runners'
+        default: '8'
+      pick:
+        description: 'Preview only: judge just these (article ids or title words, comma separated)'
+        default: ''
+  schedule:
+    - cron: '7,37 * * * *'   # every 30 min: judge new articles, then rebuild the SSC PDFs
+
+concurrency:
+  group: sscca
+  cancel-in-progress: false
+
+env:
+  CORE_TOKEN: ${{ secrets.CORE_TOKEN }}
+  PYTHONPATH: ${{ github.workspace }}/.ci
+  SATYA_DB_URL: ${{ secrets.SATYA_DB_URL }}
+  SATYA_DB_TOKEN: ${{ secrets.SATYA_DB_TOKEN }}
+  SATYA_UPSC_DB_URL: ${{ secrets.SATYA_UPSC_DB_URL }}
+  SATYA_UPSC_DB_TOKEN: ${{ secrets.SATYA_UPSC_DB_TOKEN }}
+  KIT_MODEL_REPO: unsloth/gemma-4-12b-it-GGUF
+  KIT_MODEL_FILE: gemma-4-12b-it-Q4_K_M.gguf
+  PREVIEW: ${{ github.event.inputs.preview || 'false' }}
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      shards: ${{ steps.pick.outputs.shards }}
+      more: ${{ steps.pick.outputs.more }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository }}-core
+          token: ${{ secrets.CORE_TOKEN }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - run: pip install libsql-client pytest
+      - name: Unit tests
+        run: python -m pytest -q tests
+      - name: Migrate schema (idempotent)
+        run: python migrate.py
+      - id: pick
+        env:
+          DAYS: ${{ github.event.inputs.days || '2' }}
+          BATCH: ${{ github.event.inputs.batch || '240' }}
+          SHARDS: ${{ github.event.inputs.shards || '8' }}
+          PICK: ${{ github.event.inputs.preview == 'true' && github.event.inputs.pick || '' }}
+        run: python -m sscca.select
+
+  judge:
+    needs: setup
+    if: ${{ needs.setup.outputs.shards != '[""]' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ${{ fromJson(needs.setup.outputs.shards) }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository }}-core
+          token: ${{ secrets.CORE_TOKEN }}
+      - name: Free disk for model weights
+        run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL && df -h /
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-kit-${{ hashFiles('requirements.txt') }}
+      - uses: actions/cache@v4
+        with:
+          path: models
+          key: gguf-${{ env.KIT_MODEL_FILE }}
+      - name: Install
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu
+      - name: Judge + cards
+        env:
+          SHARD_DEADLINE_SEC: '3000'
+          SHARD_NAME: ${{ strategy.job-index }}
+        run: |
+          set -o pipefail
+          mkdir -p out
+          python -m sscca.run --ids "${{ matrix.shard }}" ${{ env.PREVIEW == 'true' && '--preview out' || '' }} 2>&1 | tee out/log.txt
+          tail -1 out/log.txt | sed 's/^/::notice title=SSC shard::/'
+      - if: ${{ always() && env.PREVIEW == 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: sscca-${{ strategy.job-index }}
+          path: out/*.json
+          if-no-files-found: ignore
+
+  review:
+    needs: judge
+    if: ${{ !cancelled() && github.event.inputs.preview == 'true' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository }}-core
+          token: ${{ secrets.CORE_TOKEN }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+          merge-multiple: true
+      - run: python -m sscca.review out/*.json --md review.md
+      - name: Publish to previews branch
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN: ${{ github.run_id }}
+        run: |
+          set -e
+          rm -rf /tmp/wt && mkdir /tmp/wt && cd /tmp/wt && git init -q
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git remote add origin "https://x-access-token:${CORE_TOKEN}@github.com/${GITHUB_REPOSITORY}-core.git"
+          if git fetch -q --depth 1 origin previews; then git checkout -q -b previews FETCH_HEAD; else git checkout -q --orphan previews; fi
+          mkdir -p sscca && cp "$GITHUB_WORKSPACE"/review.md sscca/review.md && cp "$GITHUB_WORKSPACE"/review.md "sscca/review-$RUN.md"
+          git add -A && git commit -qm "sscca review $RUN" && git push -q origin HEAD:previews
+
+  after:
+    needs: [setup, judge]
+    # one failed shard must not stop the chain: its articles are simply judged again next run
+    if: ${{ !cancelled() && (needs.judge.result == 'success' || needs.judge.result == 'failure') && github.event.inputs.preview != 'true' }}
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # scheduled runs leave the PDFs to reports.yml (every 2 h); a manual run (backfill) rebuilds them now
+          if [ "${{ github.event_name }}" = workflow_dispatch ]; then
+            gh workflow run reports.yml --repo "$GITHUB_REPOSITORY" --ref main -f scope=recent -f only=:ssc
+          fi
+          if [ "${{ needs.setup.outputs.more }}" = true ]; then
+            gh workflow run sscca.yml --repo "$GITHUB_REPOSITORY" --ref main -f days='${{ github.event.inputs.days || '2' }}' \
+              -f batch='${{ github.event.inputs.batch || '240' }}' -f shards='${{ github.event.inputs.shards || '8' }}'
+          fi

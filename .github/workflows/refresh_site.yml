@@ -1,0 +1,35 @@
+name: Refresh site cache
+
+# Asks satyadheesh.in to refresh one cache tag now (e.g. after a manual entity-library fix).
+# 'entities' = party / leader / state pages; 'upsc-reports' = PDF download lists; 'hi' = Hindi pages.
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        type: choice
+        options: [entities, upsc-reports, hi]
+        default: entities
+      force:
+        description: 'Ignore the tag cooldown'
+        type: boolean
+        default: false
+
+env:
+  CORE_TOKEN: ${{ secrets.CORE_TOKEN }}
+  PYTHONPATH: ${{ github.workspace }}/.ci
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - env:
+          SECRET: ${{ secrets.REVALIDATE_SECRET }}
+          TAG: ${{ github.event.inputs.tag }}
+          FORCE: ${{ github.event.inputs.force }}
+        run: |
+          [ -z "$SECRET" ] && { echo "::error::REVALIDATE_SECRET not set"; exit 1; }
+          OUT=$(curl -sS -X POST --get "https://satyadheesh.in/api/revalidate" \
+            --data-urlencode "tag=$TAG" --data-urlencode "secret=$SECRET" \
+            $([ "$FORCE" = true ] && echo --data-urlencode force=true))
+          echo "::notice title=Refresh $TAG::$OUT"

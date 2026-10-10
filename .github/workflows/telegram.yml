@@ -1,0 +1,90 @@
+name: Telegram channel posts
+
+# Daily report at 05:00 IST (yesterday's news), weekly report on Sunday at 07:00 IST and last month's
+# report on the 1st at 08:00 IST.
+# Primary start: cron-job.org calls workflow_dispatch (mode=scheduled) ~20 min early, which starts
+# within a minute. The GitHub crons below are only a backup (GitHub often starts them late).
+# The script waits for the exact minute, and telegram_posts makes sure nothing is posted twice.
+on:
+  schedule:
+    - cron: '50 22 * * *'   # 04:20 IST daily  (primary)
+    - cron: '20 23 * * *'   # 04:50 IST daily  (backup)
+    - cron: '50 0 * * 0'    # 06:20 IST Sunday (weekly, primary)
+    - cron: '20 1 * * 0'    # 06:50 IST Sunday (weekly, backup)
+    - cron: '0 2 * * *'     # 07:30 IST daily catch-up (posts only what is missing, e.g. a late Hindi PDF)
+    - cron: '0 4 * * *'     # 09:30 IST daily catch-up
+    - cron: '30 3 * * 0'    # 09:00 IST Sunday weekly catch-up
+    - cron: '50 1 1 * *'    # 07:20 IST on the 1st (monthly, primary)
+    - cron: '20 2 1 * *'    # 07:50 IST on the 1st (monthly, backup)
+    - cron: '30 5 1 * *'    # 11:00 IST on the 1st (monthly catch-up)
+  workflow_dispatch:
+    inputs:
+      kind:
+        type: choice
+        options: [daily, weekly, monthly]
+        default: daily
+      mode:
+        description: 'dry-run = print only; check-setup = verify bot + channel; test = post now to TELEGRAM_TEST_CHAT_ID; now = post now to the channel; scheduled = wait for 05:00 / 07:00 IST, then post (cron-job.org)'
+        type: choice
+        options: [dry-run, check-setup, test, now, scheduled]
+        default: dry-run
+
+concurrency:
+  group: telegram-${{ github.event.inputs.kind || (endsWith(github.event.schedule, ' 1 * *') && 'monthly' || endsWith(github.event.schedule, '* * 0') && 'weekly' || 'daily') }}
+  cancel-in-progress: false
+
+env:
+  CORE_TOKEN: ${{ secrets.CORE_TOKEN }}
+  PYTHONPATH: ${{ github.workspace }}/.ci
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    permissions:
+      contents: read
+      actions: write        # post.py asks reports.yml to rebuild the period's PDFs just before posting
+    env:
+      KIND: ${{ github.event.inputs.kind || (endsWith(github.event.schedule, ' 1 * *') && 'monthly' || endsWith(github.event.schedule, '* * 0') && 'weekly' || 'daily') }}
+      MODE: ${{ github.event.inputs.mode || 'scheduled' }}
+      SATYA_DB_URL: ${{ secrets.SATYA_DB_URL }}
+      SATYA_DB_TOKEN: ${{ secrets.SATYA_DB_TOKEN }}
+      SATYA_UPSC_DB_URL: ${{ secrets.SATYA_UPSC_DB_URL }}
+      SATYA_UPSC_DB_TOKEN: ${{ secrets.SATYA_UPSC_DB_TOKEN }}
+      SATYA_TRANSLATION_DB_URL: ${{ secrets.SATYA_TRANSLATION_DB_URL }}
+      SATYA_TRANSLATION_DB_TOKEN: ${{ secrets.SATYA_TRANSLATION_DB_TOKEN }}
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      TELEGRAM_TEST_CHAT_ID: ${{ secrets.TELEGRAM_TEST_CHAT_ID }}
+      GITHUB_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository }}-core
+          token: ${{ secrets.CORE_TOKEN }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - run: pip install libsql-client requests qrcode
+      - run: python -c "import tg.post, tg.whoami"   # every import the posting job needs (qrcode broke it on 4 Oct)
+      - run: python -m unittest discover -s tests -t . -p 'test_tg.py'
+      - name: Migrate schema (idempotent)
+        run: python migrate.py
+      - name: Post
+        run: |
+          if [ "$MODE" = scheduled ] && { [ -z "$TELEGRAM_BOT_TOKEN" ] || [ -z "$TELEGRAM_CHAT_ID" ]; }; then
+            echo "::notice::TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID not set yet — skipping"; exit 0
+          fi
+          AT=$(case "$KIND" in weekly) echo 07:00;; monthly) echo 08:00;; *) echo 05:00;; esac)
+          if [ "$MODE" = check-setup ]; then
+            python -m tg.whoami | tee /tmp/who.txt
+            echo "::notice title=Telegram setup::$(sed -e ':a' -e 'N' -e '$!ba' -e 's/%/%25/g' -e 's/\n/%0A/g' /tmp/who.txt)"
+            exit 0
+          fi
+          case "$MODE" in
+            dry-run) python -m tg.post --kind "$KIND" --dry-run | tee /tmp/dry.txt
+                     echo "::notice title=Dry run::$(sed -e ':a' -e 'N' -e '$!ba' -e 's/%/%25/g' -e 's/\n/%0A/g' /tmp/dry.txt)" ;;
+            test)    python -m tg.post --kind "$KIND" --now --test ;;
+            now)     python -m tg.post --kind "$KIND" --now ;;
+            *)       python -m tg.post --kind "$KIND" --at "$AT" ;;
+          esac

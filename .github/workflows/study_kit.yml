@@ -1,0 +1,159 @@
+name: Study Kit (MCQs + report extras)
+
+# For each UPSC note, Gemma writes a short headline, a "why it matters" line, an In-brief line,
+# cleaned facts and one MCQ (see kit/). Runs on up to 5 runners and re-dispatches itself while
+# there is backlog. Preview mode writes samples to the `previews` branch and nothing to the DB.
+on:
+  workflow_dispatch:
+    inputs:
+      preview:
+        description: 'Preview only: number of recent notes to try (0 = normal run, writes to the DB)'
+        default: '0'
+      batch:
+        description: 'Notes per run (split over 5 runners)'
+        default: '120'
+      full:
+        description: 'Scan the whole 30-day window, not just the last 3 days'
+        type: boolean
+        default: false
+  schedule:
+    - cron: '5 * * * *'   # hourly; while there is backlog each run also re-dispatches itself
+
+concurrency:
+  group: study-kit
+  cancel-in-progress: false
+
+env:
+  CORE_TOKEN: ${{ secrets.CORE_TOKEN }}
+  PYTHONPATH: ${{ github.workspace }}/.ci
+  SATYA_DB_URL: ${{ secrets.SATYA_DB_URL }}
+  SATYA_DB_TOKEN: ${{ secrets.SATYA_DB_TOKEN }}
+  SATYA_UPSC_DB_URL: ${{ secrets.SATYA_UPSC_DB_URL }}
+  SATYA_UPSC_DB_TOKEN: ${{ secrets.SATYA_UPSC_DB_TOKEN }}
+  SATYA_TRANSLATION_DB_URL: ${{ secrets.SATYA_TRANSLATION_DB_URL }}
+  SATYA_TRANSLATION_DB_TOKEN: ${{ secrets.SATYA_TRANSLATION_DB_TOKEN }}
+  REVALIDATE_SECRET: ${{ secrets.REVALIDATE_SECRET }}
+  KIT_MODEL_REPO: unsloth/gemma-4-12b-it-GGUF
+  KIT_MODEL_FILE: gemma-4-12b-it-Q4_K_M.gguf
+  PREVIEW_N: ${{ github.event.inputs.preview || '0' }}
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      shards: ${{ steps.pick.outputs.shards }}
+      more: ${{ steps.pick.outputs.more }}
+      mode: ${{ steps.pick.outputs.mode }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository }}-core
+          token: ${{ secrets.CORE_TOKEN }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - run: pip install libsql-client pytest
+      - name: Unit tests
+        run: python -m pytest -q tests   # runs unittest and pytest-style tests (tests/test_ssc_*.py use pytest)
+      - name: Check secrets
+        run: |
+          for s in SATYA_DB_URL SATYA_DB_TOKEN SATYA_UPSC_DB_URL SATYA_UPSC_DB_TOKEN SATYA_TRANSLATION_DB_URL SATYA_TRANSLATION_DB_TOKEN REVALIDATE_SECRET; do
+            [ -n "${!s}" ] || { echo "::error::Secret $s is not set in this repo (Settings → Secrets → Actions)"; exit 1; }
+          done
+      - name: Migrate schema (idempotent; skipped in preview)
+        if: ${{ env.PREVIEW_N == '0' }}
+        run: python migrate.py
+      - id: pick
+        env:
+          BATCH: ${{ github.event.inputs.batch || '120' }}
+          FULL: ${{ github.event.inputs.full || 'false' }}
+          SHARDS: '5'
+          RECENT_DAYS: '1'   # hourly scan: last 24 h (rewritten older notes are caught by the nightly full scan)
+        run: python -m kit.setup_shards
+
+  kit:
+    needs: setup
+    if: ${{ needs.setup.outputs.shards != '[""]' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 70
+    strategy:
+      fail-fast: false
+      max-parallel: 5
+      matrix:
+        shard: ${{ fromJson(needs.setup.outputs.shards) }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository }}-core
+          token: ${{ secrets.CORE_TOKEN }}
+      - name: Free disk for model weights
+        run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL && df -h /
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-kit-${{ hashFiles('requirements.txt') }}
+      - name: Cache model weights   # 4.7 GB: downloaded once, then restored
+        uses: actions/cache@v4
+        with:
+          path: models
+          key: gguf-${{ env.KIT_MODEL_FILE }}
+      - name: Install
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu
+      - name: Make study kits
+        env:
+          SHARD_DEADLINE_SEC: '3300'
+          SHARD_NAME: ${{ strategy.job-index }}
+        run: |
+          mkdir -p out
+          set -o pipefail
+          python -m kit.run --ids "${{ matrix.shard }}" ${{ env.PREVIEW_N != '0' && '--preview out' || '' }} 2>&1 | tee "out/log-${{ strategy.job-index }}.txt"
+      - if: ${{ always() && env.PREVIEW_N != '0' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: kits-${{ strategy.job-index }}
+          path: out/
+          if-no-files-found: ignore
+
+  publish_preview:
+    needs: [setup, kit]
+    if: ${{ !cancelled() && github.event.inputs.preview != '' && github.event.inputs.preview != '0' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository }}-core
+          token: ${{ secrets.CORE_TOKEN }}
+      - uses: actions/download-artifact@v4
+        with:
+          path: prev
+      - run: mkdir -p prev && python -m kit.preview_md prev /tmp/preview.md && cat /tmp/preview.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Push to the previews branch
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+          mkdir /tmp/wt && cd /tmp/wt && git init -q
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git remote add origin "https://x-access-token:${CORE_TOKEN}@github.com/${GITHUB_REPOSITORY}-core.git"
+          if git fetch -q --depth 1 origin previews; then git checkout -q -b previews FETCH_HEAD; else git checkout -q --orphan previews; fi
+          mkdir -p kit && cp /tmp/preview.md kit/README.md && find "$GITHUB_WORKSPACE/prev" \( -name '*.jsonl' -o -name 'log-*.txt' \) -exec cp {} kit/ \;
+          git add -A && git commit -qm "study kit preview ${GITHUB_RUN_ID}" && git push -q origin HEAD:previews
+
+  chain:
+    needs: [setup, kit]
+    if: ${{ !cancelled() && needs.setup.outputs.more == 'true' && needs.kit.result == 'success' && needs.setup.outputs.mode != 'preview' }}
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh workflow run study_kit.yml --repo "$GITHUB_REPOSITORY" --ref main -f batch='${{ github.event.inputs.batch || '120' }}'

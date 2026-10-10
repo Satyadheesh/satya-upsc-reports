@@ -8,42 +8,56 @@ import time
 from common.db import close_all, in_chunks, main_db, upsc_db
 from sscca.articles import decode
 
-NAME_RE = re.compile(r"\b[A-Z][a-z]+(?:[- ](?:(?:of|for|and|on|the|de|in)[- ])*[A-Z][a-z]+){1,6}\b")
-NAME_OK = {"prime minister", "chief minister", "union minister", "supreme court", "high court", "lok sabha", "rajya sabha",
-           "union cabinet", "government of india", "union government", "central government", "finance minister",
-           "home minister", "external affairs minister", "deputy chief minister", "chief justice", "united nations",
-           "united states", "united kingdom", "european union", "south africa", "new delhi", "sri lanka", "saudi arabia",
-           "south korea", "north korea", "new zealand", "united arab emirates", "middle east", "south asia",
-           "indian ocean", "bay of bengal", "arabian sea"}
+STOP = set("""about above after again against also among and another any are around because been before being below
+between both but by can could did does doing down during each either even ever every few for from further had has have
+having here him his how however into its itself just least less made make many may might more most much must near
+neither never nor not now off often once only other others our out over own per rather same several shall should since
+some such than that the their them then there these they this those though through thus till under until upon very was
+were what when where whether which while who whom whose why will with within without would yet india indian new said
+says year years including""".split())
+WORD_RE = re.compile(r"[a-z][a-z'\-]+|\d+(?:[.,]\d+)*")
+
+
+def _words(text):
+    return {w[:6] for w in WORD_RE.findall((text or "").lower()) if w not in STOP and (len(w) >= 4 or w[0].isdigit())}
+
+
+NAME_RE = re.compile(r"\b[A-Z][\w'’-]*(?:\s+(?:(?:of|for|and|on|the|de|in)\s+)*[A-Z][\w'’-]*){1,8}")
+NAME_SPLIT = re.compile(r",\s*|\s+(?:and|in|on|at)\s+(?=[A-Z])")
+INSTITUTION = re.compile(r"\b(?:Court|Tribunal|Commission|Committee|Council|Authority|Board|Bank|Organi[sz]ation|Agency|"
+                         r"Institute|Fund|Assembly|Corporation|Bureau|Directorate|Secretariat|Parliament|Forum|Alliance|"
+                         r"Treaty|Convention|Agreement|Act|Mission|Yojana|Scheme|Programme|Observatory)\b")
 NAME_GENERIC = {"the", "of", "for", "and", "on", "de", "in"}
-NAME_START = {"the", "this", "these", "its", "his", "her", "under", "with", "after", "both", "on", "in", "at", "from",
-              "as", "by", "while", "a", "an", "it", "she", "he", "they"}
+NAME_OK = {"supreme court", "high court", "union cabinet", "united nations", "lok sabha", "rajya sabha"}
 
 
 def body_names(text):
-    """Multi-word proper names in `text` (2+ capitalised words), without a sentence-opening word."""
+    """Names of bodies (courts, commissions, banks, treaties, schemes ...) in `text`."""
     out = []
     for m in NAME_RE.finditer(text or ""):
-        words = m.group().split()
-        while words and words[0].lower() in NAME_START:
-            words = words[1:]
-        if len([w for w in words if w.lower() not in NAME_GENERIC]) >= 2:
-            out.append(" ".join(words))
+        for part in NAME_SPLIT.split(m.group()):
+            part = part.strip()
+            if INSTITUTION.search(part) and len([w for w in part.split() if w.lower() not in NAME_GENERIC]) >= 2:
+                out.append(part)
     return out
 
 
+def body_missing(name, text, words):
+    """True if the article (`text`, its `words` as _words gives them) does not name this body."""
+    low = re.sub(r"\s+", " ", text.lower())
+    n = name.lower()
+    if n in NAME_OK or n in low or n.replace("-", " ") in low.replace("-", " "):
+        return False
+    initials = "".join(w[0] for w in name.split() if w.lower() not in NAME_GENERIC).upper()
+    if len(initials) >= 2 and re.search(r"\b" + re.escape(initials) + r"\b", text):
+        return False
+    content = [w for w in _words(name) if not w[0].isdigit()]
+    return not content or not all(w in words for w in content)
 
 
 def missing(names, text):
-    low = re.sub(r"\s+", " ", text.lower())
-    out = []
-    for name in names:
-        n = name.lower()
-        initials = "".join(w[0] for w in name.split() if w.lower() not in NAME_GENERIC).upper()
-        if n in NAME_OK or n in low or n.replace("-", " ") in low.replace("-", " ") or re.search(r"\b" + initials + r"\b", text):
-            continue
-        out.append(name)
-    return out
+    ws = _words(text)
+    return [n for n in names if body_missing(n, text, ws)]
 
 
 DAYS = int(os.environ.get("DAYS") or 2)

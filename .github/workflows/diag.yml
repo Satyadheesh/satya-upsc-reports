@@ -1,4 +1,5 @@
 name: Diagnostics (read-only)
+run-name: "Diagnostics: ${{ inputs.script }}"
 
 # Runs a read-only script from tools/ and publishes its output to the previews branch (diag/latest.md).
 on:

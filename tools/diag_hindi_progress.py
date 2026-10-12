@@ -1,33 +1,41 @@
-"""READ-ONLY: progress of the 10 Oct Hindi redo (notes + kits of the last 10 days), Hindi SSC cards, Hindi SSC PDFs."""
+"""READ-ONLY: progress of the Hindi coverage work (timelines, UPSC notes, mains dimensions / keywords) and the
+partial indexes it uses. Writes nothing."""
 import time
+from common.db import close_all, main_db, translation_db, upsc_db
 
-from common.db import close_all, translation_db as trans_db, upsc_db
-
-CUT = 1791627300   # redo marked at 10 Oct 10:15 UTC
 now = int(time.time())
-since = now - 10 * 86400
-up, tr = upsc_db(), trans_db()
+m, tr, up = main_db(), translation_db(), upsc_db()
+
+
+def one(db, sql, args=()):
+    try:
+        return db.execute(sql, list(args)).rows
+    except Exception as e:
+        return [(f"error: {e}",)]
+
+
 try:
-    ids = [r[0] for r in up.execute("SELECT article_id FROM upsc_articles WHERE published_at >= ?", [since]).rows]
-    todo_n = up.execute("SELECT COUNT(*) FROM upsc_articles WHERE published_at >= ? AND translated_hi = 0", [since]).rows[0][0]
-    kit = dict(up.execute("SELECT k.translated_hi, COUNT(*) FROM upsc_kit k JOIN upsc_articles a ON a.article_id = k.article_id "
-                          "WHERE a.published_at >= ? AND k.status = 'done' GROUP BY 1", [since]).rows)
-    new_n = new_k = 0
-    for i in range(0, len(ids), 400):
-        ch = ids[i:i + 400]
-        ph = ",".join("?" * len(ch))
-        new_n += tr.execute(f"SELECT COUNT(*) FROM upsc_translations WHERE article_id IN ({ph}) AND translated_at >= ?", [*ch, CUT]).rows[0][0]
-        new_k += tr.execute(f"SELECT COUNT(*) FROM upsc_kit_translations WHERE article_id IN ({ph}) AND translated_at >= ?", [*ch, CUT]).rows[0][0]
-    print(f"notes (last 10 days, {len(ids)}): {new_n} re-translated since 10:15 UTC, {todo_n} still waiting")
-    print(f"kits: {new_k} re-translated since 10:15 UTC; state counts {kit} (0 = waiting, 1 = done, <0 = failed tries)")
-    try:
-        print("ssc_ca hi_state:", up.execute("SELECT hi_state, COUNT(*) FROM ssc_ca WHERE status = 'card' GROUP BY 1").rows)
-    except Exception as e:
-        print("ssc_ca hi_state: n/a", type(e).__name__, str(e)[:200])
-    try:
-        print("ssc_ca_translations rows:", tr.execute("SELECT COUNT(*), MAX(translated_at) FROM ssc_ca_translations").rows[0])
-    except Exception as e:
-        print("ssc_ca_translations: n/a", type(e).__name__, str(e)[:200])
-    print("Hindi SSC PDFs:", up.execute("SELECT key, items, updated_at FROM upsc_reports WHERE key LIKE '%:hi:ssc' ORDER BY updated_at DESC LIMIT 5").rows)
+    print("# Hindi coverage progress\n")
+    print("events (titled, slug) by translated_hi:",
+          one(m, "SELECT translated_hi, COUNT(*) FROM events WHERE title IS NOT NULL AND slug IS NOT NULL GROUP BY translated_hi"))
+    print("event_articles with text by translated_hi:",
+          one(m, "SELECT translated_hi, COUNT(*) FROM event_articles WHERE milestone IS NOT NULL GROUP BY translated_hi"))
+    print("Hindi event titles:", one(tr, "SELECT COUNT(*) FROM event_translations WHERE title_hi IS NOT NULL AND title_hi != ''"),
+          "Hindi milestones:", one(tr, "SELECT COUNT(*) FROM event_milestone_translations"))
+    print("indexes (main):", one(m, "SELECT name FROM sqlite_master WHERE type='index' AND name IN "
+                                    "('idx_ea_hi_todo','idx_events_hi_todo','idx_articles_hi_todo')"))
+    print("migration marker:", one(tr, "SELECT * FROM hindi_meta WHERE key = 'timeline_flags_v1'"))
+    print("\nUPSC notes by translated_hi:", one(up, "SELECT translated_hi, COUNT(*) FROM upsc_articles GROUP BY translated_hi"))
+    print("UPSC hi_extras (translated notes):", one(up, "SELECT hi_extras, COUNT(*) FROM upsc_articles WHERE translated_hi = 1 GROUP BY hi_extras"))
+    print("upsc_translations with dims / keywords:", one(tr, "SELECT SUM(mains_dimensions_hi IS NOT NULL AND mains_dimensions_hi != '[]'), "
+                                                          "SUM(keywords_hi IS NOT NULL AND keywords_hi != '[]'), COUNT(mains_dimensions_hi) FROM upsc_translations"))
+    print("newest UPSC translation:", one(tr, "SELECT (? - MAX(translated_at)) / 60 FROM upsc_translations", (now,)), "min ago")
+    print("\nsamples (dims / keywords):")
+    for r in one(tr, "SELECT article_id, mains_dimensions_hi, keywords_hi FROM upsc_translations WHERE keywords_hi IS NOT NULL "
+                     "AND keywords_hi != '[]' ORDER BY translated_at DESC LIMIT 4"):
+        print("-", *r)
+    print("\nsamples (new milestones):")
+    for r in one(tr, "SELECT event_id, article_id, milestone_hi FROM event_milestone_translations ORDER BY rowid DESC LIMIT 4"):
+        print("-", *r)
 finally:
     close_all()

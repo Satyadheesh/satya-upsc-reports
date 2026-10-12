@@ -1,8 +1,6 @@
 name: Archive report PDFs
 
 on:
-  schedule:
-    - cron: '30 2 2 * *'   # 2nd of each month, 08:00 IST: the month that just ended
   workflow_dispatch:
     inputs:
       month:

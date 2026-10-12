@@ -1,14 +1,22 @@
 name: Orchestrator
 
-# Starts the pipeline jobs when they are due (UPSC notes, SSC, study kit, Hindi, PDF reports, archive) and runs a
-# job's check when its prompt changes. Started every hour from outside (cron-job.org) and by finished jobs.
-# (Being built: for now this only records that it was started.)
+# Starts the pipeline jobs when they are due: UPSC notes and SSC every 6 hours (each keeps looping until its
+# backlog is done), the study kit, Hindi and PDF reports after new work (and at least every 6 hours), the nightly
+# runs, the monthly archive, and a job's check when its prompt/model code changes. Never starts a job that is
+# already running. Telegram and Instagram keep their own triggers.
+# Started every hour by cron-job.org, by finished jobs, and by the schedule below as a backup.
 on:
+  schedule:
+    - cron: '43 */3 * * *'   # backup only; the hourly start comes from cron-job.org
   workflow_dispatch:
     inputs:
       event:
-        description: 'What happened (e.g. notes-done); empty = regular hourly check'
+        description: 'What happened (e.g. notes-done:<run id>); empty = regular check'
         default: ''
+      dry_run:
+        description: 'Only show what would be started'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -20,6 +28,22 @@ concurrency:
 jobs:
   check:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
+    env:
+      PYTHONPATH: ${{ github.workspace }}/.ci
     steps:
-      - run: echo "orchestrator started (event='${{ github.event.inputs.event }}')"
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository }}-core
+          token: ${{ secrets.CORE_TOKEN }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Start what is due
+        env:
+          SAT_TOKEN: ${{ secrets.DISPATCH_TOKEN }}
+          HINDI_TOKEN: ${{ secrets.HINDI_DISPATCH_TOKEN }}
+        run: |
+          python tools/orchestrator.py \
+            ${{ github.event.inputs.event != '' && format('--event "{0}"', github.event.inputs.event) || '' }} \
+            ${{ github.event.inputs.dry_run == 'true' && '--dry-run' || '' }}

@@ -4,6 +4,8 @@ name: SSC current affairs (Gemma 4 12B)
 # (sscca/gate.py: topic, importance, a word-for-word fact, code checks) and the kept ones get an SSC card
 # (kit.run_ssc.generate_card: question/answer checks, LLM judge, verified static GK). Results: ssc_ca table.
 # The daily/weekly/monthly SSC PDFs are built from ssc_ca. Runs every 30 min and chains itself while work remains.
+run-name: "SSC${{ inputs.preview && ' (preview)' || '' }}"
+
 on:
   workflow_dispatch:
     inputs:
@@ -23,8 +25,6 @@ on:
       pick:
         description: 'Preview only: judge just these (article ids or title words, comma separated)'
         default: ''
-  schedule:
-    - cron: '7,37 * * * *'   # every 30 min: judge new articles, then rebuild the SSC PDFs
 
 concurrency:
   group: sscca

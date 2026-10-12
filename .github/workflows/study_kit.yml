@@ -3,6 +3,8 @@ name: Study Kit (MCQs + report extras)
 # For each UPSC note, Gemma writes a short headline, a "why it matters" line, an In-brief line,
 # cleaned facts and one MCQ (see kit/). Runs on up to 5 runners and re-dispatches itself while
 # there is backlog. Preview mode writes samples to the `previews` branch and nothing to the DB.
+run-name: "Study kit${{ inputs.full && ' (full scan)' || '' }}${{ inputs.preview != '' && inputs.preview != '0' && ' (preview)' || '' }}"
+
 on:
   workflow_dispatch:
     inputs:
@@ -16,8 +18,6 @@ on:
         description: 'Scan the whole 30-day window, not just the last 3 days'
         type: boolean
         default: false
-  schedule:
-    - cron: '5 * * * *'   # hourly; while there is backlog each run also re-dispatches itself
 
 concurrency:
   group: study-kit
@@ -157,3 +157,16 @@ jobs:
       - env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh workflow run study_kit.yml --repo "$GITHUB_REPOSITORY" --ref main -f batch='${{ github.event.inputs.batch || '120' }}'
+
+  # Backlog done: the orchestrator starts the jobs that use the new kits (Hindi, PDF reports).
+  notify:
+    needs: [setup, kit]
+    if: ${{ !cancelled() && needs.setup.outputs.more != 'true' && needs.kit.result == 'success' && needs.setup.outputs.mode != 'preview' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Tell the orchestrator (it starts what depends on this job)
+        env:
+          GH_TOKEN: ${{ secrets.DISPATCH_TOKEN }}
+        run: |
+          gh workflow run orchestrator.yml --repo Satyadheesh/satya-upsc-reports --ref main \
+            -f event='kit-done:${{ github.run_id }}' || echo "::warning::could not reach the orchestrator; its hourly check will catch up"

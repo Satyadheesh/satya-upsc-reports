@@ -35,3 +35,10 @@ Tests: `python -m unittest discover -s tests -t .`
 scheduler is often late; `tg/post.py` waits for the report, then for the exact minute (05:00 / 07:00 IST), then posts.
 Every part is recorded in `telegram_posts`, so the backup start or a rerun never posts twice.
 Manual runs: `mode = dry-run` prints the captions and polls; `test` posts to the test channel; `now` posts to the channel immediately.
+
+## Workflows
+
+The GitHub workflows for this code live in the public repo **Satyadheesh/satya-upsc-reports** (`.github/workflows`); that is where they run
+(this repo has Actions turned off) and the only place to edit them. Pipeline jobs are started by the orchestrator
+(`satya-upsc-reports` → `orchestrator.yml`, logic in `satya-upsc-reports-core/tools/orchestrator.py`), not by GitHub's
+schedule. The old copies that used to be here were removed on 13 Oct 2026 because they no longer matched the live ones.

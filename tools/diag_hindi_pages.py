@@ -25,7 +25,9 @@ def visible(h):
     return html.unescape(h)
 
 
-print("# Live Hindi pages: Latin-script words in the visible text\n")
+OUT = []
+log = lambda x: (print(x), OUT.append(x))
+log("# Live Hindi pages: Latin-script words in the visible text\n")
 for path in (os.environ.get("URLS") or "").split() or DEFAULT:
     try:
         st, h = get(path)
@@ -33,6 +35,10 @@ for path in (os.environ.get("URLS") or "").split() or DEFAULT:
         ws = [w for w in re.findall(r"[A-Za-z][A-Za-z'’\-]{2,}", t) if w not in ALLOW]
         common = ", ".join(f"{w}×{c}" for w, c in Counter(ws).most_common(15))
         title = re.search(r"<title>(.*?)</title>", h, re.S)
-        print(f"- `{path}` ({st}): {len(ws)} Latin words / {len(t.split())} words. Title: {html.unescape(title.group(1)) if title else '-'}\n  Most: {common}")
+        log(f"- `{path}` ({st}): {len(ws)} Latin words / {len(t.split())} words. Title: {html.unescape(title.group(1)) if title else '-'}\n  Most: {common}")
     except Exception as e:
-        print(f"- `{path}`: fetch failed ({e})")
+        log(f"- `{path}`: fetch failed ({e})")
+
+os.makedirs("/tmp/diag_out", exist_ok=True)
+with open("/tmp/diag_out/hindi_pages.md", "w") as f:
+    f.write("\n".join(OUT) + "\n")

@@ -1,0 +1,25 @@
+name: Orchestrator
+
+# Starts the pipeline jobs when they are due (UPSC notes, SSC, study kit, Hindi, PDF reports, archive) and runs a
+# job's check when its prompt changes. Started every hour from outside (cron-job.org) and by finished jobs.
+# (Being built: for now this only records that it was started.)
+on:
+  workflow_dispatch:
+    inputs:
+      event:
+        description: 'What happened (e.g. notes-done); empty = regular hourly check'
+        default: ''
+
+permissions:
+  contents: read
+
+concurrency:
+  group: orchestrator
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - run: echo "orchestrator started (event='${{ github.event.inputs.event }}')"

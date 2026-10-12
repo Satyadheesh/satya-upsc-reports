@@ -248,6 +248,12 @@ def main():
     lines += [f"- ERROR {e}" for e in errors]
     text = "\n".join(lines)
     print(text)
+    if os.environ.get("GITHUB_ACTIONS"):  # one-line annotations: readable through the API without the log
+        print("::notice title=orchestrator states::" + "; ".join(f"{x[0]}={x[1]}" for x in summary))
+        print("::notice title=orchestrator started::" + ("; ".join(f"{x[0]} ({x[3]})" for x in started) or "nothing")
+              + (" [dry run]" if DRY else ""))
+        for e in errors:
+            print(f"::error title=orchestrator::{e}")
     if os.environ.get("GITHUB_STEP_SUMMARY"):
         with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as f:
             f.write(text + "\n")

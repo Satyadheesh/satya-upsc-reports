@@ -70,5 +70,15 @@ jobs:
             dry-run-no-ai) python -m alerts.pick --dry-run --no-ai ;;
             *) python -m alerts.pick ;;
           esac 2>&1 | tee /tmp/out.txt
-      - if: always()
-        run: cat /tmp/out.txt >> "$GITHUB_STEP_SUMMARY" || true
+      - name: Publish the run's output (previews branch, alerts/latest.md)
+        if: always()
+        run: |
+          cat /tmp/out.txt >> "$GITHUB_STEP_SUMMARY" || true
+          set -e
+          mkdir /tmp/wt && cd /tmp/wt && git init -q
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git remote add origin "https://x-access-token:${CORE_TOKEN}@github.com/${GITHUB_REPOSITORY}-core.git"
+          if git fetch -q --depth 1 origin previews; then git checkout -q -b previews FETCH_HEAD; else git checkout -q --orphan previews; fi
+          mkdir -p alerts && cp /tmp/out.txt alerts/latest.md
+          git add -A && git commit -qm "alerts ${MODE} ${GITHUB_RUN_ID}" && git push -q origin HEAD:previews || true

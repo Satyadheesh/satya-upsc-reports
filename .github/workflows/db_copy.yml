@@ -14,7 +14,7 @@ on:
       mode:
         description: 'plan = read-only check; copy = copy everything (writers must be paused); resume = carry on after an interrupted copy; verify = compare old and new; compat = our queries on old vs new + a write test on new'
         type: choice
-        options: [plan, copy, resume, verify, compat]
+        options: [plan, copy, resume, verify, compat, jscheck]
         default: plan
 
 concurrency:
@@ -39,6 +39,10 @@ jobs:
         with:
           python-version: '3.10'
       - run: pip install libsql-client
+      - if: inputs.mode == 'jscheck'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
       - name: Run
         env:
           SATYA_UPSC_DB_URL: ${{ secrets.SATYA_UPSC_DB_URL }}
@@ -51,7 +55,11 @@ jobs:
           NEW_TRANSLATION_DB_TOKEN: ${{ secrets.NEW_TRANSLATION_DB_TOKEN }}
         run: |
           set -o pipefail
-          if [ "${{ inputs.mode }}" = compat ]; then
+          if [ "${{ inputs.mode }}" = jscheck ]; then
+            echo "| client | db | call | result | detail |" > /tmp/out.md; echo "|---|---|---|---|---|" >> /tmp/out.md
+            for v in 0.17.3 latest; do rm -rf /tmp/js && mkdir /tmp/js && cp tools/db_js_check.mjs /tmp/js/ && (cd /tmp/js && npm i -s @libsql/client@$v >/dev/null 2>&1 && node db_js_check.mjs "${{ inputs.which }}" "$v" >> /tmp/out.md 2>&1); done
+            cat /tmp/out.md
+          elif [ "${{ inputs.mode }}" = compat ]; then
             PYTHONPATH=. python -m tools.db_compat --which "${{ inputs.which }}" 2>&1 | tee /tmp/out.md
           else
             PYTHONPATH=. python -m tools.db_copy --which "${{ inputs.which }}" --mode "${{ inputs.mode }}" 2>&1 | tee /tmp/out.md

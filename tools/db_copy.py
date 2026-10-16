@@ -13,7 +13,7 @@ import os
 import sys
 import time
 
-SKIP = ("sqlite_", "_litestream", "libsql_", "_cf_")
+SKIP = ("sqlite_", "_litestream", "libsql_", "_cf_", "__turso")  # __turso_internal_*: the new DBs' own bookkeeping
 BATCH_BYTES = 1_500_000
 BATCH_ROWS = 400
 

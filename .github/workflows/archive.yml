@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       month:
-        description: "Month to archive (YYYY-MM), 'all', or empty for last month"
+        description: "Month to archive (YYYY-MM), 'all', or empty for last month + this month (the orchestrator runs it on the 30th)"
         default: ''
 
 env:

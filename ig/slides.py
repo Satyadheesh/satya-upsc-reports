@@ -151,23 +151,31 @@ def slides_html(day, stories, quiz, lang, is_today=True):
                    + (f'<div class="lbl">{e(t["remember"])}</div><ul class="rem">{facts}</ul>' if facts else "")
                    + f'</div>{_foot(t, i, n)}</section>')
     if quiz:
-        st = ("<ol class='st'>" + "".join(f"<li>{e(x)}</li>" for x in quiz["statements"]) + "</ol>"
-              f'<div class="ask">{e(t["ask"])}</div>') if quiz.get("statements") else ""
-        for reveal in (False, True):
-            i += 1
-            opts = "".join(f'<div class="opt{" ok" if reveal and j == quiz["answer"] else ""}"><i>({"abcd"[j]})</i><span>{e(o)}</span></div>'
-                           for j, o in enumerate(quiz["options"]))
-            tail = (f'<div class="expl"><b>{e(t["answer"])}: ({"abcd"[quiz["answer"]]})</b> {e(quiz["explanation"])}</div>' if reveal
-                    else f'<div class="hint">{e(t["quiz_hint"])}  →</div>')
-            long = " long" if quiz.get("statements") or len(quiz["question"]) > 160 or max(len(o) for o in quiz["options"]) > 60 else ""
-            out.append(f'<section class="s{long}"><div class="stripe"></div><div class="c"><div class="kicker">{e(t["quiz"] if not reveal else t["answer"])}</div>'
-                       f'<div class="q">{e(quiz["question"])}</div>{st}<div class="opts">{opts}</div>{tail}</div>{_foot(t, i, n)}</section>')
+        out += quiz_slides(quiz, t, i, n, _foot)
+        i += 2
     i += 1
     out.append(f'<section class="s dark"><div class="stripe"></div><div class="c">{_brand()}<div class="date" style="margin-top:70px;font-size:76px">{e(t["cta1"])}</div>'
                f'<div class="sub">{e(t["cta2"])}</div>{qr_svg(TELEGRAM)}<div class="tg">{e(t["cta3"])}</div>'
                f'<div class="save">{e(t["cta4"])}</div></div>{_foot(t, i, n)}</section>')
     return (f'<!doctype html><html lang="{lang}"><head><meta charset="utf-8"><style>{CSS}</style></head>'
             f'<body>{"".join(out)}</body></html>'), n
+
+
+def quiz_slides(quiz, t, i, n, foot, tail=""):
+    """The quiz slide and its answer slide (numbered i+1, i+2 of n); `tail` is added under the answer."""
+    st = ("<ol class='st'>" + "".join(f"<li>{e(x)}</li>" for x in quiz["statements"]) + "</ol>"
+          f'<div class="ask">{e(t["ask"])}</div>') if quiz.get("statements") else ""
+    long = " long" if quiz.get("statements") or len(quiz["question"]) > 160 or max(len(o) for o in quiz["options"]) > 60 else ""
+    out = []
+    for reveal in (False, True):
+        i += 1
+        opts = "".join(f'<div class="opt{" ok" if reveal and j == quiz["answer"] else ""}"><i>({"abcd"[j]})</i><span>{e(o)}</span></div>'
+                       for j, o in enumerate(quiz["options"]))
+        end = (f'<div class="expl"><b>{e(t["answer"])}: ({"abcd"[quiz["answer"]]})</b> {e(quiz["explanation"])}</div>{tail}' if reveal
+               else f'<div class="hint">{e(t["quiz_hint"])}  →</div>')
+        out.append(f'<section class="s{long}"><div class="stripe"></div><div class="c"><div class="kicker">{e(t["quiz"] if not reveal else t["answer"])}</div>'
+                   f'<div class="q">{e(quiz["question"])}</div>{st}<div class="opts">{opts}</div>{end}</div>{foot(t, i, n)}</section>')
+    return out
 
 
 def fact_pairs(facts, pointers, hi):

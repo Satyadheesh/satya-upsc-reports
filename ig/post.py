@@ -7,6 +7,7 @@
   python -m ig.post --scheduled            (post whatever slot is due: due from 35 min before to 2.5 h after its time)
   python -m ig.post --now --format ssc --langs en
   python -m ig.post --dry-run [--format all] (render slides + captions to the previews branch, post nothing)
+  python -m ig.post --dry-run --format explain   (the morning explainer, ig.explain: on trial, not in SLOTS yet)
   python -m ig.post --check-setup          (token + account check only)
 
 Runs start every 30 min (GitHub cron, cron-job.org as the reliable starter). Slides are rendered with Chromium,
@@ -268,6 +269,28 @@ class Builder:
         html, n = qotd_html(item, lang)
         return (html, n, qotd_caption(item, lang)), None
 
+    def explain_post(self, lang):
+        """The morning explainer (ig.explain): one of yesterday's top notes, the same one in both languages."""
+        from .explain import explain_caption, explain_html, extras, pick as pick_explain
+        if not hasattr(self, "_explain"):
+            p = self.yday
+            w = self.window(p)
+            en_ed, hi_ed, _, _ = editions(p, w.period(p, "en"), w.period(p, "hi"))
+            ex = extras(self.upsc, main_db(), translation_db(), en_ed[:12])
+            self._explain = pick_explain(en_ed, hi_ed, ex)
+        pe, ph = self._explain
+        p = pe if lang == "en" else ph
+        if not p:
+            return None, "no note with Mains angles or a backstory yesterday" if not pe else "the explainer has no Hindi"
+        q = None
+        if pe.get("mcq") and (ph is None or ph.get("mcq")):
+            q_en = quiz_of([{"id": pe["id"], "mcq": pe["mcq"]}])
+            q_hi = quiz_of([{"id": ph["id"], "mcq": ph["mcq"]}]) if ph else None
+            if q_en and (ph is None or q_hi):  # in both posts or in neither
+                q = q_en if lang == "en" else q_hi
+        html, n = explain_html(p, q, lang)
+        return (html, n, explain_caption(p, bool(q), lang)), None
+
     def ssc_post(self, lang):
         from reports.render import date_label
         from .formats import ssc_caption, ssc_quiz_html
@@ -298,7 +321,7 @@ class Builder:
         return quiz, keys, cards
 
     def build(self, fmt, lang):
-        return {"upsc": self.upsc_post, "qotd": self.qotd_post, "ssc": self.ssc_post}[fmt](lang)
+        return {"upsc": self.upsc_post, "qotd": self.qotd_post, "ssc": self.ssc_post, "explain": self.explain_post}[fmt](lang)
 
 
 def publish(ig, upsc, built, fmt, day, lang, folder, target=None):
@@ -331,7 +354,7 @@ def main():
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--now", action="store_true")
     ap.add_argument("--check-setup", action="store_true")
-    ap.add_argument("--format", default="upsc", help="upsc | qotd | ssc | all (with --now / --dry-run)")
+    ap.add_argument("--format", default="upsc", help="upsc | qotd | explain | ssc | all (with --now / --dry-run)")
     ap.add_argument("--langs", default="en,hi")
     ap.add_argument("--day", default="", help="this IST day instead of today (YYYY-MM-DD)")
     args = ap.parse_args()

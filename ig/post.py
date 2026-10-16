@@ -256,6 +256,12 @@ class Builder:
                                         "title": c["title"]},
                                        {"question": h["ssc_kit"]["question_hi"], "answer": h["ssc_kit"]["answer_hi"],
                                         "key": h["ssc_kit"].get("key_fact_hi")} if h else None)
+        if lang == "hi" and en and not hi:  # the number has no Hindi version: the top SSC question in Hindi instead
+            cards_en, cards_hi = self.ssc_cards()
+            if cards_hi:
+                h = max(cards_hi, key=lambda c: c["importance"] or 0)["ssc_kit"]
+                _, hi = qotd_question({"question": "", "answer": "", "key": "", "title": ""},
+                                      {"question": h["question_hi"], "answer": h["answer_hi"], "key": h.get("key_fact_hi")})
         item = en if lang == "en" else hi
         if not item:
             return None, "no number or question with " + ("Hindi" if lang == "hi" else "content")
@@ -265,7 +271,7 @@ class Builder:
     def ssc_post(self, lang):
         from reports.render import date_label
         from .formats import ssc_caption, ssc_quiz_html
-        for hours in (24, 48):  # a quiet day: take the last two days
+        for hours in (24, 48, 72):  # a quiet day: take the last two or three days
             quiz, keys, cards = self._ssc_quiz(lang, hours)
             if len(quiz) >= 5:
                 break
@@ -285,7 +291,7 @@ class Builder:
                      for c in cards]
         # wrong options: the other cards, plus (English) the week's cards before them
         pool = [(c["ssc_kit"]["question_en"], c["ssc_kit"]["answer_en"], c["ssc_topic"][0]) for c in cards]
-        pool += list(getattr(cards_en, "pool", ())) if lang == "en" else []
+        pool += list(getattr(cards_en if lang == "en" else cards_hi, "pool", ()))
         quiz = ssc_quiz(cards, 5, f"ig:{self.today['key']}:{lang}", pool)
         keys = [next((c["ssc_kit"].get("key_fact_en") or "" for c in cards if c["ssc_kit"]["question_en"] == q), "")
                 for q, _, _ in quiz]

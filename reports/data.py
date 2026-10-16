@@ -550,6 +550,7 @@ def ssc_items(upsc, p):
     picks.sort(key=lambda c: (TOPICS[c["topic"]][0], -c["importance"], -c["published_at"]))
     out, seen_gk = SscCards(), set()
     out.pool = [(c["question"], c["answer"], TOPICS[c["topic"]][0]) for c in cards]  # quiz options (render.ssc_quiz)
+    out.pool_src = [(c["article_id"], c["question"], TOPICS[c["topic"]][0]) for c in cards]  # same cards, for the Hindi pool
     for c in picks:
         q, ans, key = c["question"], c["answer"], c["key_fact"] or ""
         sgk, _ = choose_static_gk({"ssc_question": q, "ssc_answer": ans, "key_fact": key})
@@ -575,7 +576,8 @@ def ssc_items_hi(en_items, trans, ready=0.8):
     if not en_items or trans is None:
         return None, 0.0
     ids = [i["id"] for i in en_items]
-    pool_ids = list({*ids})
+    pool_src = getattr(en_items, "pool_src", ())  # every card of the window: wrong options for the Hindi quiz too
+    pool_ids = list({*ids, *(x[0] for x in pool_src)})
     try:
         rows = in_chunks(trans, "SELECT article_id, question_hi, answer_hi, key_fact_hi, question_en FROM ssc_ca_translations "
                                 "WHERE article_id IN ({ph})", pool_ids)
@@ -595,5 +597,11 @@ def ssc_items_hi(en_items, trans, ready=0.8):
     share = len(out) / len(en_items)
     if share < ready:
         return None, share
-    out.pool = [(i["ssc_kit"]["question_hi"], i["ssc_kit"]["answer_hi"], i["ssc_topic"][0]) for i in out]  # quiz options
+    # quiz options: the Hindi of every card of the window, like the English pool (it was only this PDF's own cards, so
+    # the Hindi quiz rarely found 3 wrong options of the same kind: Instagram's Hindi SSC quiz never had 5 questions)
+    out.pool = [(i["ssc_kit"]["question_hi"], i["ssc_kit"]["answer_hi"], i["ssc_topic"][0]) for i in out]
+    for aid, q_en, module in pool_src:
+        h = hi.get(aid)
+        if h and (not h[4] or h[4] == q_en):
+            out.pool.append((h[1], h[2], module))
     return out, share

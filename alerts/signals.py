@@ -14,12 +14,14 @@ WINDOW = 36 * H      # outlets counted over this window
 
 # daily life: money, travel, exams and jobs, health and safety, weather, rules everyone has to follow
 IMPACT = re.compile(
-    r"\b(?:prices?|petrol|diesel|fuel|lpg|cylinder|cng|gst|income tax|taxe?s?|tariffs?|tolls?|fares?|rail(?:way)?s?|trains?|"
-    r"irctc|flights?|airports?|airlines?|metro|upi|banks?|rbi|repo rate|emi|loans?|interest rates?|salar(?:y|ies)|pensions?|"
-    r"da hike|epfo|provident fund|aadhaar|pan card|ration|subsid(?:y|ies)|holidays?|schools?|colleges?|exams?|results?|"
-    r"admit cards?|neet|jee|cuet|cbse|board exams?|recruitment|vacanc(?:y|ies)|weather|rain(?:fall)?|monsoon|heat ?wave|"
-    r"cold wave|cyclone|floods?|earthquake|landslide|storm|red alert|orange alert|outbreak|virus|vaccines?|hospitals?|"
-    r"medicines?|electricity|power cuts?|water supply|internet|mobile|recharge|gold|silver|sensex|nifty|rupee|deadline|"
+    r"\b(?:price (?:hike|cut|rise)s?|prices? (?:of|to|hiked|cut|rise|rises|rose|fall|fell|increase[sd]?|reduced)|costlier|"
+    r"cheaper|petrol|diesel|fuel|lpg|cylinder|cng|gst|income tax|tax (?:slab|rebate|relief|rate)s?|toll|fares?|railways?|"
+    r"trains?|irctc|flights?|airports?|airlines?|metro|upi|bank holidays?|bank accounts?|atms?|rbi|repo rate|emi|"
+    r"home loans?|interest rates?|salar(?:y|ies)|pensions?|da hike|epfo|provident fund|aadhaar|pan card|ration|"
+    r"subsid(?:y|ies)|holidays?|schools?|colleges?|exams?|results? (?:declared|announced|out)|admit cards?|neet|jee|cuet|"
+    r"cbse|board exams?|recruitment|vacanc(?:y|ies)|weather|rain(?:fall)?|monsoon|heat ?wave|cold wave|cyclone|floods?|"
+    r"earthquake|landslide|storm|red alert|orange alert|outbreak|virus|vaccines?|hospitals?|medicines?|electricity|"
+    r"power cuts?|water supply|internet shutdown|mobile tariffs?|recharge|gold price|silver price|sensex|nifty|deadline|"
     r"new rules?|banned|ban on)\b", re.I)
 NATIONAL = re.compile(r"\b(?:nationwide|across india|all states|union cabinet|cabinet approves|supreme court|parliament|"
                       r"lok sabha|rajya sabha|prime minister|pm modi|centre|central government|election commission|"

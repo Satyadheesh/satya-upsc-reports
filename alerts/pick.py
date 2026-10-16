@@ -92,6 +92,7 @@ def main():
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--no-ai", action="store_true", help="skip the AI editor (signals only)")
     ap.add_argument("--summary", action="store_true", help="only send the day's summary")
+    ap.add_argument("--threshold", type=float, default=THRESHOLD, help="testing: a lower bar to exercise the AI editor")
     args = ap.parse_args()
     dry = args.dry_run
     now = time.time()
@@ -128,7 +129,7 @@ def main():
 
     todo = []
     for (sc, sig), g in scored:
-        if sc < THRESHOLD or len(todo) >= MAX_JUDGE:
+        if sc < args.threshold or len(todo) >= MAX_JUDGE:
             break
         k = known.get(S.story_key(g))
         if k and k["judged_at"] and not (k["decision"] == "rejected" and sc >= (k["score"] or 0) + REJUDGE_GAIN):

@@ -45,8 +45,10 @@ NIGHTLY = [  # job, inputs, text in the run's title that marks it as the nightly
     ("reports", {"scope": "nightly"}, "nightly"),
 ]
 ARCHIVE = dict(repo=REP, wf="archive.yml", tok=SAT, from_day=2)
-# Read-only daily check, after the nightly runs: English words left on live Hindi pages (diag/hindi_pages.md)
-DAILY_DIAG = [("Hindi purity check", REP, "diag.yml", SAT, {"script": "diag_hindi_pages.py"}, "diag_hindi_pages")]
+# IndexNow (Bing & co. learn about new/changed pages): the site's own endpoint, 5 times a day. GitHub's hourly schedule
+# for it fired only ~5 times a day anyway; the endpoint sends only what changed, so this is plenty.
+INDEXNOW_URL = "https://satyadheesh.in/api/indexnow"
+INDEXNOW_HOURS = {1, 5, 9, 13, 17}  # UTC; not 21 (the nightly jobs)
 CHECKS = [  # check, code repo, paths, workflow to run, its repo, token, inputs
     ("notes eval", "Satyadheesh/satya-upsc-service-core", ["analyzer.py", "syllabus.py", "eval"],
      "upsc_eval.yml", SVC, SAT, {}),
@@ -198,12 +200,22 @@ def plan_nightly():
             continue  # the next hourly check is still 21 UTC only if we are early; otherwise tomorrow
         start(f"{name} nightly", j["repo"], j["wf"], j["tok"], inputs, "nightly run")
         summary.append((f"{name} (nightly)", "due", "", "", "nightly run"))
-    for name, repo, wf, tok, inputs, mark in DAILY_DIAG:
-        rs = runs(repo, wf, tok)
-        if any(mark in r["title"] and NOW - r["created"] < 20 * H for r in rs):
-            continue
-        start(name, repo, wf, tok, inputs, "daily check")
-        summary.append((name, "due", "", "", "daily check"))
+
+
+def plan_indexnow():
+    t = datetime.fromtimestamp(NOW, timezone.utc)
+    if EVENT or t.hour not in INDEXNOW_HOURS:  # the hourly check only, not the runs started by finishing jobs
+        return
+    if DRY:
+        summary.append(("IndexNow", "due", "", "", "dry run: not called"))
+        return
+    try:
+        with urllib.request.urlopen(urllib.request.Request(INDEXNOW_URL, method="POST", data=b""), timeout=60) as r:
+            body = json.loads(r.read() or b"{}")
+        summary.append(("IndexNow", f"HTTP {r.status}", "", "", f"submitted {body.get('submitted', '?')} of {body.get('due', '?')}"
+                        + (" (still running on the server)" if body.get("pending") else "")))
+    except Exception as e:
+        summary.append(("IndexNow", "call failed", "", "", str(e)[:120]))
 
 
 def plan_archive():
@@ -242,7 +254,7 @@ def main():
         if not v:
             sys.exit(f"missing token: {k}")
     errors = []
-    for step in (plan_jobs, plan_nightly, plan_archive, plan_checks):
+    for step in (plan_jobs, plan_nightly, plan_indexnow, plan_archive, plan_checks):
         try:
             step()
         except Exception as e:  # one failing part must not stop the others

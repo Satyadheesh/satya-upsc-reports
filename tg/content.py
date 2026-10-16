@@ -5,7 +5,7 @@ import re
 
 from common.db import in_chunks
 
-from .periods import file_key, page_url, title
+from .periods import file_key, label, page_url, ssc_page_url, title
 
 CAPTION_MAX = 1024           # Telegram limit for document captions
 POLL_Q, POLL_OPT, POLL_EXPL = 300, 100, 200
@@ -103,6 +103,18 @@ def caption(period, items, heads, hi=False, both=False):
             break
         lines.append(line)
     return head + (label + "".join(lines) if lines else "") + foot
+
+
+def ssc_caption(period, items, hi=False):
+    """The SSC one-liner PDF's caption (the SSC edition of the same report period)."""
+    k = {"daily": "", "weekly": ("साप्ताहिक " if hi else "Weekly "), "monthly": ("मासिक " if hi else "Monthly ")}[period["kind"]]
+    if hi:
+        return (f"<b>एसएससी {k}करेंट अफेयर्स — {esc(label(period, True))}</b>\n<i>सत्याधीश · {items} वन-लाइनर प्रश्न-उत्तर</i>\n"
+                "SSC CGL, CHSL, MTS, रेलवे और राज्य परीक्षाओं के लिए: हर प्रश्न, उत्तर और मुख्य तथ्य।\n\n"
+                f"<a href=\"{ssc_page_url(period, True)}\">ऑनलाइन पढ़ें</a> · <a href=\"https://satyadheesh.in/ssc?lang=hi\">विषय के अनुसार सभी प्रश्न</a>")
+    return (f"<b>SSC {k}Current Affairs — {esc(label(period))}</b>\n<i>SatyaDheesh · {items} one-liner questions</i>\n"
+            "For SSC CGL, CHSL, MTS, Railways and state exams: every question with its answer and key fact.\n\n"
+            f"<a href=\"{ssc_page_url(period)}\">Read online</a> · <a href=\"https://satyadheesh.in/ssc\">All questions by topic</a>")
 
 
 def _clip(s, n):

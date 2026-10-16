@@ -75,6 +75,16 @@ def file_name(p, lang, edition="full"):
     return f"SatyaDheesh-UPSC-{k}{ed}-Current-Affairs-{p['key']}{'-Hindi' if lang == 'hi' else ''}.pdf"
 
 
+def ssc_file_name(p, lang):
+    k = {"daily": "Daily", "weekly": "Weekly", "monthly": "Monthly"}[p["kind"]]
+    return f"SatyaDheesh-SSC-{k}-Current-Affairs-{p['key']}{'-Hindi' if lang == 'hi' else ''}.pdf"
+
+
+def ssc_page_url(p, hi=False):
+    sub = {"daily": "", "weekly": "week/", "monthly": "month/"}[p["kind"]]
+    return f"https://satyadheesh.in/ssc/current-affairs/{sub}{p['key']}" + ("?lang=hi" if hi else "")
+
+
 def page_url(p, hi=False):
     sub = {"daily": "", "weekly": "week/", "monthly": "month/"}[p["kind"]]
     base = f"https://satyadheesh.in/upsc/current-affairs/{sub}{p['key']}"

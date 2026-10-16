@@ -6,7 +6,8 @@
 
 cron-job.org starts the workflow ~20 min early (GitHub crons are the backup). This script first asks the
 report builder to rebuild this period (so the PDFs carry the latest notes and Hindi corrections), waits for
-the exact minute and posts: English Brief + Detailed, Hindi Brief + Detailed, then the quiz. If the Hindi
+the exact minute and posts: English Brief + Detailed, Hindi Brief + Detailed, the quiz, then the SSC one-liner
+PDFs (English, Hindi). If the Hindi
 PDFs aren't ready (stored once >= 80% of the notes are translated) it posts the rest, keeps asking for a
 rebuild and posts Hindi as soon as it exists; later catch-up runs try again, and the admin chat is told if
 Hindi still hasn't gone out. Each part is recorded in telegram_posts, so a rerun only posts what is missing.
@@ -24,8 +25,8 @@ from common.db import close_all, main_db, translation_db, upsc_db
 from reports.data import Window, editions, select
 from reports.render import SIZE, pick_cards
 
-from .content import caption, quiz_polls, read_editions
-from .periods import file_key, file_name, label, period_for, target_ts
+from .content import caption, quiz_polls, read_editions, read_pdf, ssc_caption
+from .periods import file_key, file_name, label, period_for, ssc_file_name, target_ts
 from .telegram import Bot
 
 READY_WAIT = 60 * 60      # keep checking for a missing English report until target + 60 min
@@ -100,6 +101,8 @@ def main():
     upsc, main, trans = upsc_db(), main_db(), translation_db()
     keys = {lang: tag + file_key(p, lang) for lang in ("en", "hi")}
     keys["quiz"] = tag + f"{p['kind']}:{p['key']}:quiz"
+    # SSC one-liner PDFs (same period, English and Hindi), posted after the UPSC report and quiz (from 17 Oct 2026)
+    keys["ssc-en"], keys["ssc-hi"] = tag + f"{p['kind']}:{p['key']}:ssc:en", tag + f"{p['kind']}:{p['key']}:ssc:hi"
     if not args.dry_run and all(posted(upsc, k) for k in keys.values()):
         print("already posted, nothing to do")
         return
@@ -141,7 +144,14 @@ def main():
                                              "monthly": "questions from last month's news."}[p["kind"]]
                   + " Answers show after you vote.")
 
+    def ssc_pdf(lang):
+        pdf, meta = read_pdf(upsc, file_key(p, lang) + ":ssc")
+        return (pdf, meta["items"]) if pdf is not None else (None, 0)
+
     if args.dry_run:
+        for lang in ("en", "hi"):
+            pdf, n = ssc_pdf(lang)
+            print(f"\n--- SSC {lang}: " + (f"{ssc_file_name(p, lang)} ({len(pdf) // 1024} KB)\n{ssc_caption(p, n, lang == 'hi')}" if pdf else "not stored"))
         for lang, pdfs, cap in (("en", en_pdfs, cap_en), ("hi", hi_pdfs, cap_hi)):
             if not pdfs:
                 print(f"\n--- {lang}: not ready (under 80% translated)")
@@ -184,9 +194,25 @@ def main():
         elif not polls:
             print("no quiz yet (study kit not live for this period)")
 
+    def post_ssc(lang):
+        if posted(upsc, keys["ssc-" + lang]):
+            return
+        pdf, n = ssc_pdf(lang)
+        if pdf is None:
+            print(f"no SSC {lang} PDF stored for {p['key']} (yet)")
+            return
+        m = bot.document(chat, pdf, ssc_file_name(p, lang), ssc_caption(p, n, lang == "hi"))
+        mark(upsc, keys["ssc-" + lang], chat, m["message_id"])
+        print(f"posted SSC {lang} PDF ({n} questions) at {now_ist()} IST", flush=True)
+
     post_lang("en", en_pdfs, cap_en)
     post_lang("hi", hi_pdfs, cap_hi)
     post_quiz()
+    for lang in ("en", "hi"):  # a failed SSC post must not stop the rest
+        try:
+            post_ssc(lang)
+        except Exception as e:
+            print(f"::warning::SSC {lang} post failed: {type(e).__name__}: {str(e)[:200]}")
     if posted(upsc, keys["hi"]) or not live:
         return
 
@@ -198,6 +224,10 @@ def main():
             asked = time.time()
         time.sleep(300)
         hi_pdfs, hi_meta = read_editions(upsc, file_key(p, "hi"))
+        try:
+            post_ssc("hi")
+        except Exception as e:
+            print(f"::warning::SSC hi post failed: {type(e).__name__}")
         if hi_pdfs:
             post_lang("hi", hi_pdfs, hindi_caption(Window(upsc, main, p["start"], p["end"], trans)))
             return

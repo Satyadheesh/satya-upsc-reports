@@ -1,13 +1,14 @@
 name: Refresh site cache
 
 # Asks satyadheesh.in to refresh one cache tag now (e.g. after a manual entity-library fix).
-# 'entities' = party / leader / state pages; 'upsc-reports' = PDF download lists; 'hi' = Hindi pages.
+# 'entities' = party / leader / state pages; 'upsc-reports' = PDF download lists; 'hi' = Hindi pages;
+# 'upsc' = all UPSC notes and lists; 'persist' = every saved data entry (heavy: the site rebuilds its data on demand).
 on:
   workflow_dispatch:
     inputs:
       tag:
         type: choice
-        options: [entities, upsc-reports, hi]
+        options: [entities, upsc-reports, hi, upsc, persist]
         default: entities
       force:
         description: 'Ignore the tag cooldown'

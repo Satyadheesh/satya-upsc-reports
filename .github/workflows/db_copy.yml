@@ -12,9 +12,9 @@ on:
         type: choice
         options: [upsc, translation]
       mode:
-        description: 'plan = read-only check; copy = copy everything (writers must be paused); resume = carry on after an interrupted copy; verify = compare old and new'
+        description: 'plan = read-only check; copy = copy everything (writers must be paused); resume = carry on after an interrupted copy; verify = compare old and new; compat = our queries on old vs new + a write test on new'
         type: choice
-        options: [plan, copy, resume, verify]
+        options: [plan, copy, resume, verify, compat]
         default: plan
 
 concurrency:
@@ -51,7 +51,11 @@ jobs:
           NEW_TRANSLATION_DB_TOKEN: ${{ secrets.NEW_TRANSLATION_DB_TOKEN }}
         run: |
           set -o pipefail
-          PYTHONPATH=. python -m tools.db_copy --which "${{ inputs.which }}" --mode "${{ inputs.mode }}" 2>&1 | tee /tmp/out.md
+          if [ "${{ inputs.mode }}" = compat ]; then
+            PYTHONPATH=. python -m tools.db_compat --which "${{ inputs.which }}" 2>&1 | tee /tmp/out.md
+          else
+            PYTHONPATH=. python -m tools.db_copy --which "${{ inputs.which }}" --mode "${{ inputs.mode }}" 2>&1 | tee /tmp/out.md
+          fi
       - name: Publish
         if: always()
         run: |

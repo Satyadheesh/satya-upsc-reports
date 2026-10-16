@@ -2,7 +2,7 @@
 import re
 
 END = re.compile(r"(?<=[.!?।])(?=\s|$)")
-ABBR = re.compile(r"(?:\b(?:Rs|No|Nos|Dr|Mr|Mrs|Ms|St|vs|Jr|Sr|Govt|Art|Sec|approx|etc)|\b[A-Z])\.$")
+ABBR = re.compile(r"(?:\b(?:Rs|No|Nos|Dr|Mr|Mrs|Ms|St|vs|Jr|Sr|Govt|Art|Sec|approx|etc)|\b[A-Z]|(?:^|\s)(?:एस|पी|एम|एन|आर|डॉ|ए|बी|सी|डी|जे|के|एल|टी|वी|यू|एच|जी))\.$")  # initials: 'S. Jaishankar', 'एस. जयशंकर'
 
 
 def tidy(s, n):
@@ -12,7 +12,7 @@ def tidy(s, n):
     s = " ".join(str(s or "").split())
     if len(s) <= n:
         return s
-    ends = [m.start() for m in END.finditer(s) if not ABBR.search(s[: m.start()])]
+    ends = sentence_ends(s)
     fits = [k for k in ends if n // 3 < k <= n]
     if fits:
         return s[: fits[-1]]
@@ -26,3 +26,28 @@ def tidy(s, n):
         if k > n // 2:
             return s[:k].rstrip(" ,;")
     return s[: s.rfind(" ", 0, n)]
+
+
+WHOLE = re.compile(r"[.!?।)\"'’”]$|\d{4}$")
+
+
+def looks_whole(s):
+    """False for text that stops mid-sentence ('… revealed that the Beti Bachao'): about 2% of older notes' why-in-news
+    were saved cut off by the note writer. A trailing year ('… Amendment Bill, 2026') counts as whole."""
+    return bool(WHOLE.search(" ".join(str(s or "").split())))
+
+
+def sentence_ends(s):
+    return [m.start() for m in END.finditer(s) if not ABBR.search(s[: m.start()])]
+
+
+def first_sentence(s, n=230):
+    """The first sentence, whole ('Minister S. Jaishankar' is not two sentences); a longer one is cut back at its
+    last clause, or None when there is no clean place to cut."""
+    s = " ".join(str(s or "").split())
+    ends = sentence_ends(s)
+    first = s[: ends[0]] if ends else s
+    if len(first) <= n:
+        return first
+    k = max(first.rfind(", ", 0, n), first.rfind("; ", 0, n))
+    return first[:k] if k > n // 2 else None

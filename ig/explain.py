@@ -1,13 +1,12 @@
 """'explain': the morning explainer (replaces 'Number of the day', which gave a number without the story behind it).
 
-One of yesterday's most important UPSC notes, explained over 6-7 slides:
-  cover (headline + the issue) -> what happened (why in news + fact box) -> the backstory (earlier notes on the same
-  story, dated) -> why it matters (the note's Mains angles + Mains question) -> remember for Prelims (kit facts)
-  -> quiz -> answer.
-Everything comes from checked data: the note, its study kit, earlier notes on the same story and their Hindi
-translations; nothing is written for the post. The Hindi post is the English one in Hindi: a part that has no Hindi
-is left out of both."""
-import datetime as dt
+One of yesterday's most important UPSC notes, explained over 5-7 slides:
+  cover (headline + the issue) -> what happened (why in news + fact box) -> the backstory (the earlier updates on
+  the site's timeline of the same story, when there are 2+) -> why it matters (the note's Mains angles + Mains
+  question) -> remember for Prelims (kit facts) -> quiz -> answer.
+Everything comes from checked data: the note, its study kit, the story's timeline and their Hindi translations;
+nothing is written for the post. The Hindi post is the English one in Hindi: a part that has no Hindi is left out
+of both."""
 import json
 import re
 
@@ -17,20 +16,17 @@ from reports.render import MONTHS_HI, subject_name
 from tg.periods import ist_date
 
 from .slides import CSS, _brand, e, fact_pairs, quiz_slides
-from .text import tidy
+from .text import first_sentence, tidy
 
-DAY = 86400
-BACK_DAYS = 120
-STOP_KW = {"india", "indian", "government", "upsc", "gs2", "gs3", "gs1", "gs4", "policy", "supreme court", "centre", "states"}
 
 T = {
-    "en": dict(kicker="EXPLAINED", issue="The issue", inside="Inside: what happened · the backstory · why it matters · Prelims facts · quiz",
+    "en": dict(kicker="EXPLAINED", issue="The issue", inside="Inside", parts=("what happened", "the backstory", "why it matters", "Prelims facts", "quiz"),
                swipe="Swipe to understand it in a minute  →", what="What happened", detail="The details", back="The backstory",
                back_sub="How this story got here", now="Now", matters="Why it matters", mains="Mains question",
                remember="Remember for Prelims", quiz="Quick quiz", quiz_hint="Answer on the next slide", answer="Answer",
                ask="Which of the statements given above is/are correct?", daily="A new explainer every morning · follow @satyadheesh",
                save="Save this for revision", site="satyadheesh.in/upsc"),
-    "hi": dict(kicker="समझिए", issue="मुद्दा", inside="अंदर: क्या हुआ · पृष्ठभूमि · क्यों ज़रूरी · प्रीलिम्स तथ्य · क्विज़",
+    "hi": dict(kicker="समझिए", issue="मुद्दा", inside="अंदर", parts=("क्या हुआ", "पृष्ठभूमि", "क्यों ज़रूरी", "प्रीलिम्स तथ्य", "क्विज़"),
                swipe="एक मिनट में समझने के लिए स्वाइप करें  →", what="क्या हुआ", detail="विवरण", back="पृष्ठभूमि",
                back_sub="यह ख़बर यहाँ तक कैसे पहुँची", now="अब", matters="क्यों ज़रूरी", mains="मेन्स प्रश्न",
                remember="प्रीलिम्स के लिए याद रखें", quiz="क्विज़", quiz_hint="उत्तर अगली स्लाइड पर", answer="उत्तर",
@@ -89,24 +85,6 @@ def _date(ts, hi):
     return f"{d.day} {MONTHS_HI[d.month - 1]} {d.year}" if hi else f"{d.day} {d.strftime('%b')} {d.year}"
 
 
-def first_sentence(s, n=230):
-    s = " ".join(str(s or "").split())
-    m = re.search(r"(?<=[.।!?])\s", s)
-    first = s[: m.start()] if m else s
-    if len(first) <= n:
-        return first
-    k = max(first.rfind(", ", 0, n), first.rfind("; ", 0, n))
-    return first[:k] if k > n // 2 else None
-
-
-def _kw(v):
-    try:
-        x = json.loads(v) if v else []
-    except (TypeError, ValueError):
-        return set()
-    return {k.strip().lower() for k in x if isinstance(k, str) and k.strip()} - STOP_KW if isinstance(x, list) else set()
-
-
 def _arr(v):
     try:
         x = json.loads(v) if v else []
@@ -116,59 +94,47 @@ def _arr(v):
 
 
 def extras(upsc, main, trans, items):
-    """For each candidate note: Mains angles (en, hi) and the backstory = earlier notes (BACK_DAYS) on the same story
-    (same timeline, or 2+ shared keywords in the same GS paper), oldest first, with their Hindi.
-    -> {article_id: {"dims": [..], "dims_hi": [..], "back": [(ts, why_en, why_hi|None)]}}"""
+    """For each candidate note: its Mains angles (en, hi) and its backstory = the updates before it on the site's
+    timeline of the same story (event_articles), oldest first, with their Hindi.
+    (Matching earlier notes by shared keywords was tried and dropped: the keywords are themes like 'bilateral
+    trade', so it pulled India-Russia updates into an India-US trade story.)
+    -> {article_id: {"dims": [..], "dims_hi": [..], "back": [(ts, text_en, text_hi|None)]}}"""
     ids = [it["id"] for it in items]
     if not ids:
         return {}
+    pub = {it["id"]: it["published_at"] for it in items}
     out = {i: {"dims": [], "dims_hi": [], "back": []} for i in ids}
-    meta = {r[0]: r for r in in_chunks(upsc, "SELECT article_id, mains_dimensions, keywords, gs_paper, published_at "
-                                              "FROM upsc_articles WHERE article_id IN ({ph})", ids)}
-    for i in ids:
-        if i in meta:
-            out[i]["dims"] = [d for d in _arr(meta[i][1]) if 25 <= len(d) <= 200][:4]
+    for a, v in in_chunks(upsc, "SELECT article_id, mains_dimensions FROM upsc_articles WHERE article_id IN ({ph})", ids):
+        out[a]["dims"] = [d for d in _arr(v) if 25 <= len(d) <= 200][:4]
     if trans is not None:
-        for r in in_chunks(trans, "SELECT article_id, mains_dimensions_hi FROM upsc_translations WHERE article_id IN ({ph})", ids):
-            out[r[0]]["dims_hi"] = [clean_hi(d) for d in _arr(r[1])][:4]
-    # same timeline: the events these notes belong to, and every article on them
+        for a, v in in_chunks(trans, "SELECT article_id, mains_dimensions_hi FROM upsc_translations WHERE article_id IN ({ph})", ids):
+            out[a]["dims_hi"] = [clean_hi(d) for d in _arr(v)][:4]
     ev_of = {r[0]: r[1] for r in in_chunks(main, "SELECT article_id, event_id FROM event_articles WHERE article_id IN ({ph})", ids)}
-    ev_arts = {}
-    evs = sorted(set(ev_of.values()))
-    if evs:
-        for a, ev in in_chunks(main, "SELECT article_id, event_id FROM event_articles WHERE event_id IN ({ph})", evs):
-            ev_arts.setdefault(ev, set()).add(a)
-    first = min(meta[i][4] for i in ids if i in meta) if meta else 0
-    older = upsc.execute("SELECT article_id, published_at, gs_paper, why_in_news, keywords FROM upsc_articles INDEXED BY idx_upsc_pub "
-                         "WHERE published_at >= ? AND published_at < ?", [first - BACK_DAYS * DAY, first + 2 * DAY]).rows
-    for i in ids:
-        if i not in meta:
-            continue
-        _, _, kws, paper, pub = meta[i]
-        kw = _kw(kws)
-        same_ev = ev_arts.get(ev_of.get(i), set())
-        cands = []
-        for a, ts, p, why, okw in older:
-            if a == i or ts >= pub - 12 * 3600 or not why:
-                continue
-            if a in same_ev or (p == paper and len(kw & _kw(okw)) >= 2):
-                s = first_sentence(why, 200)
-                if s:
-                    cands.append((ts, a, s))
-        cands.sort()
+    steps = {}
+    for ev in sorted(set(ev_of.values())):
+        steps[ev] = main.execute("SELECT ea.article_id, ea.event_date, COALESCE(ea.milestone, a.rephrased_title, a.title) "
+                                 "FROM event_articles ea JOIN articles a ON a.id = ea.article_id WHERE ea.event_id = ? "
+                                 "ORDER BY ea.event_date", [ev]).rows
+    for i, ev in ev_of.items():
         picked = []
-        for ts, a, s in cands:  # one per day, no repeats of the same headline
-            if any(ist_date(ts) == ist_date(t) or same_headline(s, x) for t, _, x in picked):
+        for a, ts, text in steps.get(ev, []):
+            s = first_sentence(text, 220)
+            if a == i or not ts or ts >= pub[i] - 6 * 3600 or not s:
+                continue
+            if picked and (ist_date(ts) == ist_date(picked[-1][0]) or same_headline(s, picked[-1][2])):
+                picked[-1] = (ts, a, s)  # one step per day: the day's latest
                 continue
             picked.append((ts, a, s))
         out[i]["back"] = picked[-4:]  # the latest four steps before this one
     back_ids = sorted({a for v in out.values() for _, a, _ in v["back"]})
-    hi_why = {}
+    hi_txt = {}
     if trans is not None and back_ids:
-        hi_why = {r[0]: clean_hi(r[1]) for r in in_chunks(trans, "SELECT article_id, why_in_news_hi FROM upsc_translations "
+        hi_txt = {r[0]: clean_hi(r[1]) for r in in_chunks(trans, "SELECT article_id, rephrased_title_hi FROM translations "
                                                               "WHERE article_id IN ({ph})", back_ids) if r[1]}
+        hi_txt.update({r[0]: clean_hi(r[1]) for r in in_chunks(trans, "SELECT article_id, milestone_hi FROM event_milestone_translations "
+                                                                   "WHERE article_id IN ({ph})", back_ids) if r[1]})
     for v in out.values():
-        v["back"] = [(ts, s, first_sentence(hi_why.get(a), 260) if hi_why.get(a) else None) for ts, a, s in v["back"]]
+        v["back"] = [(ts, s, first_sentence(hi_txt[a], 280) if hi_txt.get(a) else None) for ts, a, s in v["back"]]
     return out
 
 
@@ -230,17 +196,19 @@ def explain_html(p, quiz, lang):
     """p: parts (candidate); quiz: ig.post.quiz_of(...) or None."""
     t, hi = T[lang], lang == "hi"
     body = []  # (theme, inner html)
+    has = (True, len(p["back"]) >= 2, bool(p["dims"] or p.get("mains")), bool(p["facts"]), bool(quiz))
+    inside = f'{t["inside"]}: ' + " · ".join(x for x, ok in zip(t["parts"], has) if ok)
     issue = f'<div class="lbl">{e(t["issue"])}</div><div class="issue">{e(p["issue"])}</div>' if p.get("issue") else ""
     body.append(("t-orange", f'{_brand()}<div class="top-row" style="margin-top:56px"><span class="kicker">{e(t["kicker"])} · '
                              f'{e(_date(p["published_at"], hi))}</span></div><div style="margin-top:26px">{_chip(p, hi)}</div>'
-                             f'<h1 class="lead">{e(p["title"])}</h1>{issue}<div class="inside">{e(t["inside"])}</div>'
+                             f'<h1 class="lead">{e(p["title"])}</h1>{issue}<div class="inside">{e(inside)}</div>'
                              f'<div class="swipe">{e(t["swipe"])}</div>'))
     body.append(("", f'<div class="top-row">{_chip(p, hi)}</div><div class="h2">{e(t["what"])}</div>'
                      f'<div class="para">{e(tidy(p["why"], 320))}</div>'
                      f'<div class="lbl">{e(t["detail"])}</div><div class="para sm">{e(tidy(p["fact_box"], 520))}</div>'))
     if len(p["back"]) >= 2:
         li = "".join(f'<li><span class="d">{e(_date(ts, hi))}</span>{e(s)}</li>' for ts, s in p["back"])
-        li += f'<li class="now"><span class="d">{e(t["now"])} · {e(_date(p["published_at"], hi))}</span>{e(first_sentence(p["why"], 200) or tidy(p["why"], 200))}</li>'
+        li += f'<li class="now"><span class="d">{e(t["now"])} · {e(_date(p["published_at"], hi))}</span>{e(p["title"])}</li>'
         body.append(("", f'<div class="kicker">{e(t["back_sub"])}</div><div class="h2">{e(t["back"])}</div><ol class="tl">{li}</ol>'))
     if p["dims"] or p.get("mains"):
         dims = "".join(f"<li>{e(d)}</li>" for d in p["dims"])

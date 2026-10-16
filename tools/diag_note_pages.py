@@ -28,7 +28,7 @@ try:
             dt = round(time.time() - t, 2)
             why = ("Why in news" in b or "चर्चा में क्यों" in b)
             kit = ("Practice question" in b or "Show answer" in b or "उत्तर देखें" in b)
-            rel = ("More on" in b or "इस विषय पर और" in b or "related" in b.lower())
+            rel = bool(re.search(r"More [^<]{1,60} notes<", b)) or "पर और नोट्स" in b
             hl = 'hreflang="hi-IN"' in b
             print(f"| {aid} | {lang} | {st} | {dt} | {why} | {kit} | {rel} | {hl} |")
 finally:

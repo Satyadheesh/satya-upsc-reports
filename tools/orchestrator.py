@@ -7,6 +7,7 @@ read from GitHub (run history) and from the code repos (latest commits), so a mi
 
 Rules (UTC times; IST = UTC + 5:30):
   * notes, ssc ............ every 6 hours (their own loops continue until the backlog is done)
+  * alerts ................ every hourly check (top-news alerts, shadow mode: admin chat only)
   * kit, hindi, reports ... soon after the job they depend on finished new work (and is no longer looping),
                             and at least every 6 hours
   * nightly (21 UTC) ...... study kit full scan, PDF reports nightly scope
@@ -38,6 +39,8 @@ JOBS = {
     "kit":     dict(repo=REP, wf="study_kit.yml", tok=SAT, every=6 * H, after=["notes"], inputs={}),
     "hindi":   dict(repo=HIN, wf="hindi_service.yml", tok=HINDI, every=6 * H, after=["notes", "kit"], inputs={}),
     "reports": dict(repo=REP, wf="reports.yml", tok=SAT, every=6 * H, after=["kit", "hindi"], inputs={"scope": "recent"}),
+    # top-news alerts, shadow mode (picks go to the admin Telegram chat only): every hourly check
+    "alerts":  dict(repo=REP, wf="alerts.yml", tok=SAT, every=50 * 60, after=[], inputs={}),
 }
 NIGHTLY_HOUR = 21  # 02:30 IST
 NIGHTLY = [  # job, inputs, text in the run's title that marks it as the nightly run

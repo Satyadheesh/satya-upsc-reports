@@ -96,3 +96,23 @@ CREATE TABLE IF NOT EXISTS ssc_ca (
 CREATE INDEX IF NOT EXISTS idx_ssc_ca_pub ON ssc_ca(published_at DESC);
 CREATE INDEX IF NOT EXISTS idx_ssc_ca_status ON ssc_ca(status, published_at DESC);
 CREATE INDEX IF NOT EXISTS idx_ssc_ca_cluster ON ssc_ca(cluster_id);
+
+-- Top-news alerts, shadow mode (alerts/pick.py, 17 Oct 2026): every story the picker scored, what the AI editor said,
+-- and the decision (picked / blocked:<why> / rejected / scored). Picks go to the admin Telegram chat only.
+CREATE TABLE IF NOT EXISTS alert_candidates (
+  story_key   TEXT PRIMARY KEY,
+  article_id  INTEGER NOT NULL,
+  first_seen  INTEGER NOT NULL,
+  score       REAL NOT NULL,
+  signals     TEXT,
+  judged_at   INTEGER,
+  notify      INTEGER,
+  importance  INTEGER,
+  why         TEXT,
+  line_en     TEXT,
+  line_hi     TEXT,
+  decision    TEXT,
+  decided_at  INTEGER,
+  admin_msg   INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_alert_decided ON alert_candidates(decided_at);

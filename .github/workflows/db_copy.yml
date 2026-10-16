@@ -1,0 +1,66 @@
+name: Database copy (to the new Mumbai databases)
+run-name: "DB copy: ${{ inputs.which }} ${{ inputs.mode }}"
+
+# Copies the UPSC or the Hindi translation database into a new, empty database (16 Oct 2026 move to Mumbai).
+# plan / verify only read; copy writes to the NEW database only (never the old one) and refuses a new DB with data.
+# Output: the run's summary and the previews branch (diag/db_copy_<which>.md).
+on:
+  workflow_dispatch:
+    inputs:
+      which:
+        description: 'Database'
+        type: choice
+        options: [upsc, translation]
+      mode:
+        description: 'plan = read-only check; copy = copy everything (writers must be paused); verify = compare old and new'
+        type: choice
+        options: [plan, copy, verify]
+        default: plan
+
+concurrency:
+  group: db-copy
+  cancel-in-progress: false
+
+env:
+  CORE_TOKEN: ${{ secrets.CORE_TOKEN }}
+
+jobs:
+  copy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository }}-core
+          token: ${{ secrets.CORE_TOKEN }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - run: pip install libsql-client
+      - name: Run
+        env:
+          SATYA_UPSC_DB_URL: ${{ secrets.SATYA_UPSC_DB_URL }}
+          SATYA_UPSC_DB_TOKEN: ${{ secrets.SATYA_UPSC_DB_TOKEN }}
+          SATYA_TRANSLATION_DB_URL: ${{ secrets.SATYA_TRANSLATION_DB_URL }}
+          SATYA_TRANSLATION_DB_TOKEN: ${{ secrets.SATYA_TRANSLATION_DB_TOKEN }}
+          NEW_UPSC_DB_URL: ${{ secrets.NEW_UPSC_DB_URL }}
+          NEW_UPSC_DB_TOKEN: ${{ secrets.NEW_UPSC_DB_TOKEN }}
+          NEW_TRANSLATION_DB_URL: ${{ secrets.NEW_TRANSLATION_DB_URL }}
+          NEW_TRANSLATION_DB_TOKEN: ${{ secrets.NEW_TRANSLATION_DB_TOKEN }}
+        run: |
+          set -o pipefail
+          PYTHONPATH=. python -m tools.db_copy --which "${{ inputs.which }}" --mode "${{ inputs.mode }}" 2>&1 | tee /tmp/out.md
+      - name: Publish
+        if: always()
+        run: |
+          cat /tmp/out.md >> "$GITHUB_STEP_SUMMARY" || true
+          set -e
+          mkdir /tmp/wt && cd /tmp/wt && git init -q
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git remote add origin "https://x-access-token:${CORE_TOKEN}@github.com/${GITHUB_REPOSITORY}-core.git"
+          if git fetch -q --depth 1 origin previews; then git checkout -q -b previews FETCH_HEAD; else git checkout -q --orphan previews; fi
+          mkdir -p diag && cp /tmp/out.md "diag/db_copy_${{ inputs.which }}.md" && cp /tmp/out.md diag/latest.md
+          git add -A && git commit -qm "db copy ${{ inputs.which }} ${{ inputs.mode }} ${GITHUB_RUN_ID}" && git push -q origin HEAD:previews

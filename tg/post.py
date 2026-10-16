@@ -33,6 +33,7 @@ READY_WAIT = 60 * 60      # keep checking for a missing English report until tar
 HI_WAIT = 100 * 60        # keep checking for a missing Hindi report until target + 100 min (job limit 150)
 REBUILD_EVERY = 30 * 60   # while waiting, ask the builder to rebuild this period this often
 LATE_LIMIT = 6 * 3600     # never post a "morning" report more than 6 h late
+SSC_MIN = {"daily": 8, "weekly": 25, "monthly": 60}  # fewer SSC questions than this: not worth a post (the week covers it)
 
 
 def posted(upsc, key):
@@ -151,7 +152,9 @@ def main():
     if args.dry_run:
         for lang in ("en", "hi"):
             pdf, n = ssc_pdf(lang)
-            print(f"\n--- SSC {lang}: " + (f"{ssc_file_name(p, lang)} ({len(pdf) // 1024} KB)\n{ssc_caption(p, n, lang == 'hi')}" if pdf else "not stored"))
+            print(f"\n--- SSC {lang}: " + (f"{ssc_file_name(p, lang)} ({len(pdf) // 1024} KB)"
+                                           + (f" NOT POSTED (under {SSC_MIN[p['kind']]} questions)" if (n or 0) < SSC_MIN[p["kind"]] else "")
+                                           + f"\n{ssc_caption(p, n, lang == 'hi')}" if pdf else "not stored"))
         for lang, pdfs, cap in (("en", en_pdfs, cap_en), ("hi", hi_pdfs, cap_hi)):
             if not pdfs:
                 print(f"\n--- {lang}: not ready (under 80% translated)")
@@ -200,6 +203,9 @@ def main():
         pdf, n = ssc_pdf(lang)
         if pdf is None:
             print(f"no SSC {lang} PDF stored for {p['key']} (yet)")
+            return
+        if (n or 0) < SSC_MIN[p["kind"]]:
+            print(f"SSC {lang}: only {n} questions (posts from {SSC_MIN[p['kind']]}); not posted")
             return
         m = bot.document(chat, pdf, ssc_file_name(p, lang), ssc_caption(p, n, lang == "hi"))
         mark(upsc, keys["ssc-" + lang], chat, m["message_id"])

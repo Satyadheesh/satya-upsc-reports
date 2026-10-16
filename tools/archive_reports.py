@@ -3,7 +3,7 @@ repo Satyadheesh/satyadheesh-archive: one release `reports-YYYY-MM` per month, o
 (daily_2026-10-09_en_brief.pdf ...). Re-running replaces assets whose PDF changed (same name, new size), so a month
 can be archived again after late rebuilds. Reads the DB only.
 
-  python tools/archive_reports.py              (the month that just ended)
+  python tools/archive_reports.py              (last month and this month so far: the monthly run on the 30th)
   python tools/archive_reports.py 2026-09      (one month)
   python tools/archive_reports.py all          (every month in the DB)
 
@@ -66,9 +66,10 @@ def main():
         months = sorted(by_month)
     elif arg:
         months = [arg]
-    else:
-        first = dt.date.today().replace(day=1)
-        months = [(first - dt.timedelta(days=1)).strftime("%Y-%m")]
+    else:  # last month (its last days, built after the previous run) and this month so far; unchanged PDFs are skipped
+        today = (dt.datetime.utcnow() + dt.timedelta(hours=5, minutes=30)).date()
+        first = today.replace(day=1)
+        months = [(first - dt.timedelta(days=1)).strftime("%Y-%m"), today.strftime("%Y-%m")]
     total = 0
     for month in months:
         items = by_month.get(month, [])

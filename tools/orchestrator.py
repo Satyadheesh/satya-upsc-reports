@@ -10,7 +10,7 @@ Rules (UTC times; IST = UTC + 5:30):
   * kit, hindi, reports ... soon after the job they depend on finished new work (and is no longer looping),
                             and at least every 6 hours
   * nightly (21 UTC) ...... study kit full scan, PDF reports nightly scope
-  * archive ............... once a month, from the 2nd
+  * archive ............... once a month, on the 30th (last day in February) from 06:00 IST: last month + this month
   * checks on change ...... when a job's prompt/model code changed since its check last ran: notes eval,
                             Hindi quality test / token check, study kit preview, SSC preview
 Telegram and Instagram are not handled here (they keep their own triggers).
@@ -44,7 +44,9 @@ NIGHTLY = [  # job, inputs, text in the run's title that marks it as the nightly
     ("kit", {"full": "true"}, "full scan"),
     ("reports", {"scope": "nightly"}, "nightly"),
 ]
-ARCHIVE = dict(repo=REP, wf="archive.yml", tok=SAT, from_day=2)
+# Report PDF backup: on the 30th of each month (the last day in February), from 06:00 IST; it backs up last month and
+# this month so far (Yash, 17 Oct 2026)
+ARCHIVE = dict(repo=REP, wf="archive.yml", tok=SAT, day=30, from_hour_ist=6)
 # IndexNow (Bing & co. learn about new/changed pages): the site's own endpoint, 5 times a day. GitHub's hourly schedule
 # for it fired only ~5 times a day anyway; the endpoint sends only what changed, so this is plenty.
 INDEXNOW_URL = "https://satyadheesh.in/api/indexnow"
@@ -219,18 +221,20 @@ def plan_indexnow():
 
 
 def plan_archive():
-    t = datetime.fromtimestamp(NOW, timezone.utc)
-    if t.day < ARCHIVE["from_day"]:
+    import calendar
+    ist = datetime.fromtimestamp(NOW + 19800, timezone.utc)  # IST clock
+    day = min(ARCHIVE["day"], calendar.monthrange(ist.year, ist.month)[1])
+    if ist.day < day or (ist.day == day and ist.hour < ARCHIVE["from_hour_ist"]):
         return
+    due_at = datetime(ist.year, ist.month, day, ARCHIVE["from_hour_ist"], tzinfo=timezone.utc).timestamp() - 19800
     rs = runs(ARCHIVE["repo"], ARCHIVE["wf"], ARCHIVE["tok"])
-    month_start = datetime(t.year, t.month, ARCHIVE["from_day"], tzinfo=timezone.utc).timestamp()
-    if is_active(rs) or last_success(rs, lambda r: r["created"] >= month_start):
+    if is_active(rs) or last_success(rs, lambda r: r["created"] >= due_at):
         return
-    recent_fail = next((r for r in rs if r["created"] >= month_start and NOW - r["created"] < 6 * H), None)
+    recent_fail = next((r for r in rs if r["created"] >= due_at and NOW - r["created"] < 6 * H), None)
     if recent_fail:
         return
-    start("archive", ARCHIVE["repo"], ARCHIVE["wf"], ARCHIVE["tok"], {}, "this month's archive has not run yet")
-    summary.append(("archive", "due", "", "", "monthly"))
+    start("archive", ARCHIVE["repo"], ARCHIVE["wf"], ARCHIVE["tok"], {}, "this month's backup (from the 30th) has not run yet")
+    summary.append(("archive", "due", "", "", "monthly, 30th"))
 
 
 def plan_checks():

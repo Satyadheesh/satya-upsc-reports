@@ -9,7 +9,7 @@ on:
       mode:
         description: 'hourly = normal run; summary = send the day so far to the admin chat; dry-run = print only'
         type: choice
-        options: [hourly, summary, dry-run, dry-run-no-ai]
+        options: [hourly, summary, dry-run, dry-run-no-ai, dry-run-low-bar]
         default: hourly
 
 concurrency:
@@ -68,6 +68,7 @@ jobs:
             summary) python -m alerts.pick --summary ;;
             dry-run) python -m alerts.pick --dry-run ;;
             dry-run-no-ai) python -m alerts.pick --dry-run --no-ai ;;
+            dry-run-low-bar) python -m alerts.pick --dry-run --threshold 2 ;;
             *) python -m alerts.pick ;;
           esac 2>&1 | tee /tmp/out.txt
       - name: Publish the run's output (previews branch, alerts/latest.md)

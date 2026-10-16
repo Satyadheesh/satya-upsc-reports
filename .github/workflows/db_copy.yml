@@ -12,9 +12,9 @@ on:
         type: choice
         options: [upsc, translation]
       mode:
-        description: 'plan = read-only check; copy = copy everything (writers must be paused); verify = compare old and new'
+        description: 'plan = read-only check; copy = copy everything (writers must be paused); resume = carry on after an interrupted copy; verify = compare old and new'
         type: choice
-        options: [plan, copy, verify]
+        options: [plan, copy, resume, verify]
         default: plan
 
 concurrency:

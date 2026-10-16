@@ -31,6 +31,18 @@ SUMMARY_HOUR = 22              # IST: the hourly run in this hour also sends the
 SITE = "https://satyadheesh.in"
 
 
+def retry(fn, *a, tries=3):
+    """Database reads from GitHub (US) to Mumbai: a dropped connection now and then is retried."""
+    for k in range(tries):
+        try:
+            return fn(*a)
+        except Exception as ex:
+            if k == tries - 1:
+                raise
+            print(f"  (database read failed: {type(ex).__name__}; retrying)")
+            time.sleep(5 * (k + 1))
+
+
 def ist_hour(ts):
     return time.gmtime(ts + 19800).tm_hour
 
@@ -114,11 +126,11 @@ def main():
         send_summary()
         return
 
-    arts = S.load(main_, upsc, now)
+    arts = retry(S.load, main_, upsc, now)
     groups = S.stories(arts)
     fresh = [g for g in groups if g[0]["at"] >= now - S.FRESH]
     ids = [a["id"] for g in fresh for a in g]
-    tl, us = S.timeline_depth(main_, ids), S.upsc_scores(upsc, ids)
+    tl, us = retry(S.timeline_depth, main_, ids), retry(S.upsc_scores, upsc, ids)
     scored = sorted(((S.score(g, now, tl, us), g) for g in fresh), key=lambda x: -x[0][0])
     known = {r[0]: dict(judged_at=r[1], decision=r[2], score=r[3]) for r in upsc.execute(
         "SELECT story_key, judged_at, decision, score FROM alert_candidates WHERE first_seen >= ?", [now - 3 * 86400]).rows}
@@ -148,7 +160,7 @@ def main():
     last_pick = max((r["decided_at"] for r in picks_today), default=0)
     for sc, sig, g in todo:
         lead = sig["lead_id"]
-        blob = main_.execute("SELECT rephrased_article FROM articles WHERE id = ?", [lead]).rows
+        blob = retry(lambda: main_.execute("SELECT rephrased_article FROM articles WHERE id = ?", [lead]).rows)
         summary = S.text_of(blob[0][0]) if blob else ""
         if editor:
             v = editor.judge(sig, summary)

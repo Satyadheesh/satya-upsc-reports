@@ -11,13 +11,13 @@ TELEGRAM = "https://t.me/satyadheesh"
 
 L = {
     "en": dict(kicker="UPSC CURRENT AFFAIRS", today="Today’s 5 for UPSC", day5="The day’s 5 for UPSC", swipe="Swipe for the notes  →",
-               why="Why it matters", remember="Remember", quiz="Quick quiz", quiz_hint="Answer on the next slide",
+               why="In the news", remember="Remember", quiz="Quick quiz", quiz_hint="Answer on the next slide",
                answer="Answer", ask="Which of the statements given above is/are correct?",
                cta1="Get the full PDF every morning", cta2="Brief + Detailed notes in English and Hindi, with a quiz, at 5 AM.",
                cta3="Telegram  @satyadheesh", cta4="Save this post for revision", site="satyadheesh.in/upsc",
                also="+ {n} more you can’t skip today"),
     "hi": dict(kicker="यूपीएससी करेंट अफेयर्स", today="आज की 5 ज़रूरी ख़बरें", day5="दिन की 5 ज़रूरी ख़बरें", swipe="नोट्स के लिए स्वाइप करें  →",
-               why="क्यों ज़रूरी", remember="याद रखें", quiz="क्विज़", quiz_hint="उत्तर अगली स्लाइड पर",
+               why="ख़बर में क्यों", remember="याद रखें", quiz="क्विज़", quiz_hint="उत्तर अगली स्लाइड पर",
                answer="उत्तर", ask="ऊपर दिए गए कथनों में से कौन-सा/से सही है/हैं?",
                cta1="पूरी पीडीएफ हर सुबह पाएँ", cta2="सार + विस्तृत नोट्स, हिंदी और अंग्रेज़ी में, क्विज़ के साथ, सुबह 5 बजे।",
                cta3="टेलीग्राम  @satyadheesh", cta4="दोहराव के लिए यह पोस्ट सेव करें", site="satyadheesh.in/upsc",

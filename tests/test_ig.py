@@ -87,6 +87,16 @@ class NumberScore(unittest.TestCase):
         self.assertGreaterEqual(number_score("891", "Asiatic lions, the highest count ever recorded", 3), 2)
 
 
+class Tidy(unittest.TestCase):
+    def test_finishes_the_sentence(self):
+        s = "India and the UAE agreed to deepen ties, targeting a doubling of bilateral trade by 2030. More follows here."
+        self.assertEqual(tidy(s, 70), "India and the UAE agreed to deepen ties, targeting a doubling of bilateral trade by 2030.")
+
+    def test_abbreviations_are_not_sentence_ends(self):
+        s = "The scheme gives Rs. 5,000 a month to each family in the first year. It runs to 2030 and covers every district."
+        self.assertEqual(tidy(s, 60), "The scheme gives Rs. 5,000 a month to each family in the first year.")
+
+
 class Explain(unittest.TestCase):
     def parts(self, back=2, dims=2, issue="Judicial review of reservation limits"):
         return {"id": 1, "title": "SC upholds strike-down of 34% BC quota", "paper": "GS2", "subject": "polity", "issue": issue,

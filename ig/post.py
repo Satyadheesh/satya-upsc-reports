@@ -1,13 +1,13 @@
 """Instagram: six posts a day, each English post followed by its Hindi twin two hours later (IST):
 
-  08:30 / 10:30  Number (or Question) of the day   2 slides   (ig.formats, from yesterday's study kit / SSC cards)
+  08:30 / 10:30  Explainer: one of yesterday's top notes   5-7 slides (ig.explain; replaced 'Number of the day' on 17 Oct 2026)
   13:00 / 15:00  SSC quiz, 5 questions             8 slides   (ig.formats, from the last 24 h of SSC cards)
   19:00 / 21:00  UPSC "Today's 5"                  9 slides   (ig.slides, today's notes)
 
   python -m ig.post --scheduled            (post whatever slot is due: due from 35 min before to 2.5 h after its time)
   python -m ig.post --now --format ssc --langs en
   python -m ig.post --dry-run [--format all] (render slides + captions to the previews branch, post nothing)
-  python -m ig.post --dry-run --format explain   (the morning explainer, ig.explain: on trial, not in SLOTS yet)
+  python -m ig.post --dry-run --format qotd      (the old 'Number of the day', kept but no longer posted)
   python -m ig.post --check-setup          (token + account check only)
 
 Runs start every 30 min (GitHub cron, cron-job.org as the reliable starter). Slides are rendered with Chromium,
@@ -34,6 +34,7 @@ from tg.periods import DAY, ist_date, ist_midnight, target_ts
 from .caption import caption
 from .graph import IG, current_token
 from .slides import FIT_JS, fact_pairs, slides_html
+from .text import looks_whole, tidy
 
 HERE = pathlib.Path(__file__).resolve().parent
 REPORTS = HERE.parent / "reports"          # fonts live here
@@ -48,24 +49,23 @@ def today_period(now, day=None):
     return {"kind": "daily", "key": d.isoformat(), "start": start, "end": start + DAY, "first": d, "last": d}
 
 
-def tidy(s, n):
-    """First sentence(s) up to n characters, cut at a sentence/clause end, never mid-word, no '…'."""
-    s = " ".join(str(s or "").split())
-    if len(s) <= n:
-        return s
-    for sep in (". ", "। ", "; ", ", "):
-        k = s.rfind(sep, 0, n)
-        if k > n // 3:
-            return s[:k].rstrip(" ,;") + ("." if sep == ". " else "।" if sep == "। " else "")
-    return s[: s.rfind(" ", 0, n)]
+BOILER = re.compile(r"\bcase study\b|\bGS ?[1-4]\b|\b(?:key|important) (?:topic|issue)\b", re.I)
 
 
-def story(it, lang):
+def story(it, lang, en=None):
+    """One story slide. 'Why' is the note's why-in-news: the kit's takeaway is nearly always boilerplate
+    ('Monetary policy: a key GS3 topic …', 87 of 88 on 8-9 Oct) and is used only when it isn't (checked on the
+    English kit, so both languages make the same choice)."""
     hi = lang == "hi"
     kit = (it.get("kit_hi") if hi else it.get("kit")) or {}
     title = kit.get("short_title") or (hindi_title(it) if hi else it["title_en"])
-    why = kit.get("takeaway") or tidy(it["why"], 200)
-    return {"id": it["id"], "title": tidy(title, 170), "why": tidy(why, 220), "paper": it["paper"], "subject": it["subject"],
+    en_take = (it.get("kit") or {}).get("takeaway")
+    why = kit.get("takeaway") if en_take and kit.get("takeaway") and not BOILER.search(en_take) else it["why"]
+    if why == it["why"] and not looks_whole((en or it)["why"]) and kit.get("brief_text"):
+        # a why-in-news saved cut off (~2% of notes; judged on the English, `en`, which the Hindi translates):
+        # the kit's one-line brief, which is whole
+        why = kit["brief_text"]
+    return {"id": it["id"], "title": tidy(title, 170), "why": tidy(why, 240), "paper": it["paper"], "subject": it["subject"],
             "facts": [(lab, tidy(txt, 170)) for lab, txt in fact_pairs(kit.get("facts"), it["pointers"], hi)][:3],
             "mcq": kit.get("mcq")}
 
@@ -159,7 +159,7 @@ def posted(upsc, key):
     return bool(upsc.execute("SELECT 1 FROM ig_posts WHERE key = ?", [key]).rows)
 
 
-SLOTS = [("qotd", "en", "08:30"), ("qotd", "hi", "10:30"), ("ssc", "en", "13:00"), ("ssc", "hi", "15:00"),
+SLOTS = [("explain", "en", "08:30"), ("explain", "hi", "10:30"), ("ssc", "en", "13:00"), ("ssc", "hi", "15:00"),
          ("upsc", "en", "19:00"), ("upsc", "hi", "21:00")]
 EARLY, LATE = 35 * 60, int(2.5 * 3600)
 
@@ -220,7 +220,7 @@ class Builder:
             q_en = q_hi = None  # the quiz runs in both carousels or in neither
         if lang == "hi" and len(top_hi) < HI_MIN:
             return None, f"Hindi: {len(top_hi)} of {len(top)} stories translated (needs {HI_MIN})"
-        st = [story(i, lang) for i in (top if lang == "en" else top_hi)]
+        st = [story(i, lang) for i in top] if lang == "en" else [story(h, lang, en) for h, en in zip(top_hi, top)]
         is_today = p["first"] == ist_date(time.time())
         html, n = slides_html(p["first"], st, q_en if lang == "en" else q_hi, lang, is_today)
         return (html, n, caption(p["first"], st, bool(q_en if lang == "en" else q_hi), lang, is_today)), None
@@ -354,7 +354,7 @@ def main():
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--now", action="store_true")
     ap.add_argument("--check-setup", action="store_true")
-    ap.add_argument("--format", default="upsc", help="upsc | qotd | explain | ssc | all (with --now / --dry-run)")
+    ap.add_argument("--format", default="upsc", help="upsc | explain | ssc | qotd | all (with --now / --dry-run)")
     ap.add_argument("--langs", default="en,hi")
     ap.add_argument("--day", default="", help="this IST day instead of today (YYYY-MM-DD)")
     args = ap.parse_args()
@@ -371,7 +371,7 @@ def main():
     b = Builder(upsc, now, args.day or None)
     day = b.today["key"]
     langs = [l for l in args.langs.split(",") if l in ("en", "hi")]
-    fmts = ["qotd", "ssc", "upsc"] if args.format == "all" else [args.format]
+    fmts = ["explain", "ssc", "upsc"] if args.format == "all" else [args.format]
 
     if args.dry_run:
         out = {}

@@ -1,6 +1,7 @@
 """The AI editor: for the few stories the cheap signals put on top, would an ordinary person in India want a push
-notification about this right now? Same local model as the study kit (Gemma, llama.cpp). English only: the Hindi line
-is the Hindi service's own headline translation."""
+notification about this right now? Same local model as the study kit (Gemma, llama.cpp). It only decides: the
+notification text is the article's own checked headline (a line the model rewrote in a test changed the facts), and in
+Hindi the Hindi service's translation of that headline."""
 SYSTEM = """You are the night-and-day news editor of a free Indian news app read by ordinary people (students,
 families, workers, shopkeepers), not policy experts. You decide whether ONE story deserves a push notification.
 

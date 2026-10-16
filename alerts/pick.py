@@ -165,9 +165,10 @@ def main():
         if editor:
             v = editor.judge(sig, summary)
         else:  # no AI: a conservative rule
-            v = dict(notify=sc >= 10, importance=min(10, int(sc)), why="signals only (no AI editor)", line=sig["titles"][0])
-        c = dict(score=sc, signals=sig, importance=v["importance"], why=v["why"], line_en=v["line"] or sig["titles"][0],
-                 line_hi=hindi_line(trans, [a["id"] for a in g]))
+            v = dict(notify=sc >= 10, importance=min(10, int(sc)), why="signals only (no AI editor)")
+        lead_title = next((a["title"] for a in g if a["id"] == lead), sig["titles"][0])
+        c = dict(score=sc, signals=sig, importance=v["importance"], why=v["why"], line_en=lead_title,
+                 line_hi=hindi_line(trans, [lead] + [a["id"] for a in g if a["id"] != lead]))
         h = ist_hour(now)
         if not v["notify"] or v["importance"] < MIN_IMPORTANCE:
             decision = "rejected"

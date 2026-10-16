@@ -16,13 +16,11 @@ company news that changes nothing for ordinary people, or anything already old.
 Answer in JSON:
 - notify: true/false
 - importance: 1-10 for an ordinary reader (7+ means notify-worthy)
-- why: one short sentence, the reason for your decision
-- line: the notification text, at most 110 characters, plain factual English that says what happened and why it
-  matters to the reader. No clickbait, no questions, no emojis, no "Breaking"."""
+- why: one short sentence, the reason for your decision"""
 
 SCHEMA = {"type": "object", "properties": {
     "notify": {"type": "boolean"}, "importance": {"type": "integer", "minimum": 1, "maximum": 10},
-    "why": {"type": "string"}, "line": {"type": "string"}}, "required": ["notify", "importance", "why", "line"]}
+    "why": {"type": "string"}}, "required": ["notify", "importance", "why"]}
 
 
 def prompt(sig, summary):
@@ -38,7 +36,6 @@ class Editor:
         self.m = Model(download(), n_ctx=4096)
 
     def judge(self, sig, summary):
-        out = self.m.json(SYSTEM, prompt(sig, summary), SCHEMA, temperature=0.1, max_tokens=300)
-        line = " ".join(str(out.get("line") or "").split())[:140]
+        out = self.m.json(SYSTEM, prompt(sig, summary), SCHEMA, temperature=0.1, max_tokens=200)
         return dict(notify=bool(out.get("notify")), importance=int(out.get("importance") or 0),
-                    why=" ".join(str(out.get("why") or "").split())[:300], line=line)
+                    why=" ".join(str(out.get("why") or "").split())[:300])

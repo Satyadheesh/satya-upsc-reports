@@ -3,6 +3,7 @@ from Ireland to Mumbai, next to the server and the main DB).
 
   python -m tools.db_copy --which upsc|translation --mode plan     read-only: schema, row counts, new DB empty?
   python -m tools.db_copy --which upsc|translation --mode copy     schema + every row (refuses a new DB that has data)
+  python -m tools.db_copy --which upsc|translation --mode resume   carry on after an interrupted copy (new rows only)
   python -m tools.db_copy --which upsc|translation --mode verify   read-only: row counts and last row ids, old vs new
 
 Old DB: SATYA_UPSC_DB_URL/TOKEN or SATYA_TRANSLATION_DB_URL/TOKEN. New DB: NEW_UPSC_DB_URL/TOKEN or
@@ -73,18 +74,37 @@ def plan(old, new):
     return objs, newobjs, virt
 
 
-def copy(old, new):
+def read_page(old, collist, n, rid, last, off, limit):
+    """Up to `limit` rows; halves the page when the database refuses an answer that big (big PDF chunks)."""
+    while True:
+        try:
+            if rid:
+                return old.execute(f'SELECT {collist} FROM "{n}" WHERE rowid > ? ORDER BY rowid LIMIT {limit}',
+                                   [last if last is not None else -(2 ** 62)]).rows, limit
+            return old.execute(f'SELECT {collist} FROM "{n}" LIMIT {limit} OFFSET {off}').rows, limit
+        except Exception as e:
+            if limit == 1:
+                raise
+            limit = max(1, limit // 4)
+            print(f"  ({n}: answer too big ({type(e).__name__}), reading {limit} rows at a time)", flush=True)
+
+
+def copy(old, new, resume=False):
     objs, newobjs, virt = plan(old, new)
     if virt:
         raise SystemExit("virtual tables present: not copying")
-    if any(t == "table" and count(new, n) for t, n, _, _ in newobjs):
-        raise SystemExit("the new DB already has data: not copying (use a fresh empty DB)")
-    for t, n, _, _ in newobjs:  # leftovers of an earlier, interrupted copy (no rows)
-        if t in ("table", "view"):
-            new.execute(f'DROP {t.upper()} IF EXISTS "{n}"')
+    have = {n for t, n, _, _ in newobjs if t == "table"}
+    if not resume:
+        if any(t == "table" and count(new, n) for t, n, _, _ in newobjs):
+            raise SystemExit("the new DB already has data: not copying (use resume after an interrupted copy)")
+        for t, n, _, _ in newobjs:  # leftovers of an earlier, interrupted copy (no rows)
+            if t in ("table", "view"):
+                new.execute(f'DROP {t.upper()} IF EXISTS "{n}"')
+        have = set()
     t0 = time.time()
     for n, sql in tables(objs):
-        new.execute(sql)
+        if n not in have:
+            new.execute(sql)
     print(f"\n## copying ({len(tables(objs))} tables)", flush=True)
     for n, _ in tables(objs):
         cols = [r[1] for r in old.execute(f'PRAGMA table_info("{n}")').rows]
@@ -92,13 +112,17 @@ def copy(old, new):
         sel_cols = (["rowid"] if rid else []) + cols
         collist = ", ".join(f'"{c}"' for c in sel_cols)
         ins = f'INSERT INTO "{n}" ({collist}) VALUES ({", ".join("?" * len(sel_cols))})'
-        done, last, off, tn = 0, None, 0, time.time()
-        while True:
+        done, last, off, tn, limit = 0, None, 0, time.time(), 2000
+        if resume and n in have:
             if rid:
-                rows = old.execute(f'SELECT {collist} FROM "{n}" WHERE rowid > ? ORDER BY rowid LIMIT 2000',
-                                   [last if last is not None else -(2 ** 62)]).rows
-            else:
-                rows = old.execute(f'SELECT {collist} FROM "{n}" LIMIT 2000 OFFSET {off}').rows
+                last = new.execute(f'SELECT MAX(rowid) FROM "{n}"').rows[0][0]
+            elif count(new, n):
+                if count(new, n) == count(old, n):
+                    print(f"- {n}: already complete")
+                    continue
+                raise SystemExit(f"{n}: partly copied and has no row ids: empty it by hand first")
+        while True:
+            rows, limit = read_page(old, collist, n, rid, last, off, limit)
             if not rows:
                 break
             batch, b = [], 0
@@ -116,8 +140,9 @@ def copy(old, new):
             if rid:
                 last = rows[-1][0]
         print(f"- {n}: {done:,} rows in {time.time() - tn:.0f}s", flush=True)
+    existing = {o[1] for o in objects(new)}
     for t, n, _, sql in objs:
-        if t in ("index", "trigger", "view"):
+        if t in ("index", "trigger", "view") and n not in existing:
             new.execute(sql)
     try:
         seq = old.execute("SELECT name, seq FROM sqlite_sequence").rows
@@ -155,11 +180,11 @@ def verify(old, new):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--which", choices=["upsc", "translation"], required=True)
-    ap.add_argument("--mode", choices=["plan", "copy", "verify"], default="plan")
+    ap.add_argument("--mode", choices=["plan", "copy", "resume", "verify"], default="plan")
     a = ap.parse_args()
     old, new = client("SATYA_", a.which), client("NEW_", a.which)
     try:
-        {"plan": plan, "copy": copy, "verify": verify}[a.mode](old, new)
+        {"plan": plan, "copy": copy, "resume": lambda o, n: copy(o, n, resume=True), "verify": verify}[a.mode](old, new)
     finally:
         for c in (old, new):
             try:

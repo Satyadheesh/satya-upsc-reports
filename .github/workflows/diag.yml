@@ -42,12 +42,12 @@ jobs:
       - run: pip install libsql-client qrcode
       - name: Run
         env:
-          SATYA_UPSC_DB_URL: ${{ secrets.SATYA_UPSC_DB_URL }}
-          SATYA_UPSC_DB_TOKEN: ${{ secrets.SATYA_UPSC_DB_TOKEN }}
+          SATYA_UPSC_DB_URL: ${{ secrets.NEW_UPSC_DB_URL }}
+          SATYA_UPSC_DB_TOKEN: ${{ secrets.NEW_UPSC_DB_TOKEN }}
           SATYA_DB_URL: ${{ secrets.SATYA_DB_URL }}
           SATYA_DB_TOKEN: ${{ secrets.SATYA_DB_TOKEN }}
-          SATYA_TRANSLATION_DB_URL: ${{ secrets.SATYA_TRANSLATION_DB_URL }}
-          SATYA_TRANSLATION_DB_TOKEN: ${{ secrets.SATYA_TRANSLATION_DB_TOKEN }}
+          SATYA_TRANSLATION_DB_URL: ${{ secrets.NEW_TRANSLATION_DB_URL }}
+          SATYA_TRANSLATION_DB_TOKEN: ${{ secrets.NEW_TRANSLATION_DB_TOKEN }}
           URLS: ${{ github.event.inputs.urls }}
           SAMPLE: ${{ github.event.inputs.sample }}
           SITE: ${{ github.event.inputs.site }}

@@ -29,7 +29,7 @@ try:
             why = ("Why in news" in b or "चर्चा में क्यों" in b)
             kit = ("Practice question" in b or "Show answer" in b or "उत्तर देखें" in b)
             rel = bool(re.search(r"More [^<]{1,60} notes<", b)) or "पर और नोट्स" in b
-            hl = 'hreflang="hi-IN"' in b
+            hl = bool(re.search(r"hreflang=\"hi-IN\"", b, re.I))
             print(f"| {aid} | {lang} | {st} | {dt} | {why} | {kit} | {rel} | {hl} |")
 finally:
     close_all()

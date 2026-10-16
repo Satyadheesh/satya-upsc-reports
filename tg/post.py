@@ -6,8 +6,8 @@
 
 cron-job.org starts the workflow ~20 min early (GitHub crons are the backup). This script first asks the
 report builder to rebuild this period (so the PDFs carry the latest notes and Hindi corrections), waits for
-the exact minute and posts: English Brief + Detailed, Hindi Brief + Detailed, the quiz, then the SSC one-liner
-PDFs (English, Hindi). If the Hindi
+the exact minute and posts: English Brief + Detailed, Hindi Brief + Detailed, the quiz, and (weekly report only)
+the SSC one-liner PDFs (English, Hindi). If the Hindi
 PDFs aren't ready (stored once >= 80% of the notes are translated) it posts the rest, keeps asking for a
 rebuild and posts Hindi as soon as it exists; later catch-up runs try again, and the admin chat is told if
 Hindi still hasn't gone out. Each part is recorded in telegram_posts, so a rerun only posts what is missing.
@@ -33,7 +33,8 @@ READY_WAIT = 60 * 60      # keep checking for a missing English report until tar
 HI_WAIT = 100 * 60        # keep checking for a missing Hindi report until target + 100 min (job limit 150)
 REBUILD_EVERY = 30 * 60   # while waiting, ask the builder to rebuild this period this often
 LATE_LIMIT = 6 * 3600     # never post a "morning" report more than 6 h late
-SSC_MIN = {"daily": 8, "weekly": 25, "monthly": 60}  # fewer SSC questions than this: not worth a post (the week covers it)
+SSC_KINDS = {"weekly"}  # the SSC one-liner PDFs go out with the weekly report only (Yash, 17 Oct 2026)
+SSC_MIN = 10            # a week with fewer SSC questions than this gets no SSC post
 
 
 def posted(upsc, key):
@@ -102,8 +103,9 @@ def main():
     upsc, main, trans = upsc_db(), main_db(), translation_db()
     keys = {lang: tag + file_key(p, lang) for lang in ("en", "hi")}
     keys["quiz"] = tag + f"{p['kind']}:{p['key']}:quiz"
-    # SSC one-liner PDFs (same period, English and Hindi), posted after the UPSC report and quiz (from 17 Oct 2026)
-    keys["ssc-en"], keys["ssc-hi"] = tag + f"{p['kind']}:{p['key']}:ssc:en", tag + f"{p['kind']}:{p['key']}:ssc:hi"
+    # SSC one-liner PDFs (same period, English and Hindi), posted after the UPSC report and quiz: weekly only
+    if p["kind"] in SSC_KINDS:
+        keys["ssc-en"], keys["ssc-hi"] = tag + f"{p['kind']}:{p['key']}:ssc:en", tag + f"{p['kind']}:{p['key']}:ssc:hi"
     if not args.dry_run and all(posted(upsc, k) for k in keys.values()):
         print("already posted, nothing to do")
         return
@@ -150,10 +152,10 @@ def main():
         return (pdf, meta["items"]) if pdf is not None else (None, 0)
 
     if args.dry_run:
-        for lang in ("en", "hi"):
+        for lang in (("en", "hi") if p["kind"] in SSC_KINDS else ()):
             pdf, n = ssc_pdf(lang)
             print(f"\n--- SSC {lang}: " + (f"{ssc_file_name(p, lang)} ({len(pdf) // 1024} KB)"
-                                           + (f" NOT POSTED (under {SSC_MIN[p['kind']]} questions)" if (n or 0) < SSC_MIN[p["kind"]] else "")
+                                           + (f" NOT POSTED (under {SSC_MIN} questions)" if (n or 0) < SSC_MIN else "")
                                            + f"\n{ssc_caption(p, n, lang == 'hi')}" if pdf else "not stored"))
         for lang, pdfs, cap in (("en", en_pdfs, cap_en), ("hi", hi_pdfs, cap_hi)):
             if not pdfs:
@@ -198,14 +200,14 @@ def main():
             print("no quiz yet (study kit not live for this period)")
 
     def post_ssc(lang):
-        if posted(upsc, keys["ssc-" + lang]):
+        if p["kind"] not in SSC_KINDS or posted(upsc, keys["ssc-" + lang]):
             return
         pdf, n = ssc_pdf(lang)
         if pdf is None:
             print(f"no SSC {lang} PDF stored for {p['key']} (yet)")
             return
-        if (n or 0) < SSC_MIN[p["kind"]]:
-            print(f"SSC {lang}: only {n} questions (posts from {SSC_MIN[p['kind']]}); not posted")
+        if (n or 0) < SSC_MIN:
+            print(f"SSC {lang}: only {n} questions (posts from {SSC_MIN}); not posted")
             return
         m = bot.document(chat, pdf, ssc_file_name(p, lang), ssc_caption(p, n, lang == "hi"))
         mark(upsc, keys["ssc-" + lang], chat, m["message_id"])

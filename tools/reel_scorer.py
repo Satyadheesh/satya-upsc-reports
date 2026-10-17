@@ -140,14 +140,12 @@ def dispatch_daily_reel(u_db, m_db, force=False):
         "article_id": aid,
         "title": title,
         "topic": topic,
-        "category": cat,
         "viral_score": score,
         "hook_angle": hook,
         "wow_fact": fact,
         "body": body[:1200],
         "image_url": img,
-        "source": "The Hindu",
-        "url": source_url
+        "source": "The Hindu"
     }
 
     print(f"\n🚀 Dispatching top viral reel to Satyadheesh/reels:")

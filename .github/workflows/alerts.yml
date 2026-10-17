@@ -7,9 +7,9 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: 'hourly = normal run; summary = send the day so far to the admin chat; dry-run = print only'
+        description: 'hourly = normal run; summary = send the day so far to the admin chat; dry-run = print only; replay-today = replay today from 07:00 IST (print only)'
         type: choice
-        options: [hourly, summary, dry-run, dry-run-no-ai, dry-run-low-bar]
+        options: [hourly, summary, dry-run, dry-run-no-ai, replay-today]
         default: hourly
 
 concurrency:
@@ -33,7 +33,7 @@ env:
 jobs:
   pick:
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 90
     permissions:
       contents: read
     steps:
@@ -68,7 +68,7 @@ jobs:
             summary) python -m alerts.pick --summary ;;
             dry-run) python -m alerts.pick --dry-run ;;
             dry-run-no-ai) python -m alerts.pick --dry-run --no-ai ;;
-            dry-run-low-bar) python -m alerts.pick --dry-run --threshold 2 ;;
+            replay-today) python -m alerts.pick --replay-from 7 ;;
             *) python -m alerts.pick ;;
           esac 2>&1 | tee /tmp/out.txt
       - name: Publish the run's output (previews branch, alerts/latest.md)

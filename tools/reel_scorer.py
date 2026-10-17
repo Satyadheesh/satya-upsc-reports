@@ -76,10 +76,118 @@ def decompress(blob, limit=1200):
     return ""
 
 
+def dispatch_daily_reel(u_db, m_db, force=False):
+    """Dispatches the top viral story of the day to Satyadheesh/reels via repository_dispatch."""
+    token = os.environ.get("CORE_TOKEN") or os.environ.get("GITHUB_PAT") or os.environ.get("GITHUB_PAT_CLASSIC")
+    if not token:
+        print("  Notice: No GitHub PAT found (CORE_TOKEN); skipping reel dispatch.")
+        return
+
+    now = int(time.time())
+    # Ensure at most 1 reel per ~18 hours unless force=True
+    if not force:
+        try:
+            recent = u_db.execute("SELECT max(dispatched_at) FROM reel_posts").rows
+            if recent and recent[0][0] and (now - int(recent[0][0])) < 18 * 3600:
+                last_ago_hrs = (now - int(recent[0][0])) / 3600
+                print(f"  Daily reel already dispatched {last_ago_hrs:.1f}h ago. Skipping duplicate dispatch.")
+                return
+        except Exception:
+            pass
+
+    # Find the highest viral score candidate (>= 7) from the last 24h not yet reeled
+    since = now - 24 * 3600
+    try:
+        candidates = u_db.execute(
+            "SELECT c.article_id, c.topic, c.viral_score, c.hook_angle, c.wow_fact, c.why "
+            "FROM reel_candidates c "
+            "WHERE c.viral_score >= 7 AND c.created_at >= ? "
+            "  AND c.article_id NOT IN (SELECT article_id FROM reel_posts) "
+            "ORDER BY c.viral_score DESC, c.published_at DESC "
+            "LIMIT 1",
+            [since]
+        ).rows
+    except Exception as e:
+        print(f"  Error querying reel_candidates for dispatch: {e}")
+        return
+
+    if not candidates:
+        print("  No new high viral candidate (score >= 7) available to dispatch right now.")
+        return
+
+    top = candidates[0]
+    aid, topic, score, hook, fact, why = int(top[0]), str(top[1]), int(top[2]), str(top[3]), str(top[4]), str(top[5])
+
+    # Fetch article details from main DB
+    art_rows = m_db.execute(
+        "SELECT title, rephrased_title, rephrased_article, category, image_url, url "
+        "FROM articles WHERE id = ?",
+        [aid]
+    ).rows
+
+    if not art_rows:
+        print(f"  Article {aid} not found in main DB.")
+        return
+
+    r = art_rows[0]
+    title = r[1] or r[0]
+    body = decompress(r[2])
+    cat = r[3] or topic
+    img = r[4] or ""
+    source_url = r[5] or ""
+
+    payload = {
+        "article_id": aid,
+        "title": title,
+        "topic": topic,
+        "category": cat,
+        "viral_score": score,
+        "hook_angle": hook,
+        "wow_fact": fact,
+        "body": body[:1200],
+        "image_url": img,
+        "source": "The Hindu",
+        "url": source_url
+    }
+
+    print(f"\n🚀 Dispatching top viral reel to Satyadheesh/reels:")
+    print(f"   Article #{aid} (Score {score}/10) [{topic}]")
+    print(f"   Hook: {hook}")
+
+    import urllib.request
+    req = urllib.request.Request(
+        "https://api.github.com/repos/Satyadheesh/reels/dispatches",
+        data=json.dumps({"event_type": "generate_reel", "client_payload": payload}).encode(),
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Accept": "application/vnd.github+json",
+            "Content-Type": "application/json",
+            "User-Agent": "satya-reel-scorer"
+        },
+        method="POST"
+    )
+
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            if resp.status in (200, 204):
+                print(f"✅ Successfully dispatched reel event for #{aid} to Satyadheesh/reels!")
+                u_db.execute(
+                    "INSERT OR REPLACE INTO reel_posts (article_id, title, topic, viral_score, hook_angle, dispatched_at) "
+                    "VALUES (?, ?, ?, ?, ?, ?)",
+                    [aid, title, topic, score, hook, now]
+                )
+            else:
+                print(f"⚠️ Dispatch returned status {resp.status}")
+    except Exception as e:
+        print(f"❌ Failed to dispatch to Satyadheesh/reels: {e}")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--batch", type=int, default=30, help="Number of unscored articles to evaluate")
     ap.add_argument("--dry-run", action="store_true", help="Print scores without writing to DB")
+    ap.add_argument("--dispatch", action="store_true", help="Force dispatch of top candidate")
+    ap.add_argument("--no-dispatch", action="store_true", help="Do not trigger reels repo")
     args = ap.parse_args()
 
     now = int(time.time())
@@ -113,6 +221,8 @@ def main():
 
     if not candidates:
         print(f"No new unscored articles found in the last 24h.")
+        if not args.no_dispatch and not args.dry_run:
+            dispatch_daily_reel(u_db, m_db, force=args.dispatch)
         return
 
     print(f"Evaluating {len(candidates)} new articles with Gemma 4 12B ({MODEL_NAME})...")
@@ -152,6 +262,9 @@ def main():
             print(f"  Error scoring article {art['id']}: {e}")
 
     print(f"\nDone: {scored_count} articles scored ({high_score_count} with viral score >= 7).")
+
+    if not args.no_dispatch and not args.dry_run:
+        dispatch_daily_reel(u_db, m_db, force=args.dispatch)
 
 
 if __name__ == "__main__":

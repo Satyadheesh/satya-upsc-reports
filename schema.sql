@@ -130,3 +130,14 @@ CREATE TABLE IF NOT EXISTS reel_candidates (
   created_at      INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_reel_candidates_score ON reel_candidates(viral_score DESC, published_at DESC);
+
+-- Dispatched viral reels (one row per dispatched article, ensures no duplicate reels)
+CREATE TABLE IF NOT EXISTS reel_posts (
+  article_id    INTEGER PRIMARY KEY,
+  title         TEXT,
+  topic         TEXT,
+  viral_score   INTEGER NOT NULL,
+  hook_angle    TEXT,
+  dispatched_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_reel_posts_time ON reel_posts(dispatched_at DESC);

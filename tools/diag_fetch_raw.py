@@ -9,6 +9,9 @@ for path in (os.environ.get("URLS") or "/").split():
     r = c.getresponse()
     body = r.read().decode("utf-8", "replace")
     print(f"## {path}\n- status {r.status}, location: {r.getheader('location')}, cache: {r.getheader('x-nextjs-cache')} / {r.getheader('x-cache-status') or r.getheader('x-cache')}")
+    upd = re.findall(r"(\d+) updates tracked", body)[:1]
+    marks = {k: body.count(k) for k in ("more report", "related timeline", "Part of a bigger story")}
+    print(f"- markers: {marks}, updates: {upd}")
     for pat in (r'<meta[^>]+http-equiv="refresh"[^>]*>', r'NEXT_REDIRECT[^"\\]{0,160}', r'<title>[^<]*</title>'):
         m = re.search(pat, body)
         print(f"- {pat[:22]}: {m.group(0)[:220] if m else '-'}")

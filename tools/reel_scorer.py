@@ -81,6 +81,11 @@ For the given news article, write a punchy 4-part narration script strictly in n
 The script MUST sound natural and conversational when spoken aloud by an Indian creator.
 Avoid formal bureaucratic Hindi or robotic clichés. Never output raw English words unless they are everyday terms (like 'dialysis', 'center', 'doctor', 'hospital', 'ticket').
 
+CRITICAL VOICE/TTS RULE:
+- NEVER use currency symbols like '₹' or '$' or '%' in spoken fields (hook_say, core_say, twist_say, engagement_say).
+- ALWAYS write them out as words in Hindi (e.g. write '4000 रुपये' instead of '₹4000', '999 रुपये' instead of '₹999', '20 प्रतिशत' instead of '20%').
+- Currency symbols like '₹' may ONLY appear in graphic on-screen fields (headline_hi, twist_stat).
+
 Structure:
 1. headline_hi: Catchy on-screen headline in Hindi (max 8 words)
 2. hook_say: 1-2 opening spoken lines in Hindi grabbing immediate attention

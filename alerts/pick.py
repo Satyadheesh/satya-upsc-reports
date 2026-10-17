@@ -1,15 +1,18 @@
 """Top-news alerts, SHADOW MODE: every hour, find the news an ordinary person in India would want a notification
 about, and send what it WOULD notify to the admin Telegram chat only (TELEGRAM_TEST_CHAT_ID). Nothing reaches users.
 
-  1. cheap signals (alerts.signals): outlets covering the story, daily-life words, national scope, disasters,
-     running timelines, UPSC importance; foreign-only and local crime count against
-  2. the top few (score >= THRESHOLD) go to the AI editor (alerts.judge): notify? importance 1-10, why, the line
+  1. cheap signals (alerts.signals): how widely it is reported (related reports in the window; outlets), daily-life
+     words, national scope, disasters, running timelines, UPSC importance; foreign-only and local crime count against
+  2. each hour the best MAX_JUDGE stories not judged yet (score >= THRESHOLD, a low floor) go to the AI editor
+     (alerts.judge): notify? importance 1-10, why. Ranking, not a high bar: a fixed bar of 6 let one story a day
+     through on 17 Oct, because 'outlets' is almost always 1 (the scraper drops duplicates)
   3. picked = notify and importance >= 7, 07:00-22:00 IST, at most 3 a day, 90 min apart
 Every judged story is stored in alert_candidates (UPSC DB) with its signals and decision, to tune this later.
 
   python -m alerts.pick              (hourly run)
   python -m alerts.pick --summary    (the day's picks and best rejects to the admin chat; the 22:00 IST run does it)
-  python -m alerts.pick --dry-run [--no-ai]   (print only: no DB writes, no Telegram)"""
+  python -m alerts.pick --dry-run [--no-ai]   (print only: no DB writes, no Telegram)
+  python -m alerts.pick --replay-from 7       (print only: replay today hour by hour from 07:00 IST, as if it had run)"""
 import argparse
 import html
 import json
@@ -20,8 +23,8 @@ from common.db import close_all, in_chunks, main_db, translation_db, upsc_db
 
 from . import signals as S
 
-THRESHOLD = 6
-MAX_JUDGE = 4
+THRESHOLD = 2           # floor only: the editor sees the best MAX_JUDGE stories of the hour above it
+MAX_JUDGE = 3
 REJUDGE_GAIN = 4          # a rejected story is judged again once its score has grown this much
 MIN_IMPORTANCE = 7
 DAILY_CAP = 3
@@ -104,8 +107,11 @@ def main():
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--no-ai", action="store_true", help="skip the AI editor (signals only)")
     ap.add_argument("--summary", action="store_true", help="only send the day's summary")
-    ap.add_argument("--threshold", type=float, default=THRESHOLD, help="testing: a lower bar to exercise the AI editor")
+    ap.add_argument("--threshold", type=float, default=THRESHOLD, help="minimum signal score to be judged at all")
+    ap.add_argument("--replay-from", type=int, default=None, help="replay today from this IST hour (print only)")
     args = ap.parse_args()
+    if args.replay_from is not None:
+        return replay(args)
     dry = args.dry_run
     now = time.time()
     upsc, main_, trans = upsc_db(), main_db(), translation_db()
@@ -127,11 +133,7 @@ def main():
         return
 
     arts = retry(S.load, main_, upsc, now)
-    groups = S.stories(arts)
-    fresh = [g for g in groups if g[0]["at"] >= now - S.FRESH]
-    ids = [a["id"] for g in fresh for a in g]
-    tl, us = retry(S.timeline_depth, main_, ids), retry(S.upsc_scores, upsc, ids)
-    scored = sorted(((S.score(g, now, tl, us), g) for g in fresh), key=lambda x: -x[0][0])
+    scored, groups, fresh = rank(arts, now, main_, upsc)
     known = {r[0]: dict(judged_at=r[1], decision=r[2], score=r[3]) for r in upsc.execute(
         "SELECT story_key, judged_at, decision, score FROM alert_candidates WHERE first_seen >= ?", [now - 3 * 86400]).rows}
     print(f"{len(arts)} articles in {S.WINDOW // 3600} h -> {len(groups)} stories; {len(fresh)} new in the last "
@@ -198,13 +200,81 @@ def main():
                 [S.story_key(g), lead, int(sig["first_seen"]), sc, S.dumps(sig), int(now), int(v["notify"]), v["importance"],
                  v["why"], c["line_en"], c["line_hi"], decision, int(now), msg_id])
     if not todo:
-        print("nothing above the threshold this hour")
+        print("nothing new to judge this hour")
     if ist_hour(now) == SUMMARY_HOUR and not dry:
         sent = upsc.execute("SELECT 1 FROM telegram_posts WHERE key = ?", [f"alerts-summary:{day0}"]).rows
         if not sent:
             send_summary()
             upsc.execute("INSERT OR REPLACE INTO telegram_posts (key, chat, message_id, posted_at) VALUES (?, ?, ?, ?)",
                          [f"alerts-summary:{day0}", str(chat), 0, int(now)])
+
+
+def rank(arts, now, main_, upsc):
+    """(scored fresh stories, best first; all stories; fresh stories) as of `now`."""
+    arts = [a for a in arts if a["at"] <= now and a["at"] >= now - S.WINDOW]
+    groups = S.stories(arts)
+    related = S.coverage(groups)
+    pos = {id(g): i for i, g in enumerate(groups)}
+    fresh = [g for g in groups if g[0]["at"] >= now - S.FRESH]
+    ids = [a["id"] for g in fresh for a in g]
+    tl, us = retry(S.timeline_depth, main_, ids), retry(S.upsc_scores, upsc, ids)
+    scored = sorted(((S.score(g, now, tl, us, related[pos[id(g)]]), g) for g in fresh), key=lambda x: -x[0][0])
+    return scored, groups, fresh
+
+
+def replay(args):
+    """Today from args.replay_from IST, hour by hour, as if the picker had run: same ranking, same editor, same gates.
+    Prints only; nothing is stored or sent."""
+    now = time.time()
+    day0 = ist_day_start(now)
+    t = day0 + args.replay_from * 3600 + 13 * 60   # the hourly runs start at :13 IST
+    upsc, main_ = upsc_db(), main_db()
+    arts = retry(S.load, main_, upsc, t)
+    editor = None
+    if not args.no_ai:
+        from .judge import Editor
+        editor = Editor()
+    judged, picks, rejected = set(), [], []
+    while t <= now:
+        scored, _, fresh = rank(arts, t, main_, upsc)
+        todo = [(sc, sig, g) for (sc, sig), g in scored if sc >= args.threshold and S.story_key(g) not in judged][:MAX_JUDGE]
+        hh = time.strftime("%H:%M", time.gmtime(t + 19800))
+        print(f"\n## {hh} IST — {len(fresh)} new stories; judging {len(todo)}")
+        for sc, sig, g in todo:
+            judged.add(S.story_key(g))
+            lead = sig["lead_id"]
+            title = next((a["title"] for a in g if a["id"] == lead), sig["titles"][0])
+            if editor:
+                blob = retry(lambda: main_.execute("SELECT rephrased_article FROM articles WHERE id = ?", [lead]).rows)
+                v = editor.judge(sig, S.text_of(blob[0][0]) if blob else "")
+            else:
+                v = dict(notify=sc >= 10, importance=min(10, int(sc)), why="signals only")
+            h = ist_hour(t)
+            if not v["notify"] or v["importance"] < MIN_IMPORTANCE:
+                d = "rejected"
+            elif h >= QUIET_FROM or h < QUIET_TO:
+                d = "blocked:night"
+            elif len(picks) >= DAILY_CAP:
+                d = "blocked:limit"
+            elif picks and t - picks[-1][0] < GAP:
+                d = "blocked:gap"
+            else:
+                d = "picked"
+            if d == "picked":
+                picks.append((t, title, v["importance"]))
+            elif d == "rejected":
+                rejected.append((v["importance"], title, v["why"]))
+            print(f"- [{d}] score {sc:.0f}, importance {v['importance']}: {title[:110]}\n    signals: {'; '.join(sig['why']) or '-'}"
+                  f"\n    editor: {v['why'][:200]}")
+        t += 3600
+    print("\n## Would have been sent today")
+    for t0, title, imp in picks:
+        print(f"- {time.strftime('%H:%M', time.gmtime(t0 + 19800))} IST ({imp}/10): {title}")
+    if not picks:
+        print("- nothing")
+    print("\n## Best of the rejected")
+    for imp, title, why in sorted(rejected, reverse=True)[:8]:
+        print(f"- ({imp}/10) {title[:110]} — {why[:150]}")
 
 
 if __name__ == "__main__":

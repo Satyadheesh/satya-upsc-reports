@@ -4,6 +4,7 @@
 import json
 import re
 import zlib
+from collections import Counter, defaultdict
 
 from common.db import in_chunks
 from reports.data import same_headline
@@ -88,8 +89,9 @@ def stories(arts):
     return groups
 
 
-def score(g, now, timeline, upsc_score):
-    """(score, signals) for one story. Higher = more likely an ordinary person wants to know now."""
+def score(g, now, timeline, upsc_score, related=0):
+    """(score, signals) for one story. Higher = more likely an ordinary person wants to know now.
+    related: other reports in the window about the same thing (coverage())."""
     first = g[0]
     lead = max(g, key=lambda a: (a["category"] != "international", len(a["title"])))
     title = " ".join(a["title"] for a in g[:4])
@@ -100,6 +102,9 @@ def score(g, now, timeline, upsc_score):
     s += 2 * min(len(outlets) - 1, 4)
     if len(outlets) > 1:
         why.append(f"{len(outlets)} outlets ({len(recent)} in the last 3 h)")
+    if related >= 3:
+        s += 2 if related < 6 else 4 if related < 12 else 6
+        why.append(f"widely reported ({related} related reports in {WINDOW // H} h)")
     imp = sorted({m.lower() for m in IMPACT.findall(title)})
     if imp:
         s += 4
@@ -129,9 +134,50 @@ def score(g, now, timeline, upsc_score):
         why.append("local crime")
     if lead["category"] in ("sports", "other") and len(outlets) < 3:
         s -= 1
-    return s, dict(outlets=len(outlets), recent=len(recent), category=lead["category"], geo=lead["geo"], why=why,
+    return s, dict(outlets=len(outlets), recent=len(recent), related=related, category=lead["category"], geo=lead["geo"], why=why,
                    lead_id=lead["id"], first_seen=first["at"], titles=[a["title"] for a in g[:3]],
                    sources=sorted({a["source_name"] or "?" for a in g})[:6])
+
+
+# Words that say nothing about which story it is (plus anything in more than COMMON_DF headlines of the window)
+STOP = set("""after again against amid also among been before being between both could during from have having into
+just more most much over said says than that their them then there these they this those through under until upon very
+were what when where which while will with without would your about across first last next year years week today
+india indian indians state states government govt centre central minister ministers chief party leaders leader police
+court news report reports amid","""
+           .replace(",", " ").split())
+WORD = re.compile(r"[a-z][a-z'-]{3,}")
+COMMON_DF = 25   # a word in more headlines than this is too common to tie two stories together
+RARE_DF = 12     # ...and at least one shared word must be this specific
+
+
+def words(title):
+    return {w.strip("'-") for w in WORD.findall(title.lower())} - STOP
+
+
+def coverage(groups):
+    """story index -> how many other reports in the window are about the same thing (they share at least two
+    distinctive headline words, one of them rare). The scraper drops near-duplicate articles at the source, so
+    'how many outlets carry it' is mostly 1; this is the stand-in for 'everyone is reporting this' (17 Oct 2026)."""
+    ws = [set().union(*(words(a["title"]) for a in g)) for g in groups]
+    df = Counter(w for x in ws for w in x)
+    index = defaultdict(set)
+    for i, x in enumerate(ws):
+        for w in x:
+            if 2 <= df[w] <= COMMON_DF:
+                index[w].add(i)
+    out = {}
+    for i, x in enumerate(ws):
+        shared, rare = Counter(), set()
+        for w in x:
+            for j in index.get(w, ()):
+                if j != i:
+                    shared[j] += 1
+                    if df[w] <= RARE_DF:
+                        rare.add(j)
+        related = [j for j, n in shared.items() if n >= 2 and j in rare]
+        out[i] = sum(len(groups[j]) for j in related)
+    return out
 
 
 def timeline_depth(main, ids):

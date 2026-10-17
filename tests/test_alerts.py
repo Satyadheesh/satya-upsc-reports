@@ -30,6 +30,21 @@ class Alerts(unittest.TestCase):
         self.assertLess(sc, 6)
         self.assertLess(so, 0)
 
+    def test_coverage_counts_reports_about_the_same_thing(self):
+        arts = [art(1, "Mumbai Police order actor Imran Khan to leave India by October 28", 1),
+                art(2, "Imran Khan to challenge FRRO deportation order in Bombay High Court", 2),
+                art(3, "Senior lawyer defends notice to Imran Khan over deportation", 3),
+                art(4, "OCI cardholder Imran Khan deportation row: what the law says", 4),
+                art(5, "Kerala police arrest two in theft case", 5, cat="crime"),
+                art(6, "Sensex gains 300 points in early trade", 6)]
+        groups = S.stories(arts)
+        cov = S.coverage(groups)
+        by_title = {g[0]["title"]: cov[i] for i, g in enumerate(groups)}
+        self.assertGreaterEqual(by_title["Imran Khan to challenge FRRO deportation order in Bombay High Court"], 2)
+        self.assertEqual(by_title["Kerala police arrest two in theft case"], 0)
+        g = [x for x in groups if x[0]["id"] == 6][0]
+        self.assertEqual(S.score(g, NOW, {}, {}, related=7)[0] - S.score(g, NOW, {}, {})[0], 4)
+
     def test_text_of(self):
         self.assertEqual(S.text_of(zlib.compress("hello world".encode())), "hello world")
         self.assertEqual(S.text_of(None), "")

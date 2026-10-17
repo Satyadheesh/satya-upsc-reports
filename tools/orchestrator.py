@@ -58,6 +58,8 @@ INDEXNOW_HOURS = {1, 5, 9, 13, 17}  # UTC; not 21 (the nightly jobs)
 # Timeline-follow notifications: the site's job sends what is due (its own limits: 6 h per story, 2 h per device,
 # none 22:00-07:00 IST). Every hourly check.
 TIMELINE_RUN_URL = "https://satyadheesh.in/api/notifications/timeline-run"
+# Cloudflare refuses Python's default user agent ("error code: 1010"): calls to the site say who they are
+SITE_UA = "SatyaDheesh-Orchestrator/1.0 (+https://satyadheesh.in)"
 CHECKS = [  # check, code repo, paths, workflow to run, its repo, token, inputs
     ("notes eval", "Satyadheesh/satya-upsc-service-core", ["analyzer.py", "syllabus.py", "eval"],
      "upsc_eval.yml", SVC, SAT, {}),
@@ -219,7 +221,7 @@ def plan_indexnow():
         summary.append(("IndexNow", "due", "", "", "dry run: not called"))
         return
     try:
-        with urllib.request.urlopen(urllib.request.Request(INDEXNOW_URL, method="POST", data=b""), timeout=60) as r:
+        with urllib.request.urlopen(urllib.request.Request(INDEXNOW_URL, method="POST", data=b"", headers={"User-Agent": SITE_UA}), timeout=60) as r:
             body = json.loads(r.read() or b"{}")
         summary.append(("IndexNow", f"HTTP {r.status}", "", "", f"submitted {body.get('submitted', '?')} of {body.get('due', '?')}"
                         + (" (still running on the server)" if body.get("pending") else "")))
@@ -239,7 +241,7 @@ def plan_timeline_follows():
         return
     try:
         req = urllib.request.Request(TIMELINE_RUN_URL, method="POST", data=b"",
-                                     headers={"Authorization": f"Bearer {secret}"})
+                                     headers={"Authorization": f"Bearer {secret}", "User-Agent": SITE_UA})
         with urllib.request.urlopen(req, timeout=90) as r:
             res = json.loads(r.read() or b"{}")
         summary.append(("timeline follows", "ok", "", "", ", ".join(f"{k} {v}" for k, v in res.items())[:150]))

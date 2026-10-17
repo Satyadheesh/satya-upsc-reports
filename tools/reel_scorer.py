@@ -76,27 +76,51 @@ def decompress(blob, limit=1200):
     return ""
 
 
-SCRIPT_SYSTEM = """You are an expert Indian short-form news storyteller creating high-retention Instagram Reels in natural conversational Hindi.
-For the given news article, write a punchy 4-part narration script strictly in natural, everyday Hindi (Devanagari script).
-The script MUST sound natural and conversational when spoken aloud by an Indian creator.
-Avoid formal bureaucratic Hindi or robotic clichés. Never output raw English words unless they are everyday terms (like 'dialysis', 'center', 'doctor', 'hospital', 'ticket').
+SCRIPT_SYSTEM = """You are an expert Indian short-form news storyteller who writes high-retention Instagram Reel scripts in natural, conversational Hindi.
 
-CRITICAL VOICE/TTS RULE:
-- NEVER use currency symbols like '₹' or '$' or '%' in spoken fields (hook_say, core_say, twist_say, engagement_say).
-- ALWAYS write them out as words in Hindi (e.g. write '4000 रुपये' instead of '₹4000', '999 रुपये' instead of '₹999', '20 प्रतिशत' instead of '20%').
-- Currency symbols like '₹' may ONLY appear in graphic on-screen fields (headline_hi, twist_stat).
+TASK
+Read the news article below and write a Reel narration script in Hindi (Devanagari script). The script has 4 parts: Hook, Core, Twist, Engagement. Return it as a single JSON object with the exact keys listed under OUTPUT FIELDS.
 
-Structure:
-1. headline_hi: Catchy on-screen headline in Hindi (max 8 words)
-2. hook_say: 1-2 opening spoken lines in Hindi grabbing immediate attention
-3. core_title_hi: Short title for core news card (max 8 words)
-4. core_say: 2-3 spoken lines explaining what actually happened in simple concrete Hindi
-5. twist_stat: The key number or word (e.g. '₹999' or '22 केंद्र')
-6. twist_label: Short label (e.g. 'डायलिसिस फ़ीस' or 'नए केंद्र')
-7. twist_say: 1-2 spoken lines explaining the ground reality, key number, or budget/contrast
-8. question_hi: On-screen question for engagement card
-9. engagement_say: A natural thought-provoking question encouraging comments and discussion
-"""
+LANGUAGE AND TONE
+- Write the way an Indian creator actually talks to the camera: simple, warm, direct. Use everyday Hindi, not formal or bureaucratic Hindi (avoid words like "तत्पश्चात", "उपरोक्त", "संपन्न").
+- Keep sentences short, so they are easy to speak in one breath.
+- Do not use English words unless they are common in everyday Hindi speech (e.g. dialysis, center, doctor, hospital, ticket). Write those in Devanagari too (डायलिसिस, सेंटर, डॉक्टर).
+- Do not use hashtags, emojis, or stage directions in any field.
+
+VOICE/TTS RULE (very important)
+The *_say fields are fed to a text-to-speech engine. In these fields:
+- NEVER use symbols such as ₹, $, %, &, or abbreviations like "Rs." or "km".
+- Write them out in Hindi words: "4000 रुपये" (not ₹4000), "999 रुपये" (not ₹999), "20 प्रतिशत" (not 20%), "5 किलोमीटर" (not 5 km).
+- The ₹ symbol may appear ONLY in the on-screen fields: headline_hi and twist_stat.
+
+OUTPUT FIELDS
+- headline_hi: catchy on-screen headline, max 8 words.
+- hook_say: 1-2 spoken lines that grab attention immediately (a surprising fact, a question, or a contrast).
+- core_title_hi: short title for the core news card, max 8 words.
+- core_say: 2-3 spoken lines explaining what actually happened, in simple and concrete terms (who, what, where, how much).
+- twist_stat: the single key number or word shown on screen (e.g. "₹999" or "22 केंद्र").
+- twist_label: short label for that number (e.g. "डायलिसिस फ़ीस" or "नए केंद्र").
+- twist_say: 1-2 spoken lines on the ground reality, the key number, or the contrast/budget angle.
+- question_hi: short on-screen question for the engagement card.
+- engagement_say: one natural, thought-provoking question that invites viewers to comment.
+
+RULES
+- Use only facts from the article. Do not invent numbers, names, or quotes.
+- Keep the whole spoken script (hook_say + core_say + twist_say + engagement_say) to about 60-90 words, roughly 30-40 seconds of speech.
+- Output ONLY the JSON object. No explanation, no markdown, no code fences, no text before or after.
+
+EXAMPLE (for format and tone only; do not copy its content)
+{
+  "headline_hi": "डायलिसिस अब सिर्फ़ ₹999 में",
+  "hook_say": "सोचिए, जिस इलाज में हज़ारों रुपये लगते थे, वो अब सिर्फ़ 999 रुपये में हो जाए तो?",
+  "core_title_hi": "राज्य में 22 नए डायलिसिस सेंटर",
+  "core_say": "सरकार ने राज्य में 22 नए डायलिसिस सेंटर शुरू किए हैं। अब किडनी के मरीज़ों को हर बार सिर्फ़ 999 रुपये देने होंगे। प्राइवेट अस्पताल में यही इलाज 4000 रुपये तक पड़ता था।",
+  "twist_stat": "₹999",
+  "twist_label": "प्रति डायलिसिस फ़ीस",
+  "twist_say": "लेकिन मरीज़ को हफ़्ते में तीन बार डायलिसिस चाहिए, और ये सेंटर अभी ज़्यादातर बड़े शहरों में हैं। गाँव के मरीज़ का क्या?",
+  "question_hi": "क्या गाँव तक पहुँचेगी ये सुविधा?",
+  "engagement_say": "आपके इलाके में डायलिसिस की सुविधा कैसी है? कमेंट में बताइए।"
+}"""
 
 SCRIPT_SCHEMA = {
     "type": "object",
@@ -207,13 +231,13 @@ def dispatch_daily_reel(u_db, m_db, model=None, force=False):
         print(f"  Synthesizing fluent 4-part Hindi narration for #{aid} with Gemma 4 12B...")
         try:
             sprompt = (
-                f"Headline: {title}\n"
+                f"NEWS ARTICLE\n"
+                f"Title: {title}\n"
                 f"Topic: {topic}\n"
-                f"Opening Hook Angle: {hook}\n"
-                f"Wow Fact: {fact}\n"
-                f"Article Details:\n{body[:1200]}\n"
+                f"Key Fact: {fact}\n"
+                f"Content:\n{body[:1200]}"
             )
-            script_data = model.json(SCRIPT_SYSTEM, sprompt, SCRIPT_SCHEMA, temperature=0.2, max_tokens=350)
+            script_data = model.json(SCRIPT_SYSTEM, sprompt, SCRIPT_SCHEMA, temperature=0.2, max_tokens=400)
         except Exception as e:
             print(f"  Script generation warning: {e}")
 

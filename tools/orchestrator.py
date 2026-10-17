@@ -243,8 +243,18 @@ def plan_timeline_follows():
         with urllib.request.urlopen(req, timeout=90) as r:
             res = json.loads(r.read() or b"{}")
         summary.append(("timeline follows", "ok", "", "", ", ".join(f"{k} {v}" for k, v in res.items())[:150]))
+        if os.environ.get("GITHUB_ACTIONS"):
+            print("::notice title=timeline follows::" + json.dumps(res)[:400])
     except Exception as e:
-        summary.append(("timeline follows", "failed", "", "", str(e)[:150]))
+        detail = ""
+        if isinstance(e, urllib.error.HTTPError):
+            try:
+                detail = f" HTTP {e.code}: {e.read()[:200]!r}"
+            except Exception:
+                detail = f" HTTP {e.code}"
+        summary.append(("timeline follows", "failed", "", "", (str(e) + detail)[:200]))
+        if os.environ.get("GITHUB_ACTIONS"):
+            print(f"::warning title=timeline follows::{str(e)[:150]}{detail}")
 
 
 def plan_archive():

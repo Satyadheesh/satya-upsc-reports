@@ -76,7 +76,44 @@ def decompress(blob, limit=1200):
     return ""
 
 
-def dispatch_daily_reel(u_db, m_db, force=False):
+SCRIPT_SYSTEM = """You are an expert Indian short-form news storyteller creating high-retention Instagram Reels in natural conversational Hindi.
+For the given news article, write a punchy 4-part narration script strictly in natural, everyday Hindi (Devanagari script).
+The script MUST sound natural and conversational when spoken aloud by an Indian creator.
+Avoid formal bureaucratic Hindi or robotic clichés. Never output raw English words unless they are everyday terms (like 'dialysis', 'center', 'doctor', 'hospital', 'ticket').
+
+Structure:
+1. headline_hi: Catchy on-screen headline in Hindi (max 8 words)
+2. hook_say: 1-2 opening spoken lines in Hindi grabbing immediate attention
+3. core_title_hi: Short title for core news card (max 8 words)
+4. core_say: 2-3 spoken lines explaining what actually happened in simple concrete Hindi
+5. twist_stat: The key number or word (e.g. '₹999' or '22 केंद्र')
+6. twist_label: Short label (e.g. 'डायलिसिस फ़ीस' or 'नए केंद्र')
+7. twist_say: 1-2 spoken lines explaining the ground reality, key number, or budget/contrast
+8. question_hi: On-screen question for engagement card
+9. engagement_say: A natural thought-provoking question encouraging comments and discussion
+"""
+
+SCRIPT_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "headline_hi": {"type": "string"},
+        "hook_say": {"type": "string"},
+        "core_title_hi": {"type": "string"},
+        "core_say": {"type": "string"},
+        "twist_stat": {"type": "string"},
+        "twist_label": {"type": "string"},
+        "twist_say": {"type": "string"},
+        "question_hi": {"type": "string"},
+        "engagement_say": {"type": "string"}
+    },
+    "required": [
+        "headline_hi", "hook_say", "core_title_hi", "core_say",
+        "twist_stat", "twist_label", "twist_say", "question_hi", "engagement_say"
+    ]
+}
+
+
+def dispatch_daily_reel(u_db, m_db, model=None, force=False):
     """Dispatches the top viral story of the day to Satyadheesh/reels via repository_dispatch."""
     token = os.environ.get("CORE_TOKEN") or os.environ.get("GITHUB_PAT") or os.environ.get("GITHUB_PAT_CLASSIC")
     if not token:
@@ -159,21 +196,68 @@ def dispatch_daily_reel(u_db, m_db, force=False):
     img = r[4] or ""
     source_url = r[5] or ""
 
+    # Synthesize complete 4-part Hindi script using Gemma 4 12B if model is loaded
+    script_data = None
+    if model:
+        print(f"  Synthesizing fluent 4-part Hindi narration for #{aid} with Gemma 4 12B...")
+        try:
+            sprompt = (
+                f"Headline: {title}\n"
+                f"Topic: {topic}\n"
+                f"Opening Hook Angle: {hook}\n"
+                f"Wow Fact: {fact}\n"
+                f"Article Details:\n{body[:1200]}\n"
+            )
+            script_data = model.json(SCRIPT_SYSTEM, sprompt, SCRIPT_SCHEMA, temperature=0.2, max_tokens=350)
+        except Exception as e:
+            print(f"  Script generation warning: {e}")
+
+    headline_hi = (script_data and script_data.get("headline_hi")) or title[:40]
+    hook_say = (script_data and script_data.get("hook_say")) or hook
+    core_title = (script_data and script_data.get("core_title_hi")) or "पूरी जानकारी"
+    core_say = (script_data and script_data.get("core_say")) or f"इस मामले की पूरी जानकारी ये है कि {fact}।"
+    twist_stat = (script_data and script_data.get("twist_stat")) or "बड़ा बदलाव"
+    twist_label = (script_data and script_data.get("twist_label")) or "का असर"
+    twist_say = (script_data and script_data.get("twist_say")) or f"ज़मीनी सच्चाई ये है कि {fact}।"
+    q_hi = (script_data and script_data.get("question_hi")) or "आपकी क्या राय है?"
+    eng_say = (script_data and script_data.get("engagement_say")) or "इस पूरे मामले पर आपकी क्या सोच है? कमेंट में बताइए और फ़ॉलो कीजिए सत्याधीश।"
+
     payload = {
         "article_id": aid,
-        "title": title,
-        "topic": topic,
-        "viral_score": score,
-        "hook_angle": hook,
-        "wow_fact": fact,
-        "body": body[:1200],
+        "category": topic,
+        "headline": headline_hi,
         "image_url": img,
-        "source": "The Hindu"
+        "hook": {
+            "badge": "ताज़ा पड़ताल",
+            "title": headline_hi,
+            "subtitle": "सत्याधीश रिपोर्ट",
+            "say": hook_say
+        },
+        "core": {
+            "badge": "मुख्य जानकारी",
+            "title": core_title,
+            "points": [fact[:80] or "सटीक रिपोर्ट", "सत्यापित डेटा", "The Hindu"],
+            "source": "The Hindu",
+            "say": core_say
+        },
+        "twist": {
+            "badge": "ज़मीनी हक़ीक़त",
+            "big_stat": twist_stat,
+            "stat_label": twist_label,
+            "detail": fact[:80] or "ज़मीनी हक़ीक़त",
+            "say": twist_say
+        },
+        "engagement": {
+            "headline": "सत्याधीश चर्चा",
+            "question": q_hi,
+            "cta": "कमेंट में अपनी राय ज़रूर लिखें!",
+            "say": eng_say
+        }
     }
 
     print(f"\n🚀 Dispatching top viral reel to Satyadheesh/reels:")
     print(f"   Article #{aid} (Score {score}/10) [{topic}]")
-    print(f"   Hook: {hook}")
+    print(f"   Hook: {hook_say[:70]}")
 
     import urllib.request
     req = urllib.request.Request(
@@ -285,7 +369,7 @@ def main():
     print(f"\nDone: {scored_count} articles scored ({high_score_count} with viral score >= 7).")
 
     if not args.no_dispatch and not args.dry_run:
-        dispatch_daily_reel(u_db, m_db, force=args.dispatch)
+        dispatch_daily_reel(u_db, m_db, model=model, force=args.dispatch)
 
 
 if __name__ == "__main__":

@@ -14,6 +14,7 @@ Rules (UTC times; IST = UTC + 5:30):
   * archive ............... once a month, on the 30th (last day in February) from 06:00 IST: last month + this month
   * checks on change ...... when a job's prompt/model code changed since its check last ran: notes eval,
                             Hindi quality test / token check, study kit preview, SSC preview
+  * timeline follows ...... every hourly check: the site sends due timeline-update notifications
 Telegram and Instagram are not handled here (they keep their own triggers).
 
 Usage: python tools/orchestrator.py [--event notes-done:123456] [--dry-run]
@@ -54,6 +55,9 @@ ARCHIVE = dict(repo=REP, wf="archive.yml", tok=SAT, day=30, from_hour_ist=6)
 # for it fired only ~5 times a day anyway; the endpoint sends only what changed, so this is plenty.
 INDEXNOW_URL = "https://satyadheesh.in/api/indexnow"
 INDEXNOW_HOURS = {1, 5, 9, 13, 17}  # UTC; not 21 (the nightly jobs)
+# Timeline-follow notifications: the site's job sends what is due (its own limits: 6 h per story, 2 h per device,
+# none 22:00-07:00 IST). Every hourly check.
+TIMELINE_RUN_URL = "https://satyadheesh.in/api/notifications/timeline-run"
 CHECKS = [  # check, code repo, paths, workflow to run, its repo, token, inputs
     ("notes eval", "Satyadheesh/satya-upsc-service-core", ["analyzer.py", "syllabus.py", "eval"],
      "upsc_eval.yml", SVC, SAT, {}),
@@ -223,6 +227,26 @@ def plan_indexnow():
         summary.append(("IndexNow", "call failed", "", "", str(e)[:120]))
 
 
+def plan_timeline_follows():
+    if EVENT:  # the hourly check only
+        return
+    secret = os.environ.get("REVALIDATE_SECRET", "")
+    if not secret:
+        summary.append(("timeline follows", "skipped", "", "", "REVALIDATE_SECRET not set"))
+        return
+    if DRY:
+        summary.append(("timeline follows", "due", "", "", "dry run: not called"))
+        return
+    try:
+        req = urllib.request.Request(TIMELINE_RUN_URL, method="POST", data=b"",
+                                     headers={"Authorization": f"Bearer {secret}"})
+        with urllib.request.urlopen(req, timeout=90) as r:
+            res = json.loads(r.read() or b"{}")
+        summary.append(("timeline follows", "ok", "", "", ", ".join(f"{k} {v}" for k, v in res.items())[:150]))
+    except Exception as e:
+        summary.append(("timeline follows", "failed", "", "", str(e)[:150]))
+
+
 def plan_archive():
     import calendar
     ist = datetime.fromtimestamp(NOW + 19800, timezone.utc)  # IST clock
@@ -261,7 +285,7 @@ def main():
         if not v:
             sys.exit(f"missing token: {k}")
     errors = []
-    for step in (plan_jobs, plan_nightly, plan_indexnow, plan_archive, plan_checks):
+    for step in (plan_jobs, plan_nightly, plan_indexnow, plan_timeline_follows, plan_archive, plan_checks):
         try:
             step()
         except Exception as e:  # one failing part must not stop the others

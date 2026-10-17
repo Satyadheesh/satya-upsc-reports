@@ -97,9 +97,11 @@ OUTPUT FIELDS
 - headline_hi: catchy on-screen headline, max 8 words.
 - hook_say: 1-2 spoken lines that grab attention immediately (a surprising fact, a question, or a contrast).
 - core_title_hi: short title for the core news card, max 8 words.
+- core_points_hi: exactly 2 or 3 very short on-screen bullet points in Hindi (e.g. ["22 नए सरकारी केंद्र शुरू", "किडनी के मरीज़ों को सीधा फ़ायदा", "सत्यापित डेटा"]). Max 8 words per bullet.
 - core_say: 2-3 spoken lines explaining what actually happened, in simple and concrete terms (who, what, where, how much).
 - twist_stat: the single key number or word shown on screen (e.g. "₹999" or "22 केंद्र").
 - twist_label: short label for that number (e.g. "डायलिसिस फ़ीस" or "नए केंद्र").
+- twist_detail_hi: 1 short on-screen line in Hindi summarizing the ground reality, budget, or contrast (max 10 words, e.g. "प्राइवेट में ₹4,000 तक खर्च, सरकारी से बड़ी राहत").
 - twist_say: 1-2 spoken lines on the ground reality, the key number, or the contrast/budget angle.
 - question_hi: short on-screen question for the engagement card.
 - engagement_say: one natural, thought-provoking question that invites viewers to comment.
@@ -114,9 +116,15 @@ EXAMPLE (for format and tone only; do not copy its content)
   "headline_hi": "डायलिसिस अब सिर्फ़ ₹999 में",
   "hook_say": "सोचिए, जिस इलाज में हज़ारों रुपये लगते थे, वो अब सिर्फ़ 999 रुपये में हो जाए तो?",
   "core_title_hi": "राज्य में 22 नए डायलिसिस सेंटर",
+  "core_points_hi": [
+    "22 नए सरकारी सेंटर शुरू",
+    "किडनी के मरीज़ों को सीधा फ़ायदा",
+    "सत्यापित सरकारी डेटा"
+  ],
   "core_say": "सरकार ने राज्य में 22 नए डायलिसिस सेंटर शुरू किए हैं। अब किडनी के मरीज़ों को हर बार सिर्फ़ 999 रुपये देने होंगे। प्राइवेट अस्पताल में यही इलाज 4000 रुपये तक पड़ता था।",
   "twist_stat": "₹999",
   "twist_label": "प्रति डायलिसिस फ़ीस",
+  "twist_detail_hi": "प्राइवेट में ₹4,000 तक खर्च, सरकारी से बड़ी राहत",
   "twist_say": "लेकिन मरीज़ को हफ़्ते में तीन बार डायलिसिस चाहिए, और ये सेंटर अभी ज़्यादातर बड़े शहरों में हैं। गाँव के मरीज़ का क्या?",
   "question_hi": "क्या गाँव तक पहुँचेगी ये सुविधा?",
   "engagement_say": "आपके इलाके में डायलिसिस की सुविधा कैसी है? कमेंट में बताइए।"
@@ -128,17 +136,44 @@ SCRIPT_SCHEMA = {
         "headline_hi": {"type": "string"},
         "hook_say": {"type": "string"},
         "core_title_hi": {"type": "string"},
+        "core_points_hi": {
+            "type": "array",
+            "items": {"type": "string"}
+        },
         "core_say": {"type": "string"},
         "twist_stat": {"type": "string"},
         "twist_label": {"type": "string"},
+        "twist_detail_hi": {"type": "string"},
         "twist_say": {"type": "string"},
         "question_hi": {"type": "string"},
         "engagement_say": {"type": "string"}
     },
     "required": [
-        "headline_hi", "hook_say", "core_title_hi", "core_say",
-        "twist_stat", "twist_label", "twist_say", "question_hi", "engagement_say"
+        "headline_hi", "hook_say", "core_title_hi", "core_points_hi", "core_say",
+        "twist_stat", "twist_label", "twist_detail_hi", "twist_say", "question_hi", "engagement_say"
     ]
+}
+
+CATEGORY_HI = {
+    "politics": "राजनीति",
+    "politics_funding": "चुनावी चंदा",
+    "infrastructure": "इंफ्रास्ट्रक्चर",
+    "economy": "अर्थव्यवस्था",
+    "cinema": "सिनेमा",
+    "bollywood": "सिनेमा",
+    "curiosity": "रोचक पड़ताल",
+    "science": "विज्ञान",
+    "science_space": "विज्ञान और स्पेस",
+    "space": "अंतरिक्ष",
+    "defence": "रक्षा",
+    "defense": "रक्षा",
+    "sports": "खेल",
+    "consumer_hack": "काम की खबर",
+    "crime": "विशेष रिपोर्ट",
+    "judiciary": "अदालत और कानून",
+    "education": "शिक्षा",
+    "environment": "पर्यावरण",
+    "nature": "पर्यावरण और प्रकृति",
 }
 
 
@@ -251,9 +286,29 @@ def dispatch_daily_reel(u_db, m_db, model=None, force=False):
     q_hi = (script_data and script_data.get("question_hi")) or "आपकी क्या राय है?"
     eng_say = (script_data and script_data.get("engagement_say")) or "इस पूरे मामले पर आपकी क्या सोच है? कमेंट में बताइए और फ़ॉलो कीजिए सत्याधीश।"
 
+    category_hi = CATEGORY_HI.get(str(topic).lower(), "विशेष पड़ताल")
+
+    # Clean Hindi core bullet points for Card 2
+    raw_pts = script_data.get("core_points_hi") if script_data else None
+    if raw_pts and isinstance(raw_pts, list) and len(raw_pts) > 0:
+        core_points = [str(p).strip() for p in raw_pts if str(p).strip()][:3]
+        if len(core_points) == 1:
+            core_points.append("सत्यापित सरकारी डेटा")
+    else:
+        core_points = ["सटीक सरकारी रिपोर्ट", "सत्यापित डेटा"]
+
+    # Clean Hindi detail line under big stat for Card 3
+    twist_detail = (script_data and script_data.get("twist_detail_hi"))
+    if not twist_detail:
+        twist_detail = "सत्यापित ज़मीनी रिपोर्ट"
+
+    source_label = "The Hindu"
+    if "indianexpress" in source_url.lower():
+        source_label = "The Indian Express"
+
     payload = {
         "article_id": aid,
-        "category": topic,
+        "category": category_hi,
         "headline": headline_hi,
         "image_url": img,
         "hook": {
@@ -265,15 +320,15 @@ def dispatch_daily_reel(u_db, m_db, model=None, force=False):
         "core": {
             "badge": "मुख्य जानकारी",
             "title": core_title,
-            "points": [fact[:80] or "सटीक रिपोर्ट", "सत्यापित डेटा", "The Hindu"],
-            "source": "The Hindu",
+            "points": core_points,
+            "source": source_label,
             "say": core_say
         },
         "twist": {
             "badge": "ज़मीनी हक़ीक़त",
             "big_stat": twist_stat,
             "stat_label": twist_label,
-            "detail": fact[:80] or "ज़मीनी हक़ीक़त",
+            "detail": twist_detail,
             "say": twist_say
         },
         "engagement": {

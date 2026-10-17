@@ -89,10 +89,11 @@ def main():
     since = now - 24 * 3600
     already = {r[0] for r in u_db.execute("SELECT article_id FROM reel_candidates WHERE created_at >= ?", [since - 86400]).rows}
 
-    # Fetch candidate articles
+    # Fetch candidate articles (pre-filtering out crime and politics to avoid wasting compute)
     rows = m_db.execute(
         "SELECT id, title, rephrased_title, rephrased_article, category, scraped_at "
-        "FROM articles WHERE scraped_at >= ? ORDER BY id DESC LIMIT 150",
+        "FROM articles WHERE scraped_at >= ? AND category NOT IN ('crime', 'politics') "
+        "ORDER BY id DESC LIMIT 200",
         [since]
     ).rows
 

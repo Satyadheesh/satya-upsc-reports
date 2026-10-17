@@ -84,16 +84,39 @@ def dispatch_daily_reel(u_db, m_db, force=False):
         return
 
     now = int(time.time())
-    # Ensure at most 1 reel per ~18 hours unless force=True
+    # Ensure at most 1 reel per 12 hours unless force=True
     if not force:
+        # Check 1: Turso DB reel_posts
         try:
             recent = u_db.execute("SELECT max(dispatched_at) FROM reel_posts").rows
-            if recent and recent[0][0] and (now - int(recent[0][0])) < 18 * 3600:
+            if recent and recent[0][0] and (now - int(recent[0][0])) < 12 * 3600:
                 last_ago_hrs = (now - int(recent[0][0])) / 3600
-                print(f"  Daily reel already dispatched {last_ago_hrs:.1f}h ago. Skipping duplicate dispatch.")
+                print(f"  Daily reel already dispatched {last_ago_hrs:.1f}h ago (< 12 hours). Skipping duplicate dispatch.")
                 return
         except Exception:
             pass
+
+        # Check 2: Satyadheesh/reels GitHub Actions runs (in case run was triggered directly)
+        try:
+            import datetime
+            import urllib.request
+            gh_url = "https://api.github.com/repos/Satyadheesh/reels/actions/workflows/daily-reel.yml/runs?status=success&per_page=1"
+            req = urllib.request.Request(gh_url, headers={
+                "Authorization": f"Bearer {token}",
+                "Accept": "application/vnd.github+json",
+                "User-Agent": "satya-reel-scorer"
+            })
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                data = json.loads(resp.read().decode())
+                runs = data.get("workflow_runs", [])
+                if runs:
+                    updated = datetime.datetime.fromisoformat(runs[0]["updated_at"].replace("Z", "+00:00"))
+                    diff_hrs = (datetime.datetime.now(datetime.timezone.utc) - updated).total_seconds() / 3600.0
+                    if diff_hrs < 12.0:
+                        print(f"  Reel already posted to Telegram {diff_hrs:.1f}h ago (< 12 hours). Skipping dispatch.")
+                        return
+        except Exception as e:
+            print(f"  Note: GitHub Actions run check: {e}")
 
     # Find the highest viral score candidate (>= 7) from the last 24h not yet reeled
     since = now - 24 * 3600

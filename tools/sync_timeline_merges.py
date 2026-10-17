@@ -2,8 +2,9 @@
 
   * UPSC notes keep the timeline they belong to: upsc_articles.event_id of the moved updates -> the new timeline
     (by article id, so only those rows are touched);
-  * the site refreshes its timeline caches once ('events' tag), so the old address starts redirecting and the
-    merged timeline shows all its updates.
+  * the site refreshes its timeline caches once ('events' tag, past the shared 30-min cooldown: this happens only
+    when there are new merges, i.e. about once a night), so the old address starts redirecting and the merged
+    timeline shows all its updates.
 A bookmark (sync_marks in the UPSC DB) remembers the last merge handled; it moves only after both steps worked.
 Safe to run any number of times.
 """
@@ -62,7 +63,7 @@ def main():
         if not secret:
             print("REVALIDATE_SECRET not set: bookmark not moved")
             return 0
-        url = f"{SITE}/api/revalidate?" + urllib.parse.urlencode({"tag": "events", "secret": secret})
+        url = f"{SITE}/api/revalidate?" + urllib.parse.urlencode({"tag": "events", "secret": secret, "force": "true"})
         req = urllib.request.Request(url, method="POST", data=b"", headers={"User-Agent": SITE_UA})
         with urllib.request.urlopen(req, timeout=60) as r:
             res = json.loads(r.read() or b"{}")

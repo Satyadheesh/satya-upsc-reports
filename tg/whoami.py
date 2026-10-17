@@ -34,8 +34,15 @@ def main():
     for u in bot.call("getUpdates", {"allowed_updates": '["channel_post","my_chat_member","message"]'}, tries=1):
         for k in ("channel_post", "my_chat_member", "message"):
             ch = (u.get(k) or {}).get("chat")
-            if ch and ch.get("type") in ("channel", "supergroup", "group"):
-                seen[ch["id"]] = f"{ch.get('type')} '{ch.get('title')}'" + (f" @{ch['username']}" if ch.get("username") else "")
+            if ch and ch.get("type") in ("channel", "supergroup", "group", "private"):
+                title = ch.get("title") or ch.get("first_name") or ""
+                seen[ch["id"]] = f"{ch.get('type')} '{title}'" + (f" @{ch['username']}" if ch.get("username") else "")
+                if (ch.get("username") or "").lower() == "yashhagr":
+                    try:
+                        bot.message(ch["id"], "🎬 <b>SatyaDheesh Reel Delivery</b>: Connected to @yashhagr successfully! Daily private review reels will be sent here.")
+                        print(f"Sent confirmation ping to @yashhagr (chat ID: {ch['id']})")
+                    except Exception as ex:
+                        print(f"Failed to send confirmation ping: {ex}")
     if seen:
         print("Chats the bot has seen recently (use the id or @username as TELEGRAM_CHAT_ID):")
         for i, t in seen.items():

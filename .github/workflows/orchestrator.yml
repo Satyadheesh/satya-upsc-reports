@@ -43,6 +43,7 @@ jobs:
         env:
           SAT_TOKEN: ${{ secrets.DISPATCH_TOKEN }}
           HINDI_TOKEN: ${{ secrets.HINDI_DISPATCH_TOKEN }}
+          REVALIDATE_SECRET: ${{ secrets.REVALIDATE_SECRET }}   # calls the site's timeline-follow notification job
         run: |
           python tools/orchestrator.py \
             ${{ github.event.inputs.event != '' && format('--event "{0}"', github.event.inputs.event) || '' }} \

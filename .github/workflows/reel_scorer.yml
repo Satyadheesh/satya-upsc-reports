@@ -17,6 +17,10 @@ on:
         description: 'Print only (do not write to DB)'
         type: boolean
         default: false
+      dispatch:
+        description: 'Force dispatch to reels repo'
+        type: boolean
+        default: false
 
 concurrency:
   group: reel-scorer
@@ -76,4 +80,5 @@ jobs:
         run: |
           BATCH="${{ github.event.inputs.batch || '30' }}"
           DRY="${{ github.event.inputs.dry_run == 'true' && '--dry-run' || '' }}"
-          python -m tools.reel_scorer --batch "$BATCH" $DRY
+          DISPATCH="${{ github.event.inputs.dispatch == 'true' && '--dispatch' || '' }}"
+          python -m tools.reel_scorer --batch "$BATCH" $DRY $DISPATCH

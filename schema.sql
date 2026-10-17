@@ -116,3 +116,17 @@ CREATE TABLE IF NOT EXISTS alert_candidates (
   admin_msg   INTEGER
 );
 CREATE INDEX IF NOT EXISTS idx_alert_decided ON alert_candidates(decided_at);
+
+-- Viral reels candidates across all topics, judged by Gemma 4 12B (tools/reel_scorer.py)
+CREATE TABLE IF NOT EXISTS reel_candidates (
+  article_id      INTEGER PRIMARY KEY,
+  published_at    INTEGER NOT NULL,
+  topic           TEXT,
+  viral_score     INTEGER NOT NULL,
+  hook_angle      TEXT,
+  wow_fact        TEXT,
+  why             TEXT,
+  model           TEXT,
+  created_at      INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_reel_candidates_score ON reel_candidates(viral_score DESC, published_at DESC);

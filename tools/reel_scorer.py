@@ -112,43 +112,6 @@ RULES
 - Output ONLY the JSON object. No explanation, no markdown, no code fences, no text before or after.
 """
 
-SCRIPT_SYSTEM_BABURAO = """You are Baburao Ganpatrao Apte (Babu Bhaiya from the movie Hera Pheri), writing a viral comedic Instagram Reel news script in natural, conversational Hindi.
-
-TASK
-Read the news article below and write a 4-part Reel script (Hook, Core, Twist, Engagement) reacting to the news in your iconic Baburao style. Return it as a single JSON object with the exact keys listed under OUTPUT FIELDS.
-
-BABURAO COMEDIC TONE & STYLE
-- High comedic energy, dramatic confusion, sharp public observation.
-- Use Baburao's iconic phrasing and expressions naturally: "अरे देवा!", "उठा ले रे बाबा!", "ये बाबूराव का स्टाइल है!", "अरे बाबा, ये क्या चक्कर है?!", "25 दिन में क्या?!", "अरे खोपड़ी तोड़ साले का!"
-- Simple everyday spoken Hindi (Devanagari). No formal or bureaucratic Hindi.
-- Keep sentences punchy, conversational, and easy to speak in one breath.
-- Use only facts from the article. Do not invent fake facts or numbers.
-
-VOICE/TTS RULE (very important)
-The *_say fields are fed to a text-to-speech engine:
-- NEVER use symbols such as ₹, $, %, &, or abbreviations like "Rs." or "km".
-- Write them out in Hindi words: "1000 रुपये" (not ₹1000), "50 किलोमीटर" (not 50 km).
-- The ₹ symbol may appear ONLY in on-screen fields: headline_hi and twist_stat.
-
-OUTPUT FIELDS
-- headline_hi: catchy on-screen headline in Baburao style, max 8 words (e.g. "बिना PIN के ₹1,000 साफ़?!").
-- hook_say: 1-2 spoken lines with dramatic shock or comedic question (e.g. "अरे देवा! बिना पिन डाले 1000 रुपये साफ़?! अरे ये बाबूराव का बटुआ खाली करने की नई स्कीम है क्या रे बाबा?!").
-- core_title_hi: short on-screen title for core news card, max 8 words.
-- core_points_hi: exactly 2 or 3 short on-screen bullet points in Hindi. Max 8 words per bullet.
-- core_say: 2-3 spoken lines explaining the real news in Baburao's funny yet informative way.
-- twist_stat: single key number/word on screen (e.g. "₹5,000" or "बजट").
-- twist_label: short label for that number (e.g. "वॉलेट लिमिट" or "का झटका").
-- twist_detail_hi: 1 short on-screen line in Hindi summarizing the twist or contrast (max 10 words).
-- twist_say: 1-2 spoken lines reacting with comedy and shock to the twist/budget/fine ("लेकिन बाबूराव का दिमाग तब घूमा जब देखा... उठा ले रे बाबा!").
-- question_hi: short on-screen question for engagement card.
-- engagement_say: 1 natural comedic question to the audience ("तो जनता जनार्दन... क्या तुम... कमेंट में बताओ, जल्दी बताओ!").
-
-RULES
-- Use only facts from the article. Do not invent numbers, names, or quotes.
-- Keep the whole spoken script (hook_say + core_say + twist_say + engagement_say) to about 60-90 words, roughly 30-40 seconds of speech.
-- Output ONLY the JSON object. No explanation, no markdown, no code fences, no text before or after.
-"""
-
 SCRIPT_SYSTEM = SCRIPT_SYSTEM_CHARLIE
 
 SCRIPT_SCHEMA = {
@@ -173,6 +136,38 @@ SCRIPT_SCHEMA = {
         "headline_hi", "hook_say", "core_title_hi", "core_points_hi", "core_say",
         "twist_stat", "twist_label", "twist_detail_hi", "twist_say", "question_hi", "engagement_say"
     ]
+}
+
+SUITABILITY_SYSTEM = """You are the Senior Editorial Quality Director at SatyaDheesh, an elite Indian news channel.
+Your task is to critically review a generated Hindi news Reel script and its selected voice persona before it is produced.
+
+VOICE PERSONAS:
+- 'charlie' (Male): Energetic, confident, modern, authoritative Hindi creator. Best for: national news, defense, economy, infrastructure, science, space, geopolitics.
+- 'matilda' (Female): Warm, articulate, engaging, knowledgeable Hindi creator. Best for: consumer rights, health, public schemes, civic alerts, environment, culture.
+
+EVALUATION CRITERIA:
+1. Tone & Credibility: Is the script professional, engaging, and worthy of a credible news brand? Reject ANY script with cheap movie catchphrases, slapstick humor, clownish slang, or cringe drama.
+2. Voice Match: Is the language, pacing, and vibe genuinely suitable for the assigned voice persona?
+3. Story Fit: Is this story actually worth a 30-40s video reel, or does it sound awkward, trivial, or forced?
+
+Return a JSON object:
+{
+  "is_suitable": true or false,
+  "verdict": "Clear 1-sentence assessment of tone and voice match",
+  "action": "approve" or "change_voice" or "reject_story",
+  "suggested_voice": "charlie" or "matilda"
+}
+"""
+
+SUITABILITY_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "is_suitable": {"type": "boolean"},
+        "verdict": {"type": "string"},
+        "action": {"type": "string", "enum": ["approve", "change_voice", "reject_story"]},
+        "suggested_voice": {"type": "string", "enum": ["charlie", "matilda"]}
+    },
+    "required": ["is_suitable", "verdict", "action", "suggested_voice"]
 }
 
 CATEGORY_HI = {
@@ -240,7 +235,7 @@ def dispatch_daily_reel(u_db, m_db, model=None, force=False):
         except Exception as e:
             print(f"  Note: GitHub Actions run check: {e}")
 
-    # Find the highest viral score candidate (>= 7) from the last 24h not yet reeled
+    # Find the top viral score candidates (>= 7) from the last 24h not yet reeled
     since = now - 24 * 3600
     try:
         candidates = u_db.execute(
@@ -249,7 +244,7 @@ def dispatch_daily_reel(u_db, m_db, model=None, force=False):
             "WHERE c.viral_score >= 7 AND c.created_at >= ? "
             "  AND c.article_id NOT IN (SELECT article_id FROM reel_posts) "
             "ORDER BY c.viral_score DESC, c.published_at DESC "
-            "LIMIT 1",
+            "LIMIT 5",
             [since]
         ).rows
     except Exception as e:
@@ -260,65 +255,128 @@ def dispatch_daily_reel(u_db, m_db, model=None, force=False):
         print("  No new high viral candidate (score >= 7) available to dispatch right now.")
         return
 
-    top = candidates[0]
-    aid, topic, score, hook, fact, why = int(top[0]), str(top[1]), int(top[2]), str(top[3]), str(top[4]), str(top[5])
+    approved_candidate = None
+    approved_script = None
+    approved_persona = None
+    approved_row = None
 
-    # Fetch article details from main DB
-    art_rows = m_db.execute(
-        "SELECT title, rephrased_title, rephrased_article, category, image_url, url "
-        "FROM articles WHERE id = ?",
-        [aid]
-    ).rows
+    female_topics = {"consumer_hack", "education", "environment", "nature", "health", "cinema", "lifestyle"}
 
-    if not art_rows:
-        print(f"  Article {aid} not found in main DB.")
+    for cand in candidates:
+        aid, topic, score, hook, fact, why = int(cand[0]), str(cand[1]), int(cand[2]), str(cand[3]), str(cand[4]), str(cand[5])
+        art_rows = m_db.execute(
+            "SELECT title, rephrased_title, rephrased_article, category, image_url, url "
+            "FROM articles WHERE id = ?",
+            [aid]
+        ).rows
+        if not art_rows:
+            continue
+
+        r = art_rows[0]
+        title = r[1] or r[0]
+        body = decompress(r[2])
+
+        # Initial persona selection based on topic
+        persona = "matilda" if str(topic).lower() in female_topics else "charlie"
+
+        for voice_attempt in range(2):
+            print(f"  Evaluating candidate #{aid} [{topic}] with persona: {persona} (attempt {voice_attempt + 1})...")
+            script_data = None
+            if model:
+                try:
+                    sprompt = (
+                        f"NEWS ARTICLE\n"
+                        f"Title: {title}\n"
+                        f"Topic: {topic}\n"
+                        f"Key Fact: {fact}\n"
+                        f"Voice Persona: {persona}\n"
+                        f"Content:\n{body[:1200]}"
+                    )
+                    script_data = model.json(SCRIPT_SYSTEM_CHARLIE, sprompt, SCRIPT_SCHEMA, temperature=0.25, max_tokens=450)
+                except Exception as e:
+                    print(f"  Script generation warning: {e}")
+
+            if not script_data:
+                break
+
+            # Editorial & Voice Suitability Evaluation (Gemma Quality Gate)
+            if model:
+                try:
+                    eval_prompt = (
+                        f"NEWS ARTICLE: {title}\n"
+                        f"TOPIC: {topic}\n"
+                        f"ASSIGNED VOICE: {persona}\n"
+                        f"HEADLINE: {script_data.get('headline_hi')}\n"
+                        f"HOOK: {script_data.get('hook_say')}\n"
+                        f"CORE: {script_data.get('core_say')}\n"
+                        f"TWIST: {script_data.get('twist_say')}\n"
+                        f"ENGAGEMENT: {script_data.get('engagement_say')}"
+                    )
+                    suitability = model.json(SUITABILITY_SYSTEM, eval_prompt, SUITABILITY_SCHEMA, temperature=0.1, max_tokens=200)
+                    is_ok = suitability.get("is_suitable") is True or suitability.get("action") == "approve"
+                    verdict = suitability.get("verdict", "")
+                    action = suitability.get("action", "")
+                    print(f"  Gemma review for #{aid} ({persona}): suitable={is_ok}, action={action} -> {verdict}")
+
+                    if is_ok:
+                        approved_candidate = cand
+                        approved_script = script_data
+                        approved_persona = persona
+                        approved_row = r
+                        break
+                    elif action == "change_voice" and voice_attempt == 0:
+                        suggested = suitability.get("suggested_voice")
+                        if suggested and suggested != persona:
+                            print(f"  Gemma suggested voice change: switching {persona} -> {suggested}...")
+                            persona = suggested
+                            continue
+                    else:
+                        print(f"  Story #{aid} rejected by Gemma editorial review ({verdict}). Trying next candidate...")
+                        break
+                except Exception as e:
+                    print(f"  Suitability check note: {e}")
+                    approved_candidate = cand
+                    approved_script = script_data
+                    approved_persona = persona
+                    approved_row = r
+                    break
+            else:
+                approved_candidate = cand
+                approved_script = script_data
+                approved_persona = persona
+                approved_row = r
+                break
+
+        if approved_candidate:
+            break
+
+    if not approved_candidate or not approved_script:
+        print("❌ No candidate story passed Gemma's voice & editorial quality check. Halting dispatch to preserve brand standards.")
         return
 
-    r = art_rows[0]
+    aid, topic, score, hook, fact, why = int(approved_candidate[0]), str(approved_candidate[1]), int(approved_candidate[2]), str(approved_candidate[3]), str(approved_candidate[4]), str(approved_candidate[5])
+    r = approved_row
     title = r[1] or r[0]
-    body = decompress(r[2])
     cat = r[3] or topic
     img = r[4] or ""
     source_url = r[5] or ""
+    persona = approved_persona
+    script_data = approved_script
 
-    # ── Persona & Voice Selection ──────────────────────────────────────────────
-    # For testing, hardcoded to baburao as instructed by the user.
-    # Dynamic architecture: consumer hacks, quirky stories, bizarre finance fit baburao;
-    # serious defense, space, national infrastructure fit charlie.
-    persona = "baburao"
-    voice_id = "SOYHLrjzK2X1ezoPC6cr" if persona == "baburao" else "IKne3meq5aSn9XLyUdCD"
-
-    # Synthesize complete 4-part Hindi script using Gemma 4 12B in a dedicated call
-    script_data = None
-    if model:
-        print(f"  Synthesizing fluent 4-part Hindi narration for #{aid} with Gemma 4 12B (persona: {persona})...")
-        try:
-            sprompt = (
-                f"NEWS ARTICLE\n"
-                f"Title: {title}\n"
-                f"Topic: {topic}\n"
-                f"Key Fact: {fact}\n"
-                f"Content:\n{body[:1200]}"
-            )
-            sys_prompt = SCRIPT_SYSTEM_BABURAO if persona == "baburao" else SCRIPT_SYSTEM_CHARLIE
-            script_data = model.json(sys_prompt, sprompt, SCRIPT_SCHEMA, temperature=0.25, max_tokens=450)
-        except Exception as e:
-            print(f"  Script generation warning: {e}")
-
-    headline_hi = (script_data and script_data.get("headline_hi")) or title[:40]
-    hook_say = (script_data and script_data.get("hook_say")) or hook
-    core_title = (script_data and script_data.get("core_title_hi")) or "पूरी जानकारी"
-    core_say = (script_data and script_data.get("core_say")) or f"इस मामले की पूरी जानकारी ये है कि {fact}।"
-    twist_stat = (script_data and script_data.get("twist_stat")) or "बड़ा बदलाव"
-    twist_label = (script_data and script_data.get("twist_label")) or "का असर"
-    twist_say = (script_data and script_data.get("twist_say")) or f"ज़मीनी सच्चाई ये है कि {fact}।"
-    q_hi = (script_data and script_data.get("question_hi")) or "आपकी क्या राय है?"
-    eng_say = (script_data and script_data.get("engagement_say")) or "इस पूरे मामले पर आपकी क्या सोच है? कमेंट में बताइए और फ़ॉलो कीजिए सत्याधीश।"
+    headline_hi = script_data.get("headline_hi") or title[:40]
+    hook_say = script_data.get("hook_say") or hook
+    core_title = script_data.get("core_title_hi") or "पूरी जानकारी"
+    core_say = script_data.get("core_say") or f"इस मामले की पूरी जानकारी ये है कि {fact}।"
+    twist_stat = script_data.get("twist_stat") or "बड़ा बदलाव"
+    twist_label = script_data.get("twist_label") or "का असर"
+    twist_say = script_data.get("twist_say") or f"ज़मीनी सच्चाई ये है कि {fact}।"
+    q_hi = script_data.get("question_hi") or "आपकी क्या राय है?"
+    eng_say = script_data.get("engagement_say") or "इस पूरे मामले पर आपकी क्या सोच है? कमेंट में बताइए और फ़ॉलो कीजिए सत्याधीश।"
 
     category_hi = CATEGORY_HI.get(str(topic).lower(), "विशेष पड़ताल")
 
     # Clean Hindi core bullet points for Card 2
-    raw_pts = script_data.get("core_points_hi") if script_data else None
+    raw_pts = script_data.get("core_points_hi")
     if raw_pts and isinstance(raw_pts, list) and len(raw_pts) > 0:
         core_points = [str(p).strip() for p in raw_pts if str(p).strip()][:3]
         if len(core_points) == 1:
@@ -327,7 +385,7 @@ def dispatch_daily_reel(u_db, m_db, model=None, force=False):
         core_points = ["सटीक सरकारी रिपोर्ट", "सत्यापित डेटा"]
 
     # Clean Hindi detail line under big stat for Card 3
-    twist_detail = (script_data and script_data.get("twist_detail_hi"))
+    twist_detail = script_data.get("twist_detail_hi")
     if not twist_detail:
         twist_detail = "सत्यापित ज़मीनी रिपोर्ट"
 
@@ -335,8 +393,8 @@ def dispatch_daily_reel(u_db, m_db, model=None, force=False):
     if "indianexpress" in source_url.lower():
         source_label = "The Indian Express"
 
-    hook_badge = "बाबूराव स्पेशल" if persona == "baburao" else "ताज़ा पड़ताल"
-    twist_badge = "बाबूराव का सिर चकराया!" if persona == "baburao" else "ज़मीनी हक़ीक़त"
+    hook_badge = "ताज़ा पड़ताल"
+    twist_badge = "ज़मीनी हक़ीक़त"
 
     payload = {
         "article_id": aid,

@@ -87,11 +87,14 @@ LANGUAGE AND TONE
 - Do not use English words unless they are common in everyday Hindi speech (e.g. dialysis, center, doctor, hospital, ticket). Write those in Devanagari too (डायलिसिस, सेंटर, डॉक्टर).
 - Do not use hashtags, emojis, or stage directions in any field.
 
-VOICE/TTS RULE (very important)
-The *_say fields are fed to a text-to-speech engine. In these fields:
-- NEVER use symbols such as ₹, $, %, &, or abbreviations like "Rs." or "km".
-- Write them out in Hindi words: "4000 रुपये" (not ₹4000), "999 रुपये" (not ₹999), "20 प्रतिशत" (not 20%), "5 किलोमीटर" (not 5 km).
-- The ₹ symbol may appear ONLY in the on-screen fields: headline_hi and twist_stat.
+VOICE / TTS ENGINE LIMITATIONS & PHONETIC RULES (Critical)
+The *_say fields are synthesized directly by an AI voice model. Neural TTS engines struggle with literary grammar, complex inflections, and stacked character markers:
+- Spoken Flow over Literary Grammar: Write strictly how an Indian creator speaks conversationally on camera. Avoid rare grammatical declensions, literary plural forms, or stiff bureaucratic phrasing that cause AI voices to mispronounce or slur.
+- Phonetic Simplicity: Choose simple, everyday spoken vocabulary over complex consonant clusters or stacked character modifiers. If a concept can be expressed with a standard, clean colloquial word, always prefer the simpler one.
+- Conversational Calls-to-Action: Keep engagement prompts conversational and natural (e.g. inviting viewers to share their thoughts or experiences in the comments), rather than abrupt or forceful single-word imperative commands.
+- Symbols and Units: NEVER use symbols such as ₹, $, %, &, or abbreviations like "Rs." or "km". Always write them out as spoken Hindi words: "4000 रुपये" (not ₹4000), "20 प्रतिशत" (not 20%), "5 किलोमीटर" (not 5 km).
+- Punctuation for Breathing: Use commas and short sentences to provide natural breath pauses for the AI voice. Avoid long, complex multi-clause sentences.
+The ₹ symbol may appear ONLY in the on-screen fields: headline_hi and twist_stat.
 
 OUTPUT FIELDS
 - headline_hi: catchy on-screen headline, max 8 words.
@@ -149,6 +152,7 @@ EVALUATION CRITERIA:
 1. Tone & Credibility: Is the script professional, engaging, and worthy of a credible news brand? Reject ANY script with cheap movie catchphrases, slapstick humor, clownish slang, or cringe drama.
 2. Voice Match: Is the language, pacing, and vibe genuinely suitable for the assigned voice persona?
 3. Story Fit: Is this story actually worth a 30-40s video reel, or does it sound awkward, trivial, or forced?
+4. TTS Phonetic Naturalness: Does the spoken narration flow naturally without awkward grammatical phrasing, stiff literary inflections, or tongue-twisters that would sound robotic or mispronounced on an AI voice?
 
 Return a JSON object:
 {

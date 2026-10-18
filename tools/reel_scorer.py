@@ -221,14 +221,14 @@ def dispatch_daily_reel(u_db, m_db, model=None, force=False):
         return
 
     now = int(time.time())
-    # Ensure at most 1 reel per 2 hours unless force=True
+    # Ensure at most 1 reel per 6 hours unless force=True
     if not force:
         # Check 1: Turso DB reel_posts
         try:
             recent = u_db.execute("SELECT max(dispatched_at) FROM reel_posts").rows
-            if recent and recent[0][0] and (now - int(recent[0][0])) < 2 * 3600:
+            if recent and recent[0][0] and (now - int(recent[0][0])) < 6 * 3600:
                 last_ago_hrs = (now - int(recent[0][0])) / 3600
-                print(f"  Daily reel already dispatched {last_ago_hrs:.1f}h ago (< 2 hours). Skipping duplicate dispatch.")
+                print(f"  Daily reel already dispatched {last_ago_hrs:.1f}h ago (< 6 hours). Skipping duplicate dispatch.")
                 return
         except Exception:
             pass
@@ -249,8 +249,8 @@ def dispatch_daily_reel(u_db, m_db, model=None, force=False):
                 if runs:
                     updated = datetime.datetime.fromisoformat(runs[0]["updated_at"].replace("Z", "+00:00"))
                     diff_hrs = (datetime.datetime.now(datetime.timezone.utc) - updated).total_seconds() / 3600.0
-                    if diff_hrs < 2.0:
-                        print(f"  Reel already posted to Telegram {diff_hrs:.1f}h ago (< 2 hours). Skipping dispatch.")
+                    if diff_hrs < 6.0:
+                        print(f"  Reel already posted to Telegram {diff_hrs:.1f}h ago (< 6 hours). Skipping dispatch.")
                         return
         except Exception as e:
             print(f"  Note: GitHub Actions run check: {e}")

@@ -193,6 +193,22 @@ CATEGORY_HI = {
 }
 
 
+def send_telegram_alert(text):
+    """Sends an error alert directly to Telegram."""
+    bot_token = os.environ.get("TELEGRAM_BOT_TOKEN") or "8553388061:AAGzoTrdaUABEj8QbPidn6wT1R9Q8oREqNI"
+    chat_id = os.environ.get("TELEGRAM_CHAT_ID") or os.environ.get("TELEGRAM_TEST_CHAT_ID") or os.environ.get("CHAT_ID") or "6634664206"
+    try:
+        import urllib.request
+        url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
+        data = json.dumps({"chat_id": chat_id, "text": text, "parse_mode": "Markdown"}).encode()
+        req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"}, method="POST")
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            return resp.status == 200
+    except Exception as e:
+        print(f"  Telegram alert error: {e}")
+        return False
+
+
 def dispatch_daily_reel(u_db, m_db, model=None, force=False):
     """Dispatches the top viral story of the day to Satyadheesh/reels via repository_dispatch."""
     token = os.environ.get("CORE_TOKEN") or os.environ.get("GITHUB_PAT") or os.environ.get("GITHUB_PAT_CLASSIC")
@@ -351,7 +367,14 @@ def dispatch_daily_reel(u_db, m_db, model=None, force=False):
             break
 
     if not approved_candidate or not approved_script:
-        print("❌ No candidate story passed Gemma's voice & editorial quality check. Halting dispatch to preserve brand standards.")
+        err_msg = (
+            "⚠️ *SatyaDheesh Reel Alert: No Candidate Approved*\n\n"
+            f"• *Evaluated*: {len(candidates)} high-viral candidates\n"
+            "• *Reason*: None passed Gemma's brand dignity & voice fit review.\n"
+            "• *Action*: Reel dispatch halted to protect brand quality."
+        )
+        print(f"❌ {err_msg}")
+        send_telegram_alert(err_msg)
         return
 
     aid, topic, score, hook, fact, why = int(approved_candidate[0]), str(approved_candidate[1]), int(approved_candidate[2]), str(approved_candidate[3]), str(approved_candidate[4]), str(approved_candidate[5])
@@ -458,9 +481,18 @@ def dispatch_daily_reel(u_db, m_db, model=None, force=False):
                     [aid, title, topic, score, hook, now]
                 )
             else:
-                print(f"⚠️ Dispatch returned status {resp.status}")
+                err_msg = f"⚠️ *Reel Dispatch Warning*: Satyadheesh/reels returned HTTP status {resp.status} for article #{aid}"
+                print(err_msg)
+                send_telegram_alert(err_msg)
     except Exception as e:
+        err_msg = (
+            "🚨 *SatyaDheesh Reel Dispatch Error*\n\n"
+            f"• *Article*: #{aid} ({title[:60]})\n"
+            f"• *Voice*: {persona}\n"
+            f"• *Error*: `{str(e)[:250]}`"
+        )
         print(f"❌ Failed to dispatch to Satyadheesh/reels: {e}")
+        send_telegram_alert(err_msg)
 
 
 def main():

@@ -58,6 +58,7 @@ INDEXNOW_HOURS = {1, 5, 9, 13, 17}  # UTC; not 21 (the nightly jobs)
 # Timeline-follow notifications: the site's job sends what is due (its own limits: 6 h per story, 2 h per device,
 # none 22:00-07:00 IST). Every hourly check.
 TIMELINE_RUN_URL = "https://satyadheesh.in/api/notifications/timeline-run"
+UPSC_RUN_URL = "https://satyadheesh.in/api/notifications/upsc-run"
 # Cloudflare refuses Python's default user agent ("error code: 1010"): calls to the site say who they are
 SITE_UA = "SatyaDheesh-Orchestrator/1.0 (+https://satyadheesh.in)"
 CHECKS = [  # check, code repo, paths, workflow to run, its repo, token, inputs
@@ -229,24 +230,23 @@ def plan_indexnow():
         summary.append(("IndexNow", "call failed", "", "", str(e)[:120]))
 
 
-def plan_timeline_follows():
-    if EVENT:  # the hourly check only
-        return
+def call_site_job(name, url):
+    """POST one of the site's notification jobs (auth: REVALIDATE_SECRET) and record its answer."""
     secret = os.environ.get("REVALIDATE_SECRET", "")
     if not secret:
-        summary.append(("timeline follows", "skipped", "", "", "REVALIDATE_SECRET not set"))
+        summary.append((name, "skipped", "", "", "REVALIDATE_SECRET not set"))
         return
     if DRY:
-        summary.append(("timeline follows", "due", "", "", "dry run: not called"))
+        summary.append((name, "due", "", "", "dry run: not called"))
         return
     try:
-        req = urllib.request.Request(TIMELINE_RUN_URL, method="POST", data=b"",
+        req = urllib.request.Request(url, method="POST", data=b"",
                                      headers={"Authorization": f"Bearer {secret}", "User-Agent": SITE_UA})
         with urllib.request.urlopen(req, timeout=90) as r:
             res = json.loads(r.read() or b"{}")
-        summary.append(("timeline follows", "ok", "", "", ", ".join(f"{k} {v}" for k, v in res.items())[:150]))
+        summary.append((name, "ok", "", "", ", ".join(f"{k} {v}" for k, v in res.items())[:150]))
         if os.environ.get("GITHUB_ACTIONS"):
-            print("::notice title=timeline follows::" + json.dumps(res)[:400])
+            print(f"::notice title={name}::" + json.dumps(res)[:400])
     except Exception as e:
         detail = ""
         if isinstance(e, urllib.error.HTTPError):
@@ -254,9 +254,16 @@ def plan_timeline_follows():
                 detail = f" HTTP {e.code}: {e.read()[:200]!r}"
             except Exception:
                 detail = f" HTTP {e.code}"
-        summary.append(("timeline follows", "failed", "", "", (str(e) + detail)[:200]))
+        summary.append((name, "failed", "", "", (str(e) + detail)[:200]))
         if os.environ.get("GITHUB_ACTIONS"):
-            print(f"::warning title=timeline follows::{str(e)[:150]}{detail}")
+            print(f"::warning title={name}::{str(e)[:150]}{detail}")
+
+
+def plan_timeline_follows():
+    if EVENT:  # the hourly check only
+        return
+    call_site_job("timeline follows", TIMELINE_RUN_URL)
+    call_site_job("upsc digests", UPSC_RUN_URL)   # "Notify me of new notes" on /upsc: one digest a day per topic
 
 
 def plan_archive():

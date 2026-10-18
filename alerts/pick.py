@@ -117,6 +117,9 @@ def main():
     upsc, main_, trans = upsc_db(), main_db(), translation_db()
     chat = os.environ.get("TELEGRAM_TEST_CHAT_ID")
     bot = None
+    if not chat and not dry:
+        print("::warning title=Alerts not delivered::TELEGRAM_TEST_CHAT_ID is not set in this repo's secrets, so picks "
+              "are stored but sent nowhere")
     if not dry and chat:
         from tg.telegram import Bot
         bot = Bot()

@@ -76,7 +76,7 @@ def decompress(blob, limit=1200):
     return ""
 
 
-SCRIPT_SYSTEM = """You are an expert Indian short-form news storyteller who writes high-retention Instagram Reel scripts in natural, conversational Hindi.
+SCRIPT_SYSTEM_CHARLIE = """You are an expert Indian short-form news storyteller who writes high-retention Instagram Reel scripts in natural, conversational Hindi.
 
 TASK
 Read the news article below and write a Reel narration script in Hindi (Devanagari script). The script has 4 parts: Hook, Core, Twist, Engagement. Return it as a single JSON object with the exact keys listed under OUTPUT FIELDS.
@@ -110,6 +110,46 @@ RULES
 - Use only facts from the article. Do not invent numbers, names, or quotes.
 - Keep the whole spoken script (hook_say + core_say + twist_say + engagement_say) to about 60-90 words, roughly 30-40 seconds of speech.
 - Output ONLY the JSON object. No explanation, no markdown, no code fences, no text before or after.
+"""
+
+SCRIPT_SYSTEM_BABURAO = """You are Baburao Ganpatrao Apte (Babu Bhaiya from the movie Hera Pheri), writing a viral comedic Instagram Reel news script in natural, conversational Hindi.
+
+TASK
+Read the news article below and write a 4-part Reel script (Hook, Core, Twist, Engagement) reacting to the news in your iconic Baburao style. Return it as a single JSON object with the exact keys listed under OUTPUT FIELDS.
+
+BABURAO COMEDIC TONE & STYLE
+- High comedic energy, dramatic confusion, sharp public observation.
+- Use Baburao's iconic phrasing and expressions naturally: "अरे देवा!", "उठा ले रे बाबा!", "ये बाबूराव का स्टाइल है!", "अरे बाबा, ये क्या चक्कर है?!", "25 दिन में क्या?!", "अरे खोपड़ी तोड़ साले का!"
+- Simple everyday spoken Hindi (Devanagari). No formal or bureaucratic Hindi.
+- Keep sentences punchy, conversational, and easy to speak in one breath.
+- Use only facts from the article. Do not invent fake facts or numbers.
+
+VOICE/TTS RULE (very important)
+The *_say fields are fed to a text-to-speech engine:
+- NEVER use symbols such as ₹, $, %, &, or abbreviations like "Rs." or "km".
+- Write them out in Hindi words: "1000 रुपये" (not ₹1000), "50 किलोमीटर" (not 50 km).
+- The ₹ symbol may appear ONLY in on-screen fields: headline_hi and twist_stat.
+
+OUTPUT FIELDS
+- headline_hi: catchy on-screen headline in Baburao style, max 8 words (e.g. "बिना PIN के ₹1,000 साफ़?!").
+- hook_say: 1-2 spoken lines with dramatic shock or comedic question (e.g. "अरे देवा! बिना पिन डाले 1000 रुपये साफ़?! अरे ये बाबूराव का बटुआ खाली करने की नई स्कीम है क्या रे बाबा?!").
+- core_title_hi: short on-screen title for core news card, max 8 words.
+- core_points_hi: exactly 2 or 3 short on-screen bullet points in Hindi. Max 8 words per bullet.
+- core_say: 2-3 spoken lines explaining the real news in Baburao's funny yet informative way.
+- twist_stat: single key number/word on screen (e.g. "₹5,000" or "बजट").
+- twist_label: short label for that number (e.g. "वॉलेट लिमिट" or "का झटका").
+- twist_detail_hi: 1 short on-screen line in Hindi summarizing the twist or contrast (max 10 words).
+- twist_say: 1-2 spoken lines reacting with comedy and shock to the twist/budget/fine ("लेकिन बाबूराव का दिमाग तब घूमा जब देखा... उठा ले रे बाबा!").
+- question_hi: short on-screen question for engagement card.
+- engagement_say: 1 natural comedic question to the audience ("तो जनता जनार्दन... क्या तुम... कमेंट में बताओ, जल्दी बताओ!").
+
+RULES
+- Use only facts from the article. Do not invent numbers, names, or quotes.
+- Keep the whole spoken script (hook_say + core_say + twist_say + engagement_say) to about 60-90 words, roughly 30-40 seconds of speech.
+- Output ONLY the JSON object. No explanation, no markdown, no code fences, no text before or after.
+"""
+
+SCRIPT_SYSTEM = SCRIPT_SYSTEM_CHARLIE
 
 EXAMPLE (for format and tone only; do not copy its content)
 {
@@ -260,10 +300,17 @@ def dispatch_daily_reel(u_db, m_db, model=None, force=False):
     img = r[4] or ""
     source_url = r[5] or ""
 
-    # Synthesize complete 4-part Hindi script using Gemma 4 12B if model is loaded
+    # ── Persona & Voice Selection ──────────────────────────────────────────────
+    # For testing, hardcoded to baburao as instructed by the user.
+    # Dynamic architecture: consumer hacks, quirky stories, bizarre finance fit baburao;
+    # serious defense, space, national infrastructure fit charlie.
+    persona = "baburao"
+    voice_id = "SOYHLrjzK2X1ezoPC6cr" if persona == "baburao" else "IKne3meq5aSn9XLyUdCD"
+
+    # Synthesize complete 4-part Hindi script using Gemma 4 12B in a dedicated call
     script_data = None
     if model:
-        print(f"  Synthesizing fluent 4-part Hindi narration for #{aid} with Gemma 4 12B...")
+        print(f"  Synthesizing fluent 4-part Hindi narration for #{aid} with Gemma 4 12B (persona: {persona})...")
         try:
             sprompt = (
                 f"NEWS ARTICLE\n"
@@ -272,7 +319,8 @@ def dispatch_daily_reel(u_db, m_db, model=None, force=False):
                 f"Key Fact: {fact}\n"
                 f"Content:\n{body[:1200]}"
             )
-            script_data = model.json(SCRIPT_SYSTEM, sprompt, SCRIPT_SCHEMA, temperature=0.2, max_tokens=400)
+            sys_prompt = SCRIPT_SYSTEM_BABURAO if persona == "baburao" else SCRIPT_SYSTEM_CHARLIE
+            script_data = model.json(sys_prompt, sprompt, SCRIPT_SCHEMA, temperature=0.25, max_tokens=450)
         except Exception as e:
             print(f"  Script generation warning: {e}")
 
@@ -306,13 +354,19 @@ def dispatch_daily_reel(u_db, m_db, model=None, force=False):
     if "indianexpress" in source_url.lower():
         source_label = "The Indian Express"
 
+    hook_badge = "बाबूराव स्पेशल" if persona == "baburao" else "ताज़ा पड़ताल"
+    twist_badge = "बाबूराव का सिर चकराया!" if persona == "baburao" else "ज़मीनी हक़ीक़त"
+
     payload = {
         "article_id": aid,
+        "persona": persona,
+        "voice_id": voice_id,
+        "force": force,
         "category": category_hi,
         "headline": headline_hi,
         "image_url": img,
         "hook": {
-            "badge": "ताज़ा पड़ताल",
+            "badge": hook_badge,
             "title": headline_hi,
             "subtitle": "सत्याधीश रिपोर्ट",
             "say": hook_say
@@ -325,7 +379,7 @@ def dispatch_daily_reel(u_db, m_db, model=None, force=False):
             "say": core_say
         },
         "twist": {
-            "badge": "ज़मीनी हक़ीक़त",
+            "badge": twist_badge,
             "big_stat": twist_stat,
             "stat_label": twist_label,
             "detail": twist_detail,

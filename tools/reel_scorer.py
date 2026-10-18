@@ -341,7 +341,6 @@ def dispatch_daily_reel(u_db, m_db, model=None, force=False):
     payload = {
         "article_id": aid,
         "persona": persona,
-        "voice_id": voice_id,
         "force": force,
         "category": category_hi,
         "headline": headline_hi,

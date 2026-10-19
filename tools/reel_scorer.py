@@ -416,9 +416,9 @@ def dispatch_daily_reel(u_db, m_db, model=None, force=False):
     if not twist_detail:
         twist_detail = "सत्यापित ज़मीनी रिपोर्ट"
 
-    source_label = "The Hindu"
+    source_label = "TheHindu"
     if "indianexpress" in source_url.lower():
-        source_label = "The Indian Express"
+        source_label = "TheIndianExpress"
 
     hook_badge = "ताज़ा पड़ताल"
     twist_badge = "ज़मीनी हक़ीक़त"

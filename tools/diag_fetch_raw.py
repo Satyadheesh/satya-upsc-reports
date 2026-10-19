@@ -8,7 +8,9 @@ for path in (os.environ.get("URLS") or "/").split():
     c.request("GET", path, headers={"User-Agent": "Mozilla/5.0 (compatible; SatyaDheeshAudit/1.0)"})
     r = c.getresponse()
     body = r.read().decode("utf-8", "replace")
-    print(f"## {path}\n- status {r.status}, location: {r.getheader('location')}, cache: {r.getheader('x-nextjs-cache')} / {r.getheader('x-cache-status') or r.getheader('x-cache')}")
+    lang = re.search(r'<html[^>]*lang="([^"]+)"', body)
+    print(f"## {path}\n- status {r.status}, location: {r.getheader('location')}, cache: {r.getheader('x-nextjs-cache')} / {r.getheader('x-cache-status') or r.getheader('x-cache')}"
+          f"\n- cloudflare: {r.getheader('cf-cache-status')} age={r.getheader('age')} · cache-control: {r.getheader('cache-control')} · html lang={lang.group(1) if lang else '-'}")
     upd = re.findall(r"(\d+) updates tracked", body)[:1]
     marks = {k: body.count(k) for k in ("more report", "related timeline", "Part of a bigger story")}
     print(f"- markers: {marks}, updates: {upd}")

@@ -169,8 +169,7 @@ def posted(upsc, key):
     return bool(upsc.execute("SELECT 1 FROM ig_posts WHERE key = ?", [key]).rows)
 
 
-SLOTS = [("explain", "en", "08:30"), ("explain", "hi", "10:30"), ("ssc", "en", "13:00"), ("ssc", "hi", "15:00"),
-         ("upsc", "en", "19:00"), ("upsc", "hi", "21:00")]  # DIGEST_SWITCH: becomes [digest 19:00 en, 21:00 hi] once Yash OKs the preview
+SLOTS = [("digest", "en", "19:00"), ("digest", "hi", "21:00")]  # one post a day since 20 Oct 2026
 EARLY, LATE = 35 * 60, int(2.5 * 3600)
 
 

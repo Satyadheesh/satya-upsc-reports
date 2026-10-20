@@ -55,10 +55,28 @@ def fetch(run_id, token, wait=600):
     return mp4, (txt.read_text(encoding="utf-8") if txt.exists() else "")
 
 
-def reel_caption(text):
-    """The reel's description, made for Instagram: no links (they aren't clickable), no YouTube tags, 5 hashtags."""
+def news_link(article_id):
+    """The story's page on the site: Hindi when that page exists (the reels are Hindi), else English."""
+    if not str(article_id or "").isdigit():
+        return ""
+    for url in (f"https://satyadheesh.in/news/{article_id}?lang=hi", f"https://satyadheesh.in/news/{article_id}"):
+        try:
+            if requests.get(url, timeout=30, headers={"User-Agent": "SatyaDheeshIG/1.0"}).status_code == 200:
+                return url.replace("https://", "")
+        except requests.RequestException:
+            pass
+    return ""
+
+
+def reel_caption(text, link=""):
+    """The reel's description, made for Instagram: the story's link (as text: captions show no clickable links),
+    no YouTube tags, 5 hashtags."""
     lines = [l.rstrip() for l in (text or "").splitlines()]
     lines = [re.sub(r"https?://", "", l) for l in lines if not re.fullmatch(r"\s*(#\S+\s*)+", l)]
+    if link:
+        lines = [f"पूरी ख़बर / Full story: {link}" if re.search(r"Website:", l) else l for l in lines]
+        if not any(link in l for l in lines):
+            lines.append(f"पूरी ख़बर / Full story: {link}")
     body = "\n".join(lines).strip()
     body = re.sub(r"\n{3,}", "\n\n", body)
     if len(body) > 1500:  # cut at the last sentence end before 1500 characters
@@ -71,6 +89,7 @@ def reel_caption(text):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--run-id", required=True)
+    ap.add_argument("--article-id", default="", help="the story's article id (from the reel's payload), for the link")
     ap.add_argument("--dry-run", action="store_true", help="download and show the caption; post nothing")
     a = ap.parse_args()
     token = os.environ.get("REELS_TOKEN") or ""
@@ -82,7 +101,7 @@ def main():
         print(f"reel of run {a.run_id} already posted")
         return
     mp4, text = fetch(a.run_id, token)
-    cap = reel_caption(text)
+    cap = reel_caption(text, news_link(a.article_id))
     print(f"reel {mp4.name}: {mp4.stat().st_size / 1e6:.1f} MB\n--- caption ---\n{cap}\n---")
     if a.dry_run:
         print(f"::notice title=Instagram reel dry-run::{mp4.name} {mp4.stat().st_size / 1e6:.1f} MB%0A"

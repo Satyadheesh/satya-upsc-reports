@@ -137,7 +137,10 @@ def digest_caption(day, stories, number, quiz, lang):
     if number:
         lines.append(f"{'आज का आँकड़ा' if hi else 'Number of the day'}: {number['number']} — {number['what']}")
     lines.append("")
-    lines += [f"{k}. {s['title']}" for k, s in enumerate(stories[:5], 1)]
+    for k, s in enumerate(stories[:5], 1):  # each with its note's address (captions show no clickable links, but it can be copied)
+        lines.append(f"{k}. {s['title']}")
+        if s.get("id"):
+            lines.append(f"   satyadheesh.in/upsc/note/{s['id']}" + ("?lang=hi" if hi else ""))
     if len(quiz) >= 2:
         lines += ["", ("क्विज़ स्लाइड पर — अपना स्कोर कमेंट करें!" if hi else "Quick quiz on the slides — comment your score!")]
     lines += ["", ("पूरे नोट्स मुफ़्त: satyadheesh.in · रोज़ की पीडीएफ टेलीग्राम पर @satyadheesh" if hi

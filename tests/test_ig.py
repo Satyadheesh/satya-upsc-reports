@@ -6,7 +6,7 @@ from ig.post import tidy, today_period
 from ig.slides import slides_html
 
 DAY = dt.date(2026, 10, 3)
-ST = [{"title": f"Story {k} about the Chenab Bridge and Vande Bharat at 100 kmph", "why": "Why it matters. " * 6,
+ST = [{"id": 1000 + k, "title": f"Story {k} about the Chenab Bridge and Vande Bharat at 100 kmph", "why": "Why it matters. " * 6,
        "paper": "GS3", "subject": "economy", "facts": [("Figure", "100 kmph on the Chenab Bridge")]} for k in range(1, 6)]
 Q = {"question": "Consider the following statements:", "statements": ["A is B.", "C is D."],
      "options": ["1 only", "2 only", "Both 1 and 2", "Neither 1 nor 2"], "answer": 2, "explanation": "Both are correct."}
@@ -84,11 +84,12 @@ class Formats(unittest.TestCase):
             c = digest_caption(DAY, ST, num, quiz, lang)
             self.assertLessEqual(c.count("#"), 5)
             self.assertNotIn("http", c)
+            self.assertIn("satyadheesh.in/upsc/note/", c)
         self.assertEqual(digest_html(DAY, ST[:3], None, quiz[:1], "en")[1], 4)  # no number, no quiz with < 2 questions
 
     def test_slots(self):
         from ig.post import SLOTS, post_key
-        self.assertEqual(len(SLOTS), 6)
+        self.assertEqual(SLOTS, [("digest", "en", "19:00"), ("digest", "hi", "21:00")])
         self.assertEqual(post_key("digest", "2026-10-20", "hi"), "ig:digest:2026-10-20:hi")
         self.assertEqual(post_key("upsc", "2026-10-10", "en"), "ig:daily:2026-10-10:en")  # old key kept
         self.assertEqual(post_key("ssc", "2026-10-10", "hi"), "ig:ssc:2026-10-10:hi")

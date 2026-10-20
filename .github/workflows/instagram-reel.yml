@@ -1,0 +1,60 @@
+name: Instagram reel
+run-name: "Instagram reel from reels run ${{ github.event.client_payload.run_id || github.event.inputs.run_id }}"
+
+# Every reel of the Satyadheesh/reels pipeline also goes to Instagram as a Reel (Yash, 20 Oct 2026).
+# The reels workflow sends repository_dispatch 'ig_reel' {run_id} after its YouTube upload.
+on:
+  repository_dispatch:
+    types: [ig_reel]
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: 'Satyadheesh/reels run id'
+        required: true
+      dry_run:
+        description: 'Download and show the caption only'
+        type: boolean
+        default: true
+
+concurrency:
+  group: instagram-reel
+  cancel-in-progress: false
+
+env:
+  CORE_TOKEN: ${{ secrets.CORE_TOKEN }}
+  PYTHONPATH: ${{ github.workspace }}/.ci
+
+jobs:
+  reel:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      RUN_ID: ${{ github.event.client_payload.run_id || github.event.inputs.run_id }}
+      DRY: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run == 'true' }}
+      REELS_TOKEN: ${{ secrets.DISPATCH_TOKEN }}
+      IG_TOKEN: ${{ secrets.IG_TOKEN }}
+      SATYA_UPSC_DB_URL: ${{ secrets.NEW_UPSC_DB_URL }}
+      SATYA_UPSC_DB_TOKEN: ${{ secrets.NEW_UPSC_DB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository }}-core
+          token: ${{ secrets.CORE_TOKEN }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - run: pip install libsql-client requests
+      - name: Post
+        run: |
+          set -o pipefail
+          case "$RUN_ID" in ''|*[!0-9]*) echo "::error::bad run id"; exit 1;; esac
+          python -m ig.reel --run-id "$RUN_ID" $([ "$DRY" = true ] && echo --dry-run) 2>&1 | tee /tmp/out.txt
+      - name: Tell Telegram if it failed
+        if: failure()
+        env:
+          TG: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          CHAT: ${{ secrets.TELEGRAM_TEST_CHAT_ID }}
+        run: |
+          [ -n "$TG" ] && [ -n "$CHAT" ] || exit 0
+          MSG="Instagram reel failed (reels run $RUN_ID): $(tail -c 600 /tmp/out.txt 2>/dev/null) ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          curl -s -o /dev/null "https://api.telegram.org/bot$TG/sendMessage" --data-urlencode "chat_id=$CHAT" --data-urlencode "text=$MSG"

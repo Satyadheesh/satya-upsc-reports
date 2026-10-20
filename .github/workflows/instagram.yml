@@ -1,9 +1,10 @@
 name: Instagram posts
 
-# Six carousels a day: Number/Question of the day, SSC quiz and the UPSC top 5, each in English then Hindi.
+# One post a day since 20 Oct 2026: "Today in 60 seconds" (ig.digest), English at 19:00 and Hindi at 21:00 IST.
+# (Reels are posted by instagram-reel.yml.)
 on:
-  # No GitHub schedule: cron-job.org starts each of the six slots (08:30, 10:30, 13:00, 15:00, 19:00, 21:00 IST)
-  # with mode=scheduled ~20 min early; a run posts whatever slot is due (35 min early to 2.5 h late) and exits.
+  # No GitHub schedule: cron-job.org starts the 18:40 and 20:40 IST runs with mode=scheduled; a run posts whatever
+  # slot is due (35 min early to 2.5 h late) and exits. Its other four daily calls now find nothing due.
   workflow_dispatch:
     inputs:
       mode:
@@ -12,8 +13,8 @@ on:
         options: [dry-run, check-setup, now, scheduled]
         default: dry-run
       format:
-        description: 'now / dry-run: upsc, qotd (number or question of the day), ssc (quiz), or all'
-        default: 'all'
+        description: 'now / dry-run: digest (the daily post), or the old formats upsc, explain, ssc, qotd'
+        default: 'digest'
       langs:
         description: 'Languages'
         default: 'en,hi'
@@ -38,7 +39,7 @@ jobs:
     env:
       MODE: ${{ github.event.inputs.mode || 'scheduled' }}
       LANGS: ${{ github.event.inputs.langs || 'en,hi' }}
-      FORMAT: ${{ github.event.inputs.format || 'all' }}
+      FORMAT: ${{ github.event.inputs.format || 'digest' }}
       DAY: ${{ github.event.inputs.day || '' }}
       SATYA_DB_URL: ${{ secrets.SATYA_DB_URL }}
       SATYA_DB_TOKEN: ${{ secrets.SATYA_DB_TOKEN }}

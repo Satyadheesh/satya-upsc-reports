@@ -11,6 +11,9 @@ on:
       run_id:
         description: 'Satyadheesh/reels run id'
         required: true
+      article_id:
+        description: "The story's article id, for the link in the caption (optional)"
+        default: ''
       dry_run:
         description: 'Download and show the caption only'
         type: boolean
@@ -30,6 +33,7 @@ jobs:
     timeout-minutes: 30
     env:
       RUN_ID: ${{ github.event.client_payload.run_id || github.event.inputs.run_id }}
+      ARTICLE_ID: ${{ github.event.client_payload.article_id || github.event.inputs.article_id }}
       DRY: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run == 'true' }}
       REELS_TOKEN: ${{ secrets.DISPATCH_TOKEN }}
       IG_TOKEN: ${{ secrets.IG_TOKEN }}
@@ -48,7 +52,8 @@ jobs:
         run: |
           set -o pipefail
           case "$RUN_ID" in ''|*[!0-9]*) echo "::error::bad run id"; exit 1;; esac
-          python -m ig.reel --run-id "$RUN_ID" $([ "$DRY" = true ] && echo --dry-run) 2>&1 | tee /tmp/out.txt
+          case "$ARTICLE_ID" in *[!0-9]*) ARTICLE_ID="";; esac
+          python -m ig.reel --run-id "$RUN_ID" --article-id "$ARTICLE_ID" $([ "$DRY" = true ] && echo --dry-run) 2>&1 | tee /tmp/out.txt
       - name: Tell Telegram if it failed
         if: failure()
         env:

@@ -57,18 +57,10 @@ class IG:
         self.wait(cid)
         return self.post(f"{self.user_id}/media_publish", creation_id=cid)["id"]
 
-    def reel(self, mp4_path, caption, limit=900):
-        """Upload an MP4 straight to Instagram (resumable upload: no public URL needed) and publish it as a Reel
-        (also shown in the feed). Returns the media id."""
-        size = os.path.getsize(mp4_path)
-        c = self.post(f"{self.user_id}/media", media_type="REELS", upload_type="resumable", caption=caption, share_to_feed="true")
-        cid = c["id"]
-        uri = c.get("uri") or f"https://rupload.facebook.com/ig-api-upload/{VERSION}/{cid}"
-        with open(mp4_path, "rb") as f:
-            r = requests.post(uri, data=f, timeout=600,
-                              headers={"Authorization": f"OAuth {self.token}", "offset": "0", "file_size": str(size)})
-        if not r.ok:
-            raise IGError(f"video upload failed: HTTP {r.status_code} {r.text[:200]}")
+    def reel(self, video_url, caption, limit=900):
+        """Publish the MP4 at a public `video_url` as a Reel (also shown in the feed). Returns the media id.
+        (Instagram Login has no direct upload: 20 Oct 2026, upload_type=resumable answered 'video_url is required'.)"""
+        cid = self.post(f"{self.user_id}/media", media_type="REELS", video_url=video_url, caption=caption, share_to_feed="true")["id"]
         self.wait(cid, limit)
         return self.post(f"{self.user_id}/media_publish", creation_id=cid)["id"]
 

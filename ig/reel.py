@@ -95,6 +95,42 @@ def reel_caption(text, link=""):
     return (f"{body}\n\n{tail}\n\n{TAGS}" if body else f"SatyaDheesh\n\n{tail}\n\n{TAGS}")[:MAX]
 
 
+def host(mp4, run_id):
+    """Put the MP4 where Instagram can fetch it: a one-commit branch `ig-reels` of this public repo (force-pushed,
+    so old videos don't pile up in its history), served by jsDelivr with the right content type. -> URL"""
+    import subprocess
+    repo, tok = os.environ.get("GITHUB_REPOSITORY"), os.environ.get("GITHUB_TOKEN")
+    if not repo or not tok:
+        raise SystemExit("GITHUB_REPOSITORY / GITHUB_TOKEN missing (run inside the workflow)")
+    wt = pathlib.Path("/tmp/ig_reels_wt")
+    subprocess.run(["rm", "-rf", str(wt)], check=True)
+    (wt / "reels").mkdir(parents=True)
+    name = f"{run_id}.mp4"
+    (wt / "reels" / name).write_bytes(mp4.read_bytes())
+    git = lambda *a: subprocess.run(["git", *a], cwd=wt, check=True, capture_output=True, text=True)
+    git("init", "-q")
+    git("config", "user.name", "github-actions[bot]")
+    git("config", "user.email", "41898282+github-actions[bot]@users.noreply.github.com")
+    git("checkout", "-q", "--orphan", "ig-reels")
+    git("add", "-A")
+    git("commit", "-qm", f"reel {run_id}")
+    git("push", "-q", "-f", f"https://x-access-token:{tok}@github.com/{repo}.git", "HEAD:ig-reels")
+    sha = git("rev-parse", "HEAD").stdout.strip()
+    urls = [f"https://cdn.jsdelivr.net/gh/{repo}@{sha}/reels/{name}", f"https://raw.githubusercontent.com/{repo}/{sha}/reels/{name}"]
+    t0 = time.time()
+    while time.time() - t0 < 240:
+        for u in urls:
+            try:
+                r = requests.head(u, timeout=30, allow_redirects=True)
+                if r.ok and int(r.headers.get("content-length") or 0) == mp4.stat().st_size:
+                    print(f"video at {u} ({r.headers.get('content-type')})", flush=True)
+                    return u
+            except requests.RequestException:
+                pass
+        time.sleep(10)
+    raise SystemExit("the video never became reachable")
+
+
 def dispatched_article(upsc, run_id, token):
     """For a reel whose payload is gone: the article the reel scorer dispatched (reel_posts.dispatched_at) within
     10 minutes before the run started."""
@@ -128,7 +164,7 @@ def post_one(upsc, ig, run_id, token, article_id, dry, seen):
         print(f"::notice title=Instagram reel dry-run {run_id}::{mp4.name} {mp4.stat().st_size / 1e6:.1f} MB%0A"
               + cap.replace("%", "%25").replace("\n", "%0A")[:2500])
         return False
-    media_id = ig.reel(str(mp4), cap)
+    media_id = ig.reel(host(mp4, run_id), cap)
     upsc.execute("INSERT OR REPLACE INTO ig_posts (key, media_id, posted_at) VALUES (?, ?, ?)", [key, media_id, int(time.time())])
     try:
         link = ig.get(media_id, fields="permalink").get("permalink")

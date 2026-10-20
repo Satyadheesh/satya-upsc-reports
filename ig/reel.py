@@ -85,6 +85,8 @@ def main():
     cap = reel_caption(text)
     print(f"reel {mp4.name}: {mp4.stat().st_size / 1e6:.1f} MB\n--- caption ---\n{cap}\n---")
     if a.dry_run:
+        print(f"::notice title=Instagram reel dry-run::{mp4.name} {mp4.stat().st_size / 1e6:.1f} MB%0A"
+              + cap.replace("%", "%25").replace("\n", "%0A")[:2500])
         return
     ig = IG(current_token(upsc))
     media_id = ig.reel(str(mp4), cap)

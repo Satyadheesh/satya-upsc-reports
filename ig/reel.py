@@ -12,6 +12,7 @@ import io
 import os
 import pathlib
 import re
+import sys
 import time
 import zipfile
 
@@ -44,6 +45,8 @@ def fetch(run_id, token, wait=600):
         time.sleep(20)
     z = requests.get(arts[0]["archive_download_url"], headers=h, timeout=300)  # redirects to storage; requests drops the auth header
     z.raise_for_status()
+    import shutil
+    shutil.rmtree(OUT, ignore_errors=True)
     OUT.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(io.BytesIO(z.content)) as zf:
         zf.extractall(OUT)
@@ -52,7 +55,13 @@ def fetch(run_id, token, wait=600):
         raise SystemExit("the artifact has no MP4")
     mp4 = mp4s[-1]
     txt = mp4.with_suffix(".txt")
-    return mp4, (txt.read_text(encoding="utf-8") if txt.exists() else "")
+    article = ""
+    for js in OUT.rglob("*.json"):  # older runs: the article id, if the script kept it
+        m = re.search(r'"article_id"\s*:\s*"?(\d+)', js.read_text(encoding="utf-8", errors="replace"))
+        if m:
+            article = m.group(1)
+            break
+    return mp4, (txt.read_text(encoding="utf-8") if txt.exists() else ""), article
 
 
 def news_link(article_id):
@@ -86,35 +95,61 @@ def reel_caption(text, link=""):
     return (f"{body}\n\n{tail}\n\n{TAGS}" if body else f"SatyaDheesh\n\n{tail}\n\n{TAGS}")[:MAX]
 
 
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--run-id", required=True)
-    ap.add_argument("--article-id", default="", help="the story's article id (from the reel's payload), for the link")
-    ap.add_argument("--dry-run", action="store_true", help="download and show the caption; post nothing")
-    a = ap.parse_args()
-    token = os.environ.get("REELS_TOKEN") or ""
-    if not token:
-        raise SystemExit("REELS_TOKEN missing")
-    upsc = upsc_db()
-    key = f"ig:reel:{a.run_id}"
+def post_one(upsc, ig, run_id, token, article_id, dry, seen):
+    key = f"ig:reel:{run_id}"
     if upsc.execute("SELECT 1 FROM ig_posts WHERE key = ?", [key]).rows:
-        print(f"reel of run {a.run_id} already posted")
-        return
-    mp4, text = fetch(a.run_id, token)
-    cap = reel_caption(text, news_link(a.article_id))
-    print(f"reel {mp4.name}: {mp4.stat().st_size / 1e6:.1f} MB\n--- caption ---\n{cap}\n---")
-    if a.dry_run:
-        print(f"::notice title=Instagram reel dry-run::{mp4.name} {mp4.stat().st_size / 1e6:.1f} MB%0A"
+        print(f"reel of run {run_id} already posted")
+        return False
+    mp4, text, art = fetch(run_id, token)
+    title = (text.strip().splitlines() or [""])[0].strip()
+    if title and title in seen:  # the same story rendered twice (re-runs): post it once
+        print(f"run {run_id}: same story as an earlier reel ({title[:60]}), skipped")
+        return False
+    seen.add(title)
+    cap = reel_caption(text, news_link(article_id or art))
+    print(f"reel {run_id} {mp4.name}: {mp4.stat().st_size / 1e6:.1f} MB\n--- caption ---\n{cap}\n---", flush=True)
+    if dry:
+        print(f"::notice title=Instagram reel dry-run {run_id}::{mp4.name} {mp4.stat().st_size / 1e6:.1f} MB%0A"
               + cap.replace("%", "%25").replace("\n", "%0A")[:2500])
-        return
-    ig = IG(current_token(upsc))
+        return False
     media_id = ig.reel(str(mp4), cap)
     upsc.execute("INSERT OR REPLACE INTO ig_posts (key, media_id, posted_at) VALUES (?, ?, ?)", [key, media_id, int(time.time())])
     try:
         link = ig.get(media_id, fields="permalink").get("permalink")
     except Exception as ex:
         link = f"media {media_id} (permalink lookup failed: {type(ex).__name__})"
-    print(f"::notice title=Instagram reel::{link}")
+    print(f"::notice title=Instagram reel {run_id}::{link}", flush=True)
+    return True
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--run-id", required=True, help="a reels run id, or several (comma-separated, oldest first) to catch up")
+    ap.add_argument("--article-id", default="", help="the story's article id (from the reel's payload), for the link")
+    ap.add_argument("--gap", type=float, default=0, help="minutes between reels when several are posted")
+    ap.add_argument("--dry-run", action="store_true", help="download and show the caption; post nothing")
+    a = ap.parse_args()
+    token = os.environ.get("REELS_TOKEN") or ""
+    if not token:
+        raise SystemExit("REELS_TOKEN missing")
+    runs = [r for r in a.run_id.split(",") if r.strip().isdigit()]
+    upsc = upsc_db()
+    ig = None if a.dry_run else IG(current_token(upsc))
+    seen, failed, last = set(), 0, 0.0
+    for k, run in enumerate(runs):
+        if last and a.gap and not a.dry_run:
+            wait = last + a.gap * 60 - time.time()
+            if wait > 0:
+                print(f"waiting {wait / 60:.0f} min before the next reel", flush=True)
+                time.sleep(wait)
+        try:
+            if post_one(upsc, ig, run, token, a.article_id if len(runs) == 1 else "", a.dry_run, seen):
+                last = time.time()
+        except (Exception, SystemExit) as ex:  # one bad reel must not stop the others
+            failed += 1
+            print(f"::warning::reel {run} failed: {type(ex).__name__}: {str(ex)[:300]}", flush=True)
+    if failed:
+        sys.exit(1)
 
 
 if __name__ == "__main__":

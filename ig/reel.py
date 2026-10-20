@@ -95,6 +95,22 @@ def reel_caption(text, link=""):
     return (f"{body}\n\n{tail}\n\n{TAGS}" if body else f"SatyaDheesh\n\n{tail}\n\n{TAGS}")[:MAX]
 
 
+def dispatched_article(upsc, run_id, token):
+    """For a reel whose payload is gone: the article the reel scorer dispatched (reel_posts.dispatched_at) within
+    10 minutes before the run started."""
+    try:
+        r = requests.get(f"{API}/repos/{REPO}/actions/runs/{run_id}", timeout=60,
+                         headers={"Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json"}).json()
+        import datetime as dt
+        start = dt.datetime.fromisoformat(r["created_at"].replace("Z", "+00:00")).timestamp()
+        rows = upsc.execute("SELECT article_id FROM reel_posts WHERE dispatched_at BETWEEN ? AND ? "
+                            "ORDER BY dispatched_at DESC LIMIT 1", [int(start) - 600, int(start) + 60]).rows
+        return str(rows[0][0]) if rows else ""
+    except Exception as ex:
+        print(f"(no article id for run {run_id}: {type(ex).__name__})")
+        return ""
+
+
 def post_one(upsc, ig, run_id, token, article_id, dry, seen):
     key = f"ig:reel:{run_id}"
     if upsc.execute("SELECT 1 FROM ig_posts WHERE key = ?", [key]).rows:
@@ -106,7 +122,7 @@ def post_one(upsc, ig, run_id, token, article_id, dry, seen):
         print(f"run {run_id}: same story as an earlier reel ({title[:60]}), skipped")
         return False
     seen.add(title)
-    cap = reel_caption(text, news_link(article_id or art))
+    cap = reel_caption(text, news_link(article_id or art or dispatched_article(upsc, run_id, token)))
     print(f"reel {run_id} {mp4.name}: {mp4.stat().st_size / 1e6:.1f} MB\n--- caption ---\n{cap}\n---", flush=True)
     if dry:
         print(f"::notice title=Instagram reel dry-run {run_id}::{mp4.name} {mp4.stat().st_size / 1e6:.1f} MB%0A"

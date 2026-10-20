@@ -1,8 +1,11 @@
-"""Instagram: six posts a day, each English post followed by its Hindi twin two hours later (IST):
+"""Instagram: one post a day since 20 Oct 2026 (Yash: people don't read much), English then its Hindi twin (IST):
 
-  08:30 / 10:30  Explainer: one of yesterday's top notes   5-7 slides (ig.explain; replaced 'Number of the day' on 17 Oct 2026)
-  13:00 / 15:00  SSC quiz, 5 questions             8 slides   (ig.formats, from the last 24 h of SSC cards)
-  19:00 / 21:00  UPSC "Today's 5"                  9 slides   (ig.slides, today's notes)
+  19:00 / 21:00  "Today in 60 seconds"   up to 6 slides (ig.digest): lead story, number of the day, the other 4
+                 stories in one line each, a 3-question SSC quiz, answers. Built from the formats below.
+  Reels: every reel of the Satyadheesh/reels pipeline is also posted as an Instagram Reel (ig.reel).
+
+  Older formats, kept for --now / --dry-run but no longer scheduled: explain (morning explainer, ig.explain),
+  ssc (5-question SSC quiz, ig.formats), upsc ("Today's 5", ig.slides), qotd (number/question of the day).
 
   python -m ig.post --scheduled            (post whatever slot is due: due from 35 min before to 2.5 h after its time)
   python -m ig.post --now --format ssc --langs en
@@ -107,6 +110,13 @@ def quiz_of(stories, only_id=None):
     return None
 
 
+def hindi_cards(cards):
+    """Hindi SSC cards with the Hindi text in the question_en / answer_en / key_fact_en fields the quiz code reads."""
+    return [{**c, "ssc_kit": {**c["ssc_kit"], "question_en": c["ssc_kit"]["question_hi"],
+                              "answer_en": c["ssc_kit"]["answer_hi"], "key_fact_en": c["ssc_kit"].get("key_fact_hi") or ""}}
+            for c in cards]
+
+
 def push_media(files_by_dir, branch, msg):
     """Commit the slides to a branch of this (public) repo; returns the raw URL prefix."""
     repo, tok = os.environ.get("GITHUB_REPOSITORY"), os.environ.get("GITHUB_TOKEN")
@@ -160,7 +170,7 @@ def posted(upsc, key):
 
 
 SLOTS = [("explain", "en", "08:30"), ("explain", "hi", "10:30"), ("ssc", "en", "13:00"), ("ssc", "hi", "15:00"),
-         ("upsc", "en", "19:00"), ("upsc", "hi", "21:00")]
+         ("upsc", "en", "19:00"), ("upsc", "hi", "21:00")]  # DIGEST_SWITCH: becomes [digest 19:00 en, 21:00 hi] once Yash OKs the preview
 EARLY, LATE = 35 * 60, int(2.5 * 3600)
 
 
@@ -309,9 +319,7 @@ class Builder:
         cards_en, cards_hi = self.ssc_cards(hours)
         cards = cards_en if lang == "en" else cards_hi
         if lang == "hi":  # the quiz reads question_en / answer_en: give it the Hindi text
-            cards = [{**c, "ssc_kit": {**c["ssc_kit"], "question_en": c["ssc_kit"]["question_hi"],
-                                       "answer_en": c["ssc_kit"]["answer_hi"], "key_fact_en": c["ssc_kit"].get("key_fact_hi") or ""}}
-                     for c in cards]
+            cards = hindi_cards(cards)
         # wrong options: the other cards, plus (English) the week's cards before them
         pool = [(c["ssc_kit"]["question_en"], c["ssc_kit"]["answer_en"], c["ssc_topic"][0]) for c in cards]
         pool += list(getattr(cards_en if lang == "en" else cards_hi, "pool", ()))
@@ -320,8 +328,35 @@ class Builder:
                 for q, _, _ in quiz]
         return quiz, keys, cards
 
+    def digest_post(self, lang):
+        """The one daily post (ig.digest): today's 5 notes, the most telling number among today's 10 best notes, and
+        3 one-line SSC questions from the last 24 h (48 h on a quiet day)."""
+        from .digest import digest_caption, digest_html, quick_quiz
+        from .formats import qotd_number
+        p = self.today
+        top, top_hi, _, _ = self.stories(p)
+        if len(top) < 3:
+            return None, f"only {len(top)} notes today"
+        if lang == "hi" and len(top_hi) < HI_MIN:
+            return None, f"Hindi: {len(top_hi)} of {len(top)} stories translated (needs {HI_MIN})"
+        st = [story(i, lang) for i in top] if lang == "en" else [story(h, lang, en) for h, en in zip(top_hi, top)]
+        if not hasattr(self, "_num"):
+            w = self.window(p)
+            en_ed, hi_ed, _, _ = editions(p, w.period(p, "en"), w.period(p, "hi"))
+            self._num = qotd_number([story(i, "en") for i in en_ed[:10]], [story(i, "hi") for i in hi_ed[:10]] if hi_ed else None)
+        number = self._num[0] if lang == "en" else self._num[1]
+        quiz = []
+        for hours in (24, 48):
+            cards_en, cards_hi = self.ssc_cards(hours)
+            quiz = quick_quiz(cards_en if lang == "en" else hindi_cards(cards_hi))
+            if len(quiz) >= 3:
+                break
+        html, n = digest_html(p["first"], st, number, quiz, lang)
+        return (html, n, digest_caption(p["first"], st, number, quiz, lang)), None
+
     def build(self, fmt, lang):
-        return {"upsc": self.upsc_post, "qotd": self.qotd_post, "ssc": self.ssc_post, "explain": self.explain_post}[fmt](lang)
+        return {"upsc": self.upsc_post, "qotd": self.qotd_post, "ssc": self.ssc_post, "explain": self.explain_post,
+                "digest": self.digest_post}[fmt](lang)
 
 
 def publish(ig, upsc, built, fmt, day, lang, folder, target=None):
@@ -354,7 +389,7 @@ def main():
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--now", action="store_true")
     ap.add_argument("--check-setup", action="store_true")
-    ap.add_argument("--format", default="upsc", help="upsc | explain | ssc | qotd | all (with --now / --dry-run)")
+    ap.add_argument("--format", default="digest", help="digest | upsc | explain | ssc | qotd | all (with --now / --dry-run)")
     ap.add_argument("--langs", default="en,hi")
     ap.add_argument("--day", default="", help="this IST day instead of today (YYYY-MM-DD)")
     args = ap.parse_args()
@@ -371,7 +406,7 @@ def main():
     b = Builder(upsc, now, args.day or None)
     day = b.today["key"]
     langs = [l for l in args.langs.split(",") if l in ("en", "hi")]
-    fmts = ["explain", "ssc", "upsc"] if args.format == "all" else [args.format]
+    fmts = ["digest"] if args.format == "all" else [args.format]
 
     if args.dry_run:
         out = {}

@@ -69,9 +69,27 @@ class Formats(unittest.TestCase):
         self.assertEqual(q[0][1], ["Gold", "Silver", "Bronze", "No medal"])
         self.assertEqual(q[0][2], 2)
 
+    def test_digest(self):
+        from ig.digest import digest_caption, digest_html, quick_quiz
+        cards = [{"importance": 9 - k, "ssc_topic": [f"t{k}"], "ssc_kit": {"question_en": f"Which state hosts event {k}?",
+                  "answer_en": f"State {k}", "key_fact_en": "Held every year."}} for k in range(4)]
+        cards.append({"importance": 10, "ssc_topic": ["t0"], "ssc_kit": {"question_en": "Q " * 80, "answer_en": "A"}})
+        quiz = quick_quiz(cards)
+        self.assertEqual([q["a"] for q in quiz], ["State 0", "State 1", "State 2"])  # long one dropped, one per topic
+        num = {"number": "₹1.2 lakh crore", "what": "the record GST collection in October", "title": ST[0]["title"]}
+        for lang in ("en", "hi"):
+            html, n = digest_html(DAY, ST, num, quiz, lang)
+            self.assertEqual(n, 6)
+            self.assertEqual(html.count('<section class="s'), 6)
+            c = digest_caption(DAY, ST, num, quiz, lang)
+            self.assertLessEqual(c.count("#"), 5)
+            self.assertNotIn("http", c)
+        self.assertEqual(digest_html(DAY, ST[:3], None, quiz[:1], "en")[1], 4)  # no number, no quiz with < 2 questions
+
     def test_slots(self):
         from ig.post import SLOTS, post_key
         self.assertEqual(len(SLOTS), 6)
+        self.assertEqual(post_key("digest", "2026-10-20", "hi"), "ig:digest:2026-10-20:hi")
         self.assertEqual(post_key("upsc", "2026-10-10", "en"), "ig:daily:2026-10-10:en")  # old key kept
         self.assertEqual(post_key("ssc", "2026-10-10", "hi"), "ig:ssc:2026-10-10:hi")
 

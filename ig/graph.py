@@ -1,4 +1,4 @@
-"""Instagram API with Instagram Login (graph.instagram.com): carousel publishing + token refresh.
+"""Instagram API with Instagram Login (graph.instagram.com): carousel and reel publishing + token refresh.
 Free; needs a Professional (Business or Creator) account and a token with instagram_business_content_publish.
 The token is never printed."""
 import hashlib
@@ -57,6 +57,21 @@ class IG:
         self.wait(cid)
         return self.post(f"{self.user_id}/media_publish", creation_id=cid)["id"]
 
+    def reel(self, mp4_path, caption, limit=900):
+        """Upload an MP4 straight to Instagram (resumable upload: no public URL needed) and publish it as a Reel
+        (also shown in the feed). Returns the media id."""
+        size = os.path.getsize(mp4_path)
+        c = self.post(f"{self.user_id}/media", media_type="REELS", upload_type="resumable", caption=caption, share_to_feed="true")
+        cid = c["id"]
+        uri = c.get("uri") or f"https://rupload.facebook.com/ig-api-upload/{VERSION}/{cid}"
+        with open(mp4_path, "rb") as f:
+            r = requests.post(uri, data=f, timeout=600,
+                              headers={"Authorization": f"OAuth {self.token}", "offset": "0", "file_size": str(size)})
+        if not r.ok:
+            raise IGError(f"video upload failed: HTTP {r.status_code} {r.text[:200]}")
+        self.wait(cid, limit)
+        return self.post(f"{self.user_id}/media_publish", creation_id=cid)["id"]
+
     def wait(self, cid, limit=300):
         t0 = time.time()
         while time.time() - t0 < limit:
@@ -64,7 +79,7 @@ class IG:
             if st == "FINISHED":
                 return
             if st in ("ERROR", "EXPIRED"):
-                raise IGError(f"container {cid} {st}")
+                raise IGError(f"container {cid} {st}: {self.get(cid, fields='status').get('status')}")
             time.sleep(5)
         raise IGError(f"container {cid} not ready after {limit}s")
 

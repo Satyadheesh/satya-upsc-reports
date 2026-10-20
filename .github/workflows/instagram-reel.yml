@@ -9,8 +9,11 @@ on:
   workflow_dispatch:
     inputs:
       run_id:
-        description: 'Satyadheesh/reels run id'
+        description: 'Satyadheesh/reels run id (several: comma-separated, oldest first)'
         required: true
+      gap:
+        description: 'Minutes between reels when several are posted'
+        default: '30'
       article_id:
         description: "The story's article id, for the link in the caption (optional)"
         default: ''
@@ -30,7 +33,7 @@ env:
 jobs:
   reel:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 360   # catching up on several reels with a gap between them
     env:
       RUN_ID: ${{ github.event.client_payload.run_id || github.event.inputs.run_id }}
       ARTICLE_ID: ${{ github.event.client_payload.article_id || github.event.inputs.article_id }}
@@ -51,9 +54,10 @@ jobs:
       - name: Post
         run: |
           set -o pipefail
-          case "$RUN_ID" in ''|*[!0-9]*) echo "::error::bad run id"; exit 1;; esac
+          case "$RUN_ID" in ''|*[!0-9,]*) echo "::error::bad run id"; exit 1;; esac
+          GAP="${{ github.event.inputs.gap || '0' }}"; case "$GAP" in ''|*[!0-9]*) GAP=0;; esac
           case "$ARTICLE_ID" in *[!0-9]*) ARTICLE_ID="";; esac
-          python -m ig.reel --run-id "$RUN_ID" --article-id "$ARTICLE_ID" $([ "$DRY" = true ] && echo --dry-run) 2>&1 | tee /tmp/out.txt
+          python -m ig.reel --run-id "$RUN_ID" --article-id "$ARTICLE_ID" --gap "$GAP" $([ "$DRY" = true ] && echo --dry-run) 2>&1 | tee /tmp/out.txt
       - name: Tell Telegram if it failed
         if: failure()
         env:

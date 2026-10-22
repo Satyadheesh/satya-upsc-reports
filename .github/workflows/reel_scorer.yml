@@ -21,6 +21,9 @@ on:
         description: 'Force dispatch to reels repo'
         type: boolean
         default: false
+      script_test:
+        description: 'Article ids (comma-separated): write and review their reel scripts, print only'
+        default: ''
 
 concurrency:
   group: reel-scorer
@@ -81,4 +84,11 @@ jobs:
           BATCH="${{ github.event.inputs.batch || '30' }}"
           DRY="${{ github.event.inputs.dry_run == 'true' && '--dry-run' || '' }}"
           DISPATCH="${{ github.event.inputs.dispatch == 'true' && '--dispatch' || '' }}"
+          TEST="${{ github.event.inputs.script_test }}"
+          if [ -n "$TEST" ]; then
+            case "$TEST" in *[!0-9,]*) echo "::error::bad ids"; exit 1;; esac
+            python -m tools.reel_scorer --script-test "$TEST" 2>&1 | tee /tmp/st.txt
+            echo "::notice title=Script test::$(tail -c 3500 /tmp/st.txt | sed ':a;N;$!ba;s/%/%25/g;s/\n/%0A/g')"
+            exit 0
+          fi
           python -m tools.reel_scorer --batch "$BATCH" $DRY $DISPATCH

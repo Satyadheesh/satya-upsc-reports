@@ -117,6 +117,40 @@ RULES
 
 SCRIPT_SYSTEM = SCRIPT_SYSTEM_CHARLIE
 
+# Political reels (Yash, 22 Oct 2026: political stories get the most traction; make them sharper, but legally safe)
+POLITICAL_TOPICS = {"politics", "politics_funding", "governance", "elections", "election", "parliament", "policy"}
+
+
+def is_political(topic):
+    t = str(topic or "").lower()
+    return t in POLITICAL_TOPICS or "politic" in t or "election" in t
+
+
+SCRIPT_POLITICAL_EXTRA = """
+POLITICAL STORY MODE (this story is political)
+Make it sharp and questioning, the way a fearless Hindi news creator talks: open on a contradiction, a broken promise,
+a U-turn, a big number, or "who said what". Hold power to account with questions. But it must be legally safe:
+1. Attribute every claim. core_say MUST start with "{source} की रिपोर्ट के मुताबिक". Tie each statement or accusation to
+   whoever made it: "कांग्रेस का आरोप है", "भाजपा का दावा है", "मंत्री ने कहा". Never present a claim as your own.
+2. An allegation stays an allegation: use "आरोप है", "दावा किया गया", "सवाल उठ रहे हैं". Never say or imply that a named
+   person or party is guilty, corrupt or a criminal unless the article reports a court conviction.
+3. Never use abusive or loaded labels for anyone (चोर, घोटालेबाज़, भ्रष्ट, गद्दार, जुमलेबाज़ and the like).
+4. Criticise only actions, decisions, policies, public statements and public records; never anyone's family, caste,
+   religion, looks or private life.
+5. If the article gives the other side's reply or denial, include it in one short line ("सरकार/पार्टी का कहना है ...").
+6. End with a question to the viewer, never a verdict (e.g. "क्या जनता को इसका जवाब नहीं मिलना चाहिए?").
+7. Be equally sharp with every party and government; no cheering or mocking any side.
+8. headline_hi may be a pointed question. Facts, numbers and names only from the article.
+"""
+
+SUITABILITY_POLITICAL_EXTRA = """
+5. LEGAL SAFETY (this is a political story; reject_story if ANY point fails):
+   - core_say starts with the source attribution ("... की रिपोर्ट के मुताबिक") and every accusation is tied to whoever made it;
+   - no named person or party is called or implied guilty, corrupt or criminal (unless the script says a court convicted them);
+   - no abusive or loaded labels; nothing about anyone's family, caste, religion or private life;
+   - it ends on a question, not a verdict, and does not cheer or mock a party.
+"""
+
 SCRIPT_SCHEMA = {
     "type": "object",
     "properties": {
@@ -259,14 +293,18 @@ def dispatch_daily_reel(u_db, m_db, model=None, force=False):
     since = now - 24 * 3600
     try:
         candidates = u_db.execute(
-            "SELECT c.article_id, c.topic, c.viral_score, c.hook_angle, c.wow_fact, c.why "
+            "SELECT c.article_id, c.topic, c.viral_score, c.hook_angle, c.wow_fact, c.why, c.published_at "
             "FROM reel_candidates c "
-            "WHERE c.viral_score >= 7 AND c.created_at >= ? "
+            "WHERE c.viral_score >= 6 AND c.created_at >= ? "
             "  AND c.article_id NOT IN (SELECT article_id FROM reel_posts) "
             "ORDER BY c.viral_score DESC, c.published_at DESC "
-            "LIMIT 5",
+            "LIMIT 40",
             [since]
         ).rows
+        # political stories get the most traction (Yash, 22 Oct 2026): +1 when ranking, and they qualify from 6
+        candidates = [c for c in candidates if int(c[2]) >= 7 or (is_political(c[1]) and int(c[2]) >= 6)]
+        candidates.sort(key=lambda c: (int(c[2]) + (1 if is_political(c[1]) else 0), c[6] or 0), reverse=True)
+        candidates = [c[:6] for c in candidates[:5]]
     except Exception as e:
         print(f"  Error querying reel_candidates for dispatch: {e}")
         return
@@ -295,6 +333,8 @@ def dispatch_daily_reel(u_db, m_db, model=None, force=False):
         r = art_rows[0]
         title = r[1] or r[0]
         body = decompress(r[2])
+        political = is_political(topic)
+        src_name = "इंडियन एक्सप्रेस" if "indianexpress" in str(r[5] or "").lower() else "द हिंदू"
 
         # Initial persona selection based on topic
         persona = "matilda" if str(topic).lower() in female_topics else "charlie"
@@ -308,11 +348,13 @@ def dispatch_daily_reel(u_db, m_db, model=None, force=False):
                         f"NEWS ARTICLE\n"
                         f"Title: {title}\n"
                         f"Topic: {topic}\n"
+                        f"Source: {src_name}\n"
                         f"Key Fact: {fact}\n"
                         f"Voice Persona: {persona}\n"
-                        f"Content:\n{body[:1200]}"
+                        f"Content:\n{body[:2400 if political else 1200]}"  # political: room for the other side's reply
                     )
-                    script_data = model.json(SCRIPT_SYSTEM_CHARLIE, sprompt, SCRIPT_SCHEMA, temperature=0.25, max_tokens=450)
+                    system = SCRIPT_SYSTEM_CHARLIE + (SCRIPT_POLITICAL_EXTRA.replace("{source}", src_name) if political else "")
+                    script_data = model.json(system, sprompt, SCRIPT_SCHEMA, temperature=0.25, max_tokens=500)
                 except Exception as e:
                     print(f"  Script generation warning: {e}")
 
@@ -324,7 +366,7 @@ def dispatch_daily_reel(u_db, m_db, model=None, force=False):
                 try:
                     eval_prompt = (
                         f"NEWS ARTICLE: {title}\n"
-                        f"TOPIC: {topic}\n"
+                        f"TOPIC: {topic}{' (POLITICAL: apply the legal safety check)' if political else ''}\n"
                         f"ASSIGNED VOICE: {persona}\n"
                         f"HEADLINE: {script_data.get('headline_hi')}\n"
                         f"HOOK: {script_data.get('hook_say')}\n"
@@ -332,7 +374,8 @@ def dispatch_daily_reel(u_db, m_db, model=None, force=False):
                         f"TWIST: {script_data.get('twist_say')}\n"
                         f"ENGAGEMENT: {script_data.get('engagement_say')}"
                     )
-                    suitability = model.json(SUITABILITY_SYSTEM, eval_prompt, SUITABILITY_SCHEMA, temperature=0.1, max_tokens=200)
+                    suitability = model.json(SUITABILITY_SYSTEM + (SUITABILITY_POLITICAL_EXTRA if political else ""), eval_prompt,
+                                             SUITABILITY_SCHEMA, temperature=0.1, max_tokens=200)
                     is_ok = suitability.get("is_suitable") is True or suitability.get("action") == "approve"
                     verdict = suitability.get("verdict", "")
                     action = suitability.get("action", "")
@@ -355,6 +398,9 @@ def dispatch_daily_reel(u_db, m_db, model=None, force=False):
                         break
                 except Exception as e:
                     print(f"  Suitability check note: {e}")
+                    if political:  # a political script is never made without its legal check
+                        print(f"  Story #{aid}: political and unchecked, trying next candidate...")
+                        break
                     approved_candidate = cand
                     approved_script = script_data
                     approved_persona = persona

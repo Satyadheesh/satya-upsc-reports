@@ -95,6 +95,25 @@ def reel_caption(text, link=""):
     return (f"{body}\n\n{tail}\n\n{TAGS}" if body else f"SatyaDheesh\n\n{tail}\n\n{TAGS}")[:MAX]
 
 
+SINCE = "2026-10-20T12:00:00Z"  # reels before this were caught up by hand on 20 Oct
+
+
+def pending_runs(upsc, token, hours=72):
+    """Successful reels runs (made from a real story) of the last `hours` that aren't on Instagram yet, oldest first.
+    The hourly orchestrator asks for these, so a reel whose own 'post to Instagram' signal got lost is posted anyway."""
+    import datetime as dt
+    h = {"Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json"}
+    runs = requests.get(f"{API}/repos/{REPO}/actions/workflows/daily-reel.yml/runs", headers=h, timeout=60,
+                        params={"status": "success", "event": "repository_dispatch", "per_page": 30}).json().get("workflow_runs", [])
+    floor = max(dt.datetime.fromisoformat(SINCE.replace("Z", "+00:00")).timestamp(), time.time() - hours * 3600)
+    out = []
+    for r in runs:
+        t = dt.datetime.fromisoformat(r["created_at"].replace("Z", "+00:00")).timestamp()
+        if t >= floor and not upsc.execute("SELECT 1 FROM ig_posts WHERE key = ?", [f"ig:reel:{r['id']}"]).rows:
+            out.append((t, str(r["id"])))
+    return [i for _, i in sorted(out)]
+
+
 def host(mp4, run_id):
     """Put the MP4 where Instagram can fetch it: a one-commit branch `ig-reels` of this public repo (force-pushed,
     so old videos don't pile up in its history), served by jsDelivr with the right content type. -> URL"""
@@ -176,7 +195,8 @@ def post_one(upsc, ig, run_id, token, article_id, dry, seen):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--run-id", required=True, help="a reels run id, or several (comma-separated, oldest first) to catch up")
+    ap.add_argument("--run-id", required=True, help="a reels run id, several (comma-separated, oldest first), or 'pending' "
+                                                    "(every recent reel not on Instagram yet)")
     ap.add_argument("--article-id", default="", help="the story's article id (from the reel's payload), for the link")
     ap.add_argument("--gap", type=float, default=0, help="minutes between reels when several are posted")
     ap.add_argument("--dry-run", action="store_true", help="download and show the caption; post nothing")
@@ -184,8 +204,15 @@ def main():
     token = os.environ.get("REELS_TOKEN") or ""
     if not token:
         raise SystemExit("REELS_TOKEN missing")
-    runs = [r for r in a.run_id.split(",") if r.strip().isdigit()]
     upsc = upsc_db()
+    if a.run_id == "pending":
+        runs = pending_runs(upsc, token)
+        print(f"reels not on Instagram yet: {runs or 'none'}")
+        if not runs:
+            return
+        a.gap = a.gap or 20
+    else:
+        runs = [r for r in a.run_id.split(",") if r.strip().isdigit()]
     ig = None if a.dry_run else IG(current_token(upsc))
     seen, failed, last = set(), 0, 0.0
     for k, run in enumerate(runs):

@@ -20,6 +20,7 @@ on:
 
 permissions:
   contents: read
+  actions: write    # starts instagram-reel.yml for reels not on Instagram yet
 
 concurrency:
   group: orchestrator
@@ -62,3 +63,14 @@ jobs:
         run: |
           pip install -q libsql-client
           PYTHONPATH=.:$PYTHONPATH python tools/sync_timeline_merges.py
+
+      # Reels made by Satyadheesh/reels that aren't on Instagram yet (their own signal can get lost): post them
+      - name: Instagram reels catch-up
+        if: ${{ github.event.inputs.dry_run != 'true' && github.event.inputs.event == '' }}
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          curl -sf -X POST -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/workflows/instagram-reel.yml/dispatches" \
+            -d '{"ref":"main","inputs":{"run_id":"pending","dry_run":false,"gap":"20"}}' && echo "asked instagram-reel.yml to post pending reels"

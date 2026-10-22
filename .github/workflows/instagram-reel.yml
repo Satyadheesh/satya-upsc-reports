@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       run_id:
-        description: 'Satyadheesh/reels run id (several: comma-separated, oldest first)'
+        description: "Satyadheesh/reels run id (several: comma-separated, oldest first; 'pending' = every recent reel not on Instagram yet)"
         required: true
       gap:
         description: 'Minutes between reels when several are posted'
@@ -57,7 +57,7 @@ jobs:
       - name: Post
         run: |
           set -o pipefail
-          case "$RUN_ID" in ''|*[!0-9,]*) echo "::error::bad run id"; exit 1;; esac
+          [ "$RUN_ID" = pending ] || case "$RUN_ID" in ''|*[!0-9,]*) echo "::error::bad run id"; exit 1;; esac
           GAP="${{ github.event.inputs.gap || '0' }}"; case "$GAP" in ''|*[!0-9]*) GAP=0;; esac
           case "$ARTICLE_ID" in *[!0-9]*) ARTICLE_ID="";; esac
           python -m ig.reel --run-id "$RUN_ID" --article-id "$ARTICLE_ID" --gap "$GAP" $([ "$DRY" = true ] && echo --dry-run) 2>&1 | tee /tmp/out.txt

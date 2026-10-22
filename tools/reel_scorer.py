@@ -142,6 +142,10 @@ a U-turn, a big number, or "who said what". Hold power to account with questions
 6. End with a question to the viewer, never a verdict (e.g. "क्या जनता को इसका जवाब नहीं मिलना चाहिए?").
 7. Be equally sharp with every party and government; no cheering or mocking any side.
 8. headline_hi may be a pointed question. Facts, numbers and names only from the article.
+9. The on-screen text (headline_hi, core_points_hi, twist_stat, twist_label, twist_detail_hi) follows the same rules:
+   any accusation carries "आरोप" or "दावा" ("43,000 करोड़ के भ्रष्टाचार का आरोप", never "43,000 करोड़ का भ्रष्टाचार").
+10. Criminal cases (murder, assault, fraud): only what the investigation or court has done, as reported, attributed;
+   never connect a named person to a crime beyond what the report itself says.
 """
 
 SCRIPT_SOURCE_RULES = """
@@ -189,7 +193,8 @@ def fit_prompt(model, system, head, summary, original, max_tokens, margin=160):
 SUITABILITY_POLITICAL_EXTRA = """
 5. LEGAL SAFETY (this is a political story; reject_story if ANY point fails):
    - core_say starts with the source attribution ("... की रिपोर्ट के मुताबिक") and every accusation is tied to whoever made it;
-   - no named person or party is called or implied guilty, corrupt or criminal (unless the script says a court convicted them);
+   - no named person or party is called or implied guilty, corrupt or criminal (unless the script says a court convicted them),
+     in the spoken lines AND the on-screen text (headline, points, stat label, detail line);
    - no abusive or loaded labels; nothing about anyone's family, caste, religion or private life;
    - it ends on a question, not a verdict, and does not cheer or mock a party.
 """
@@ -376,7 +381,7 @@ def dispatch_daily_reel(u_db, m_db, model=None, force=False):
         r = art_rows[0]
         title = r[1] or r[0]
         body = decompress(r[2], limit=4000)
-        original = clean_original(decompress(r[6], limit=12000))[:7000]  # trimmed to the context window below
+        original = clean_original(decompress(r[6], limit=12000))[:4000]  # ~1,000 tokens: richer context, runner time in check
         political = is_political(topic)
         src_name = "इंडियन एक्सप्रेस" if "indianexpress" in str(r[5] or "").lower() else "द हिंदू"
 
@@ -407,6 +412,8 @@ def dispatch_daily_reel(u_db, m_db, model=None, force=False):
                         f"TOPIC: {topic}{' (POLITICAL: apply the legal safety check)' if political else ''}\n"
                         f"ASSIGNED VOICE: {persona}\n"
                         f"HEADLINE: {script_data.get('headline_hi')}\n"
+                        f"ON-SCREEN: {script_data.get('core_title_hi')} | {' | '.join(script_data.get('core_points_hi') or [])} | "
+                        f"{script_data.get('twist_stat')} {script_data.get('twist_label')} | {script_data.get('twist_detail_hi')}\n"
                         f"HOOK: {script_data.get('hook_say')}\n"
                         f"CORE: {script_data.get('core_say')}\n"
                         f"TWIST: {script_data.get('twist_say')}\n"
@@ -597,7 +604,7 @@ def script_test(m_db, u_db, ids):
         r = r[0]
         title, political = r[1] or r[0], is_political(topic)
         src_name = "इंडियन एक्सप्रेस" if "indianexpress" in str(r[3] or "").lower() else "द हिंदू"
-        body, original = decompress(r[2], limit=4000), clean_original(decompress(r[4], limit=12000))[:7000]
+        body, original = decompress(r[2], limit=4000), clean_original(decompress(r[4], limit=12000))[:4000]
         system = SCRIPT_SYSTEM_CHARLIE + SCRIPT_SOURCE_RULES + (SCRIPT_POLITICAL_EXTRA.replace("{source}", src_name) if political else "")
         head = f"NEWS ARTICLE\nTitle: {title}\nTopic: {topic}\nSource: {src_name}\nKey Fact: {fact}\nVoice Persona: charlie\n"
         prompt = fit_prompt(model, system, head, body[:1500], original, max_tokens=550)
@@ -608,7 +615,9 @@ def script_test(m_db, u_db, ids):
         sc = model.json(system, prompt, SCRIPT_SCHEMA, temperature=0.25, max_tokens=550)
         print(f"script in {time.time() - t0:.0f}s:\n{json.dumps(sc, ensure_ascii=False, indent=1)}", flush=True)
         ev = (f"NEWS ARTICLE: {title}\nTOPIC: {topic}{' (POLITICAL: apply the legal safety check)' if political else ''}\n"
-              f"ASSIGNED VOICE: charlie\nHEADLINE: {sc.get('headline_hi')}\nHOOK: {sc.get('hook_say')}\nCORE: {sc.get('core_say')}\n"
+              f"ASSIGNED VOICE: charlie\nHEADLINE: {sc.get('headline_hi')}\n"
+              f"ON-SCREEN: {sc.get('core_title_hi')} | {' | '.join(sc.get('core_points_hi') or [])} | {sc.get('twist_stat')} "
+              f"{sc.get('twist_label')} | {sc.get('twist_detail_hi')}\nHOOK: {sc.get('hook_say')}\nCORE: {sc.get('core_say')}\n"
               f"TWIST: {sc.get('twist_say')}\nENGAGEMENT: {sc.get('engagement_say')}")
         rv = model.json(SUITABILITY_SYSTEM + (SUITABILITY_POLITICAL_EXTRA if political else ""), ev, SUITABILITY_SCHEMA,
                         temperature=0.1, max_tokens=200)

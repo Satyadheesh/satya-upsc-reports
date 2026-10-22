@@ -41,7 +41,7 @@ env:
 jobs:
   score:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 75   # scoring ~25 min + scripts (~7 min each, more with the original article); was 45, runs reached 44
     permissions:
       contents: read
       actions: read

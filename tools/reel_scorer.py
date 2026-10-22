@@ -9,6 +9,7 @@ Results are saved to `reel_candidates` in the UPSC DB.
 import argparse
 import json
 import os
+import re
 import time
 
 from common.db import close_all, in_chunks, main_db, upsc_db
@@ -142,6 +143,48 @@ a U-turn, a big number, or "who said what". Hold power to account with questions
 7. Be equally sharp with every party and government; no cheering or mocking any side.
 8. headline_hi may be a pointed question. Facts, numbers and names only from the article.
 """
+
+SCRIPT_SOURCE_RULES = """
+SOURCE TEXT
+You get SUMMARY (our short rewrite) and, when available, ORIGINAL ARTICLE (the full report: quotes, who said what,
+the other side's reply, numbers). Use the ORIGINAL for details and attribution. Write everything in your own words:
+never translate its sentences word for word; quote only short statements, always naming who said them.
+"""
+
+JUNK_LINE = re.compile(r"^(also read|read more|read also|click here|subscribe|follow us|published|updated|copyright|"
+                       r"advertisement|watch:|listen:|photo:|image:|file photo|representative image|for representational)",
+                       re.I)
+
+
+def clean_original(text):
+    """The scraped article without its page furniture (read-more links, captions, bylines), whitespace squeezed."""
+    out = []
+    for line in str(text or "").splitlines():
+        line = " ".join(line.split())
+        if len(line) < 25 or JUNK_LINE.match(line):
+            continue
+        out.append(line)
+    return "\n".join(out)
+
+
+def fit_prompt(model, system, head, summary, original, max_tokens, margin=160):
+    """The user prompt, cut so that system + prompt + the answer fit the model's context window (4,096 tokens on
+    the GitHub runner; going over makes llama.cpp refuse the call). The ORIGINAL is trimmed first, at a paragraph
+    end, then the SUMMARY. Token counts come from the model's own tokenizer."""
+    def n(t):
+        return len(model.llm.tokenize(t.encode("utf-8"), add_bos=False))
+    budget = model.llm.n_ctx() - max_tokens - margin - n(system) - 40  # 40: the chat template's own tokens
+
+    def build(sm, og):
+        return head + f"SUMMARY:\n{sm}" + (f"\n\nORIGINAL ARTICLE:\n{og}" if og else "")
+    sm, og = summary, original
+    while og and n(build(sm, og)) > budget:
+        cut = og.rfind("\n", 0, int(len(og) * 0.8))
+        og = og[:cut] if cut > 400 else ""
+    while n(build(sm, og)) > budget and len(sm) > 300:
+        sm = sm[: int(len(sm) * 0.8)]
+    return build(sm, og)
+
 
 SUITABILITY_POLITICAL_EXTRA = """
 5. LEGAL SAFETY (this is a political story; reject_story if ANY point fails):
@@ -323,7 +366,7 @@ def dispatch_daily_reel(u_db, m_db, model=None, force=False):
     for cand in candidates:
         aid, topic, score, hook, fact, why = int(cand[0]), str(cand[1]), int(cand[2]), str(cand[3]), str(cand[4]), str(cand[5])
         art_rows = m_db.execute(
-            "SELECT title, rephrased_title, rephrased_article, category, image_url, url "
+            "SELECT title, rephrased_title, rephrased_article, category, image_url, url, content "
             "FROM articles WHERE id = ?",
             [aid]
         ).rows
@@ -332,7 +375,8 @@ def dispatch_daily_reel(u_db, m_db, model=None, force=False):
 
         r = art_rows[0]
         title = r[1] or r[0]
-        body = decompress(r[2])
+        body = decompress(r[2], limit=4000)
+        original = clean_original(decompress(r[6], limit=12000))[:7000]  # trimmed to the context window below
         political = is_political(topic)
         src_name = "इंडियन एक्सप्रेस" if "indianexpress" in str(r[5] or "").lower() else "द हिंदू"
 
@@ -344,17 +388,11 @@ def dispatch_daily_reel(u_db, m_db, model=None, force=False):
             script_data = None
             if model:
                 try:
-                    sprompt = (
-                        f"NEWS ARTICLE\n"
-                        f"Title: {title}\n"
-                        f"Topic: {topic}\n"
-                        f"Source: {src_name}\n"
-                        f"Key Fact: {fact}\n"
-                        f"Voice Persona: {persona}\n"
-                        f"Content:\n{body[:2400 if political else 1200]}"  # political: room for the other side's reply
-                    )
-                    system = SCRIPT_SYSTEM_CHARLIE + (SCRIPT_POLITICAL_EXTRA.replace("{source}", src_name) if political else "")
-                    script_data = model.json(system, sprompt, SCRIPT_SCHEMA, temperature=0.25, max_tokens=500)
+                    system = SCRIPT_SYSTEM_CHARLIE + SCRIPT_SOURCE_RULES + (SCRIPT_POLITICAL_EXTRA.replace("{source}", src_name) if political else "")
+                    head = (f"NEWS ARTICLE\nTitle: {title}\nTopic: {topic}\nSource: {src_name}\nKey Fact: {fact}\n"
+                            f"Voice Persona: {persona}\n")
+                    sprompt = fit_prompt(model, system, head, body[:1500], original, max_tokens=550)
+                    script_data = model.json(system, sprompt, SCRIPT_SCHEMA, temperature=0.25, max_tokens=550)
                 except Exception as e:
                     print(f"  Script generation warning: {e}")
 
@@ -545,13 +583,49 @@ def dispatch_daily_reel(u_db, m_db, model=None, force=False):
         send_telegram_alert(err_msg)
 
 
+def script_test(m_db, u_db, ids):
+    """Write (and review) the reel script for these article ids and print it, with prompt sizes and timings.
+    Nothing is saved or dispatched."""
+    model = Model(download())
+    for aid in ids:
+        c = u_db.execute("SELECT topic, wow_fact FROM reel_candidates WHERE article_id = ?", [aid]).rows
+        topic, fact = (str(c[0][0]), str(c[0][1])) if c else ("politics", "")
+        r = m_db.execute("SELECT title, rephrased_title, rephrased_article, url, content FROM articles WHERE id = ?", [aid]).rows
+        if not r:
+            print(f"## {aid}: not found")
+            continue
+        r = r[0]
+        title, political = r[1] or r[0], is_political(topic)
+        src_name = "इंडियन एक्सप्रेस" if "indianexpress" in str(r[3] or "").lower() else "द हिंदू"
+        body, original = decompress(r[2], limit=4000), clean_original(decompress(r[4], limit=12000))[:7000]
+        system = SCRIPT_SYSTEM_CHARLIE + SCRIPT_SOURCE_RULES + (SCRIPT_POLITICAL_EXTRA.replace("{source}", src_name) if political else "")
+        head = f"NEWS ARTICLE\nTitle: {title}\nTopic: {topic}\nSource: {src_name}\nKey Fact: {fact}\nVoice Persona: charlie\n"
+        prompt = fit_prompt(model, system, head, body[:1500], original, max_tokens=550)
+        n = lambda t: len(model.llm.tokenize(t.encode("utf-8"), add_bos=False))
+        print(f"## {aid} [{topic}] political={political}: original {len(original)} chars, prompt {n(system)} + {n(prompt)} tokens "
+              f"(context {model.llm.n_ctx()}), original kept: {'ORIGINAL ARTICLE' in prompt}", flush=True)
+        t0 = time.time()
+        sc = model.json(system, prompt, SCRIPT_SCHEMA, temperature=0.25, max_tokens=550)
+        print(f"script in {time.time() - t0:.0f}s:\n{json.dumps(sc, ensure_ascii=False, indent=1)}", flush=True)
+        ev = (f"NEWS ARTICLE: {title}\nTOPIC: {topic}{' (POLITICAL: apply the legal safety check)' if political else ''}\n"
+              f"ASSIGNED VOICE: charlie\nHEADLINE: {sc.get('headline_hi')}\nHOOK: {sc.get('hook_say')}\nCORE: {sc.get('core_say')}\n"
+              f"TWIST: {sc.get('twist_say')}\nENGAGEMENT: {sc.get('engagement_say')}")
+        rv = model.json(SUITABILITY_SYSTEM + (SUITABILITY_POLITICAL_EXTRA if political else ""), ev, SUITABILITY_SCHEMA,
+                        temperature=0.1, max_tokens=200)
+        print(f"review: {json.dumps(rv, ensure_ascii=False)}\n", flush=True)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--batch", type=int, default=30, help="Number of unscored articles to evaluate")
     ap.add_argument("--dry-run", action="store_true", help="Print scores without writing to DB")
     ap.add_argument("--dispatch", action="store_true", help="Force dispatch of top candidate")
     ap.add_argument("--no-dispatch", action="store_true", help="Do not trigger reels repo")
+    ap.add_argument("--script-test", default="", help="comma-separated article ids: write and review their scripts, print only")
     args = ap.parse_args()
+    if args.script_test:
+        script_test(main_db(), upsc_db(), [int(x) for x in args.script_test.split(",") if x.strip().isdigit()])
+        return
 
     now = int(time.time())
     m_db = main_db()

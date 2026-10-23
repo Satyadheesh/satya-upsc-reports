@@ -92,7 +92,12 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--ids", default="")
     ap.add_argument("--models", default="auto")
+    ap.add_argument("--efforts", default="")
     a = ap.parse_args()
+    for part in (os.environ.get("URLS") or "").split(";"):  # diag.yml passes its 'urls' input: models=a,b;efforts=x,y;ids=1,2
+        k, _, v = part.partition("=")
+        if k.strip() in ("models", "efforts", "ids") and v.strip():
+            setattr(a, k.strip(), v.strip())
     m_db, u_db = main_db(), upsc_db()
     if a.ids:
         ids = [int(x) for x in a.ids.split(",") if x.strip().isdigit()]
@@ -126,7 +131,8 @@ def main():
                 f"SUMMARY:\n{body[:1500]}" + (f"\n\nORIGINAL ARTICLE:\n{original}" if original else ""))
         print(f"# Story {aid}: {title} [{topic}{', political' if political else ''}]\n")
         for model in want:
-            for effort in (["low"] if ("sol" in model or "terra" in model) else ["low", "medium"] if "luna" in model else ["low"]):
+            efforts = a.efforts.split(",") if a.efforts else (["low"] if ("sol" in model or "terra" in model) else ["low", "medium"] if "luna" in model else ["low"])
+            for effort in efforts:
                 if "sol" in model and aid != ids[-1]:
                     continue  # the flagship only on the political story: enough to judge, keeps the test cheap
                 sc, err, usage = write(model, system, user, effort)

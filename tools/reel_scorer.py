@@ -153,6 +153,8 @@ SOURCE TEXT
 You get SUMMARY (our short rewrite) and, when available, ORIGINAL ARTICLE (the full report: quotes, who said what,
 the other side's reply, numbers). Use the ORIGINAL for details and attribution. Write everything in your own words:
 never translate its sentences word for word; quote only short statements, always naming who said them.
+STYLE: make the hook and the closing question specific to THIS story. Never open with "क्या आप यकीन करेंगे" and never
+close with a generic "इस पूरे मामले पर आपकी क्या राय है?".
 """
 
 JUNK_LINE = re.compile(r"^(also read|read more|read also|click here|subscribe|follow us|published|updated|copyright|"
@@ -216,6 +218,56 @@ def legal_pass(script):
         return v
     out = {k: ([fix(x) for x in v] if isinstance(v, list) else fix(v)) for k, v in script.items()}
     return out, notes, ok
+
+
+# Script writer: OpenAI GPT-5.6 Luna (Yash, 24 Oct 2026, after the model test: best Hindi for the money), Gemma 12B as
+# the fallback. Hard cap: Rs 2 per reel, counted at Luna's launch price ($1 / $6 per 1M tokens), whatever OpenAI bills.
+OPENAI_MODEL = os.environ.get("REEL_SCRIPT_MODEL", "gpt-5.6-luna")
+OPENAI_EFFORT = os.environ.get("REEL_SCRIPT_EFFORT", "medium")  # low | medium | high
+OPENAI_PRICE = {"gpt-5.6-luna": (1.0, 6.0), "gpt-5.6-terra": (2.5, 15.0), "gpt-5.6-sol": (5.0, 30.0)}  # $/1M, launch prices
+REEL_BUDGET_INR = float(os.environ.get("REEL_BUDGET_INR", "2"))
+USD_INR = float(os.environ.get("USD_INR", "88"))
+SPENT = {"inr": 0.0}  # this reel's OpenAI spend (one dispatch = one reel)
+
+
+def openai_script(system, user):
+    """The reel script from OpenAI, or (None, why). Never spends more than what's left of the reel's budget: the
+    answer's length is capped so even the worst case stays inside it."""
+    import urllib.error
+    import urllib.request
+    key = os.environ.get("OPENAI_API_KEY")
+    if not key:
+        return None, "no OPENAI_API_KEY"
+    pin, pout = OPENAI_PRICE.get(OPENAI_MODEL, (5.0, 30.0))
+    left_usd = (REEL_BUDGET_INR - SPENT["inr"]) / USD_INR
+    in_tokens = len(system + user) / 2.5  # generous estimate (Hindi/English mix)
+    max_out = int((left_usd - in_tokens * pin / 1e6) / (pout / 1e6))
+    if max_out < 1500:
+        return None, f"reel budget used (Rs {SPENT['inr']:.2f} of {REEL_BUDGET_INR})"
+    schema = json.loads(json.dumps(SCRIPT_SCHEMA))
+    schema["additionalProperties"], schema["required"] = False, list(schema["properties"])
+    body = {"model": OPENAI_MODEL, "reasoning_effort": OPENAI_EFFORT, "max_completion_tokens": min(max_out, 8000),
+            "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
+            "response_format": {"type": "json_schema", "json_schema": {"name": "reel_script", "schema": schema, "strict": True}}}
+    req = urllib.request.Request("https://api.openai.com/v1/chat/completions", data=json.dumps(body).encode(), method="POST",
+                                 headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=180) as r:
+            out = json.loads(r.read())
+    except urllib.error.HTTPError as e:
+        return None, f"OpenAI HTTP {e.code}: {e.read().decode('utf-8', 'replace')[:200]}"
+    except Exception as e:
+        return None, f"OpenAI {type(e).__name__}"
+    u = out.get("usage") or {}
+    cost = (u.get("prompt_tokens", 0) * pin + u.get("completion_tokens", 0) * pout) / 1e6 * USD_INR
+    SPENT["inr"] += cost
+    print(f"  OpenAI {OPENAI_MODEL} ({OPENAI_EFFORT}): {u.get('prompt_tokens')} in, {u.get('completion_tokens')} out "
+          f"({(u.get('completion_tokens_details') or {}).get('reasoning_tokens')} thinking), at most Rs {cost:.2f} "
+          f"(reel so far Rs {SPENT['inr']:.2f})", flush=True)
+    try:
+        return json.loads(out["choices"][0]["message"]["content"]), None
+    except Exception as e:
+        return None, f"OpenAI answer unreadable: {type(e).__name__}"
 
 
 SUITABILITY_POLITICAL_EXTRA = """
@@ -324,6 +376,7 @@ def send_telegram_alert(text):
 
 
 def dispatch_daily_reel(u_db, m_db, model=None, force=False):
+    SPENT["inr"] = 0.0
     """Dispatches the top viral story of the day to Satyadheesh/reels via repository_dispatch."""
     token = os.environ.get("CORE_TOKEN") or os.environ.get("GITHUB_PAT") or os.environ.get("GITHUB_PAT_CLASSIC")
     if not token:
@@ -416,16 +469,29 @@ def dispatch_daily_reel(u_db, m_db, model=None, force=False):
         # Initial persona selection based on topic
         persona = "matilda" if str(topic).lower() in female_topics else "charlie"
 
+        last_openai = None
         for voice_attempt in range(2):
             print(f"  Evaluating candidate #{aid} [{topic}] with persona: {persona} (attempt {voice_attempt + 1})...")
             script_data = None
-            if model:
+            system = SCRIPT_SYSTEM_CHARLIE + SCRIPT_SOURCE_RULES + (SCRIPT_POLITICAL_EXTRA.replace("{source}", src_name) if political else "")
+            head = (f"NEWS ARTICLE\nTitle: {title}\nTopic: {topic}\nSource: {src_name}\nKey Fact: {fact}\n"
+                    f"Voice Persona: {persona}\n")
+            if last_openai:  # only the voice changed: the OpenAI script stays (no second payment)
+                script_data = last_openai
+            else:
+                script_data, why = openai_script(system, head + f"SUMMARY:\n{body[:1500]}" + (f"\n\nORIGINAL ARTICLE:\n{original}" if original else ""))
+                if script_data:
+                    last_openai = script_data
+                else:
+                    print(f"  OpenAI script not used ({why}); Gemma writes it")
+            if not script_data and model:
                 try:
-                    system = SCRIPT_SYSTEM_CHARLIE + SCRIPT_SOURCE_RULES + (SCRIPT_POLITICAL_EXTRA.replace("{source}", src_name) if political else "")
-                    head = (f"NEWS ARTICLE\nTitle: {title}\nTopic: {topic}\nSource: {src_name}\nKey Fact: {fact}\n"
-                            f"Voice Persona: {persona}\n")
                     sprompt = fit_prompt(model, system, head, body[:1500], original, max_tokens=550)
                     script_data = model.json(system, sprompt, SCRIPT_SCHEMA, temperature=0.25, max_tokens=550)
+                except Exception as e:
+                    print(f"  Script generation warning: {e}")
+            if script_data:
+                try:
                     if political and script_data:
                         script_data, notes, legal_ok = legal_pass(script_data)
                         for note in notes:

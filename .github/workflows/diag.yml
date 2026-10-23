@@ -54,6 +54,7 @@ jobs:
           REPEAT: ${{ github.event.inputs.repeat }}
           FOLLOW: '/upsc/note/ /ssc/current-affairs/ /ssc/topic/'
           CHECK_OG: '1'
+          OPENAI_API_KEY: ${{ github.event.inputs.script == 'reel_model_test.py' && secrets.OPENAI_API_KEY || '' }}  # only for the reel model test
         run: PYTHONPATH=. python "tools/${{ github.event.inputs.script }}" 2>&1 | tee /tmp/diag.md
       - name: Publish
         if: always()

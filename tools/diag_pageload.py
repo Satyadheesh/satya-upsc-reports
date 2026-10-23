@@ -8,7 +8,7 @@ subprocess.run([sys.executable, "-m", "pip", "install", "-q", "playwright"], che
 subprocess.run([sys.executable, "-m", "playwright", "install", "--with-deps", "chromium"], check=True, capture_output=True)
 from playwright.sync_api import sync_playwright  # noqa: E402
 
-PAGES = [("/", None), ("/upsc", None), ("/", "hi"), ("/timelines", None), ("/news/138876?lang=hi", None)]
+PAGES = [("/", None), ("/", "hi"), ("/?lang=hi", None)]
 LCP_JS = """() => new Promise(res => { let v = 0; new PerformanceObserver(l => { for (const e of l.getEntries()) v = e.startTime; })
   .observe({type: 'largest-contentful-paint', buffered: true}); setTimeout(() => res(v), 1500); })"""
 with sync_playwright() as pw:
@@ -40,6 +40,9 @@ with sync_playwright() as pw:
                       f"{len(reqs)} requests, {sum((r.sizes().get('responseBodySize', 0) for r in reqs)) // 1024} KB")
                 for d, u in slow[:6]:
                     print(f"  - {d:.0f} ms {u[:110]}")
+                big = sorted(((r.sizes().get('responseBodySize', 0), r.url) for r in reqs), reverse=True)[:6]
+                for sz, u in big:
+                    print(f"  * {sz // 1024} KB {u[:130]}")
             except Exception as ex:
                 print(f"## {path} cookie={cookie} try {attempt}: {type(ex).__name__}: {str(ex)[:200]}")
             ctx.close()

@@ -102,17 +102,20 @@ OUTPUT FIELDS
 - hook_say: 1-2 spoken lines that grab attention immediately (a surprising fact, a question, or a contrast).
 - core_title_hi: short title for the core news card, max 8 words.
 - core_points_hi: exactly 2 or 3 very short on-screen bullet points in Hindi (e.g. ["22 नए सरकारी केंद्र शुरू", "किडनी के मरीज़ों को सीधा फ़ायदा", "सत्यापित डेटा"]). Max 8 words per bullet.
-- core_say: 2-3 spoken lines explaining what actually happened, in simple and concrete terms (who, what, where, how much).
+- core_say: 3-4 spoken lines: what actually happened, in simple and concrete terms (who, what, where, how much), plus one line of background (how we got here).
 - twist_stat: the single key number or word shown on screen (e.g. "₹999" or "22 केंद्र").
 - twist_label: short label for that number (e.g. "डायलिसिस फ़ीस" or "नए केंद्र").
 - twist_detail_hi: 1 short on-screen line in Hindi summarizing the ground reality, budget, or contrast (max 10 words, e.g. "प्राइवेट में ₹4,000 तक खर्च, सरकारी से बड़ी राहत").
-- twist_say: 1-2 spoken lines on the ground reality, the key number, or the contrast/budget angle.
+- twist_say: 2-3 spoken lines: the ground reality, the key number or the contrast, and what happens next (a hearing, deadline, vote, decision or rollout), if the article says.
 - question_hi: short on-screen question for the engagement card.
 - engagement_say: one natural, thought-provoking question that invites viewers to comment.
 
 RULES
 - Use only facts from the article. Do not invent numbers, names, or quotes.
-- Keep the whole spoken script (hook_say + core_say + twist_say + engagement_say) to about 60-90 words, roughly 30-40 seconds of speech.
+- Keep the whole spoken script (hook_say + core_say + twist_say + engagement_say) to about 110-140 words, roughly 45-55 seconds of speech.
+- Make it rich, not padded. Every script carries: (1) one line of background, (2) at least one concrete detail from the
+  article: a date, a figure, or a named person or institution, (3) what happens next, if the article says. Skip a point
+  rather than invent it.
 - Output ONLY the JSON object. No explanation, no markdown, no code fences, no text before or after.
 """
 
@@ -487,8 +490,8 @@ def dispatch_daily_reel(u_db, m_db, model=None, force=False):
                     print(f"  OpenAI script not used ({why}); Gemma writes it")
             if not script_data and model:
                 try:
-                    sprompt = fit_prompt(model, system, head, body[:1500], original, max_tokens=550)
-                    script_data = model.json(system, sprompt, SCRIPT_SCHEMA, temperature=0.25, max_tokens=550)
+                    sprompt = fit_prompt(model, system, head, body[:1500], original, max_tokens=800)
+                    script_data = model.json(system, sprompt, SCRIPT_SCHEMA, temperature=0.25, max_tokens=800)
                 except Exception as e:
                     print(f"  Script generation warning: {e}")
             if script_data:

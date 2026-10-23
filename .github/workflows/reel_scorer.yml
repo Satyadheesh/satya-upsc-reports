@@ -37,11 +37,12 @@ env:
   SATYA_UPSC_DB_TOKEN: ${{ secrets.NEW_UPSC_DB_TOKEN || secrets.SATYA_UPSC_DB_TOKEN }}
   KIT_MODEL_REPO: unsloth/gemma-4-12b-it-GGUF
   KIT_MODEL_FILE: gemma-4-12b-it-Q4_K_M.gguf
-  # Reel scripts: OpenAI GPT-5.6 Luna (Gemma writes them if this fails); at most Rs 2 per reel.
-  # Thinking level without a code change: repo variable REEL_SCRIPT_EFFORT = low | medium | high.
+  # Reel scripts: OpenAI GPT-5.6 Luna (Gemma writes them if this fails); ~Rs 0.2 per reel at medium.
+  # Without a code change (repo variables): REEL_SCRIPT_EFFORT = low | medium | high; REEL_BUDGET_INR = runaway guard per reel (default 10).
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
   REEL_SCRIPT_MODEL: gpt-5.6-luna
   REEL_SCRIPT_EFFORT: ${{ vars.REEL_SCRIPT_EFFORT || 'medium' }}
+  REEL_BUDGET_INR: ${{ vars.REEL_BUDGET_INR || '10' }}
 
 jobs:
   score:

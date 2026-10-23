@@ -19,9 +19,13 @@ SYSTEM = """You are an expert executive producer for viral short-form news video
 Your goal is to evaluate news stories across ALL topics (politics & political funding/chanda, cinema/Bollywood, infrastructure, science, space, quirky/bizarre curiosities, defense, sports, consumer hacks, economy, nature) and score their viral potential.
 
 EVALUATION CRITERIA (0 to 10):
-1. Scroll-Stopping Hook (0-3): Does the story start with a fascinating contrast, question, or paradox that immediately stops someone scrolling?
-2. Scale & Wow Factor (0-3): Does it feature an impressive physical scale, record, massive budget, high number, or unusual feat?
-3. Talkability & Shareability (0-4): Would an ordinary Indian share this on WhatsApp with friends or family saying "Did you know this?" (e.g. mind-blowing political donation/chanda figures, electoral bond disclosures, declared neta assets vs reality, giant taxpayer spending, viral cinema/sports milestones, tech wonders).
+1. Scroll-Stopping Hook (0-2): Does the story start with a fascinating contrast, question, or paradox that immediately stops someone scrolling?
+2. Scale & Wow Factor (0-2): Does it feature an impressive physical scale, record, massive budget, high number, or unusual feat?
+3. India Relevance (0-2): Does it directly involve India: Indian leaders, parties, institutions, public money, laws, or a clear effect on ordinary Indians? A foreign story with no India angle scores 0 here.
+4. Talkability & Shareability (0-4): Would an ordinary Indian share this on WhatsApp with friends or family saying "Did you know this?" (e.g. mind-blowing political donation/chanda figures, electoral bond disclosures, declared neta assets vs reality, giant taxpayer spending, viral cinema/sports milestones, tech wonders).
+
+CAPS:
+- A foreign business, tech or celebrity story with no India angle (a US company's deal, a foreign billionaire's plan) scores at most 5 overall: our audience is Indian and follows Indian news.
 
 WHAT TO REJECT (Score 0):
 - Routine partisan name-calling, spokesperson bickering, or unverified verbal allegations without official records.
@@ -276,6 +280,56 @@ def openai_script(system, user):
         return None, f"OpenAI answer unreadable: {type(e).__name__}"
 
 
+FEEDBACK = ""  # filled once per run by main() (audience_feedback)
+
+
+def audience_feedback(u_db, n=4):
+    """What our audience actually watched: the first line of our recent Instagram reels with their reach (best and
+    worst n), for the scoring prompt (Yash, 24 Oct 2026: learn from results). '' if Instagram can't be read."""
+    try:
+        import urllib.parse
+        import urllib.request
+        tok = {r[0]: r[1] for r in u_db.execute("SELECT k, token FROM ig_auth").rows}.get("long_lived")
+        if not tok:
+            return ""
+        base = "https://graph.instagram.com/v23.0"
+        get = lambda path, **q: json.loads(urllib.request.urlopen(f"{base}/{path}?" + urllib.parse.urlencode({**q, "access_token": tok}), timeout=30).read())
+        me = get("me", fields="user_id")
+        media = get(f"{me.get('user_id') or me.get('id')}/media", fields="id,caption,media_product_type,timestamp", limit=40).get("data", [])
+        rows = []
+        for m in media:
+            if m.get("media_product_type") != "REELS" or not m.get("caption"):
+                continue
+            try:
+                reach = get(f"{m['id']}/insights", metric="reach")["data"][0]["values"][0]["value"]
+            except Exception:
+                continue
+            line = m["caption"].strip().splitlines()[0].lstrip("🚨 ").strip()[:90]
+            rows.append((reach, line))
+        if len(rows) < 6:
+            return ""
+        rows.sort(reverse=True)
+        top = "\n".join(f"  + reach {r}: {t}" for r, t in rows[:n])
+        low = "\n".join(f"  - reach {r}: {t}" for r, t in rows[-n:])
+        return ("\nWHAT OUR AUDIENCE ACTUALLY WATCHED (Instagram reach of our recent reels; learn the pattern, don't copy the topics):\n"
+                f"Did well:\n{top}\nDid poorly:\n{low}\n")
+    except Exception as e:
+        print(f"  (audience feedback unavailable: {type(e).__name__})")
+        return ""
+
+
+NAME = re.compile(r"\b[A-Z][a-zA-Z.'-]{3,}\b")
+COMMON = {"India", "Indian", "Indians", "Government", "Centre", "Central", "State", "States", "Minister", "Chief", "Prime",
+          "Supreme", "Court", "High", "Union", "National", "Party", "Congress", "Lok", "Sabha", "Rajya", "President", "Bank",
+          "Report", "Committee", "Commission", "Election", "Police", "Delhi", "Mumbai", "World", "First", "After", "With",
+          "Over", "From", "Says", "Said", "Will", "Amid", "Rs", "Crore", "Lakh", "Billion", "Trillion", "Million", "This", "That"}
+
+
+def names_in(title):
+    """Proper names in an English headline (people, companies, places), minus the very common ones."""
+    return {w.strip(".'-") for w in NAME.findall(title or "")} - COMMON
+
+
 SUITABILITY_POLITICAL_EXTRA = """
 5. LEGAL SAFETY (this is a political story; reject_story if ANY point fails):
    - core_say starts with the source attribution ("... की रिपोर्ट के मुताबिक") and every accusation is tied to whoever made it;
@@ -439,7 +493,22 @@ def dispatch_daily_reel(u_db, m_db, model=None, force=False):
         # political stories get the most traction (Yash, 22 Oct 2026): +1 when ranking, and they qualify from 6
         candidates = [c for c in candidates if int(c[2]) >= 7 or (is_political(c[1]) and int(c[2]) >= 6)]
         candidates.sort(key=lambda c: (int(c[2]) + (1 if is_political(c[1]) else 0), c[6] or 0), reverse=True)
-        candidates = [c[:6] for c in candidates[:5]]
+        # no repeat of the same person or company within 48 h (Musk got 3 reels in 3 days, 22-24 Oct 2026)
+        recent = [int(r[0]) for r in u_db.execute("SELECT article_id FROM reel_posts WHERE dispatched_at >= ?", [now - 48 * 3600]).rows]
+        ids = recent + [int(c[0]) for c in candidates[:20]]
+        titles = {}
+        if ids:
+            ph = ",".join("?" * len(ids))
+            titles = {int(r[0]): (r[1] or r[2] or "") for r in m_db.execute(f"SELECT id, title, rephrased_title FROM articles WHERE id IN ({ph})", ids).rows}
+        seen = set().union(*[names_in(titles.get(a, "")) for a in recent]) if recent else set()
+        fresh = []
+        for c in candidates[:20]:
+            overlap = names_in(titles.get(int(c[0]), "")) & seen
+            if overlap:
+                print(f"  #{c[0]} skipped: {sorted(overlap)} already had a reel in the last 48 h")
+                continue
+            fresh.append(c)
+        candidates = [c[:6] for c in fresh[:5]]
     except Exception as e:
         print(f"  Error querying reel_candidates for dispatch: {e}")
         return
@@ -783,6 +852,10 @@ def main():
 
     print(f"Evaluating {len(candidates)} new articles with Gemma 4 12B ({MODEL_NAME})...")
     model = Model(download())
+    global FEEDBACK
+    FEEDBACK = audience_feedback(u_db)
+    if FEEDBACK:
+        print(FEEDBACK)
 
     scored_count = 0
     high_score_count = 0
@@ -794,7 +867,7 @@ def main():
             f"Article Body:\n{art['body'][:1000]}\n"
         )
         try:
-            res = model.json(SYSTEM, prompt, SCHEMA, temperature=0.1, max_tokens=250)
+            res = model.json(SYSTEM + FEEDBACK, prompt, SCHEMA, temperature=0.1, max_tokens=250)
             score = int(res.get("viral_score") or 0)
             topic = str(res.get("topic") or art["category"])
             hook = str(res.get("hook_angle") or "")

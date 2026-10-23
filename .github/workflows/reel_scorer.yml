@@ -97,4 +97,10 @@ jobs:
             echo "::notice title=Script test::$(tail -c 3500 /tmp/st.txt | sed ':a;N;$!ba;s/%/%25/g;s/\n/%0A/g')"
             exit 0
           fi
-          python -m tools.reel_scorer --batch "$BATCH" $DRY $DISPATCH
+          if [ -n "$DRY" ]; then
+            python -m tools.reel_scorer --batch "$BATCH" $DRY $DISPATCH 2>&1 | tee /tmp/dry.txt
+            # logs aren't readable from outside: the scores and the audience feedback as one annotation
+            echo "::notice title=Dry run::$(grep -E 'Score|reach|Did |skipped' /tmp/dry.txt | tail -c 3800 | sed ':a;N;$!ba;s/%/%25/g;s/\n/%0A/g')"
+          else
+            python -m tools.reel_scorer --batch "$BATCH" $DRY $DISPATCH
+          fi

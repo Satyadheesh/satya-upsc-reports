@@ -190,6 +190,34 @@ def fit_prompt(model, system, head, summary, original, max_tokens, margin=160):
     return build(sm, og)
 
 
+LOADED = re.compile(r"(भ्रष्टाचार|घोटाल[ाेो]|घपल[ाेो]|घूसखोरी|रिश्वतखोरी|धोखाधड़ी|हेराफेरी|लूट)")
+HEDGED = re.compile(r"आरोप|दावा|दावे|कथित|जांच|जाँच|सवाल")
+LABELS = {"चोर", "चोरों", "गद्दार", "जुमलेबाज़", "जुमलेबाज", "घोटालेबाज़", "घोटालेबाज", "भ्रष्ट", "लुटेरा", "लुटेरे", "देशद्रोही"}
+
+
+def legal_pass(script):
+    """The political rules the model doesn't always keep, applied in code (22 Oct 2026: an on-screen bullet read
+    '43,000 करोड़ का भ्रष्टाचार' and the review still approved it). A field that names wrongdoing without 'आरोप/दावा/
+    कथित/जांच' gets 'कथित' (alleged) in front of it; an abusive label rejects the script. -> (script, notes, ok)"""
+    notes, ok = [], True
+
+    def fix(v):
+        nonlocal ok
+        if not isinstance(v, str):
+            return v
+        words = set(re.findall(r"[\u0900-\u097F]+", v))
+        if words & LABELS:
+            ok = False
+            notes.append(f"label {sorted(words & LABELS)} in: {v[:60]}")
+        if LOADED.search(v) and not HEDGED.search(v):
+            nv = LOADED.sub(lambda m: "कथित " + m.group(1), v, count=1)
+            notes.append(f"'{v[:50]}' -> '{nv[:56]}'")
+            return nv
+        return v
+    out = {k: ([fix(x) for x in v] if isinstance(v, list) else fix(v)) for k, v in script.items()}
+    return out, notes, ok
+
+
 SUITABILITY_POLITICAL_EXTRA = """
 5. LEGAL SAFETY (this is a political story; reject_story if ANY point fails):
    - core_say starts with the source attribution ("... की रिपोर्ट के मुताबिक") and every accusation is tied to whoever made it;
@@ -398,6 +426,13 @@ def dispatch_daily_reel(u_db, m_db, model=None, force=False):
                             f"Voice Persona: {persona}\n")
                     sprompt = fit_prompt(model, system, head, body[:1500], original, max_tokens=550)
                     script_data = model.json(system, sprompt, SCRIPT_SCHEMA, temperature=0.25, max_tokens=550)
+                    if political and script_data:
+                        script_data, notes, legal_ok = legal_pass(script_data)
+                        for note in notes:
+                            print(f"  legal pass #{aid}: {note}")
+                        if not legal_ok:
+                            print(f"  Story #{aid}: abusive label in the script, trying next candidate...")
+                            script_data = None
                 except Exception as e:
                     print(f"  Script generation warning: {e}")
 
@@ -613,6 +648,9 @@ def script_test(m_db, u_db, ids):
               f"(context {model.llm.n_ctx()}), original kept: {'ORIGINAL ARTICLE' in prompt}", flush=True)
         t0 = time.time()
         sc = model.json(system, prompt, SCRIPT_SCHEMA, temperature=0.25, max_tokens=550)
+        if political:
+            sc, notes, legal_ok = legal_pass(sc)
+            print(f"legal pass: ok={legal_ok} {notes}", flush=True)
         print(f"script in {time.time() - t0:.0f}s:\n{json.dumps(sc, ensure_ascii=False, indent=1)}", flush=True)
         ev = (f"NEWS ARTICLE: {title}\nTOPIC: {topic}{' (POLITICAL: apply the legal safety check)' if political else ''}\n"
               f"ASSIGNED VOICE: charlie\nHEADLINE: {sc.get('headline_hi')}\n"

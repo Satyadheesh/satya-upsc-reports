@@ -221,18 +221,19 @@ def legal_pass(script):
 
 
 # Script writer: OpenAI GPT-5.6 Luna (Yash, 24 Oct 2026, after the model test: best Hindi for the money), Gemma 12B as
-# the fallback. Hard cap: Rs 2 per reel, counted at Luna's launch price ($1 / $6 per 1M tokens), whatever OpenAI bills.
+# the fallback. ~Rs 0.2 per reel at medium. Rs 2 is a target, not a hard limit (Yash, 24 Oct): the only cap is a runaway
+# guard (REEL_BUDGET_INR, default Rs 10 per reel, counted at Luna's launch price $1 / $6 per 1M tokens).
 OPENAI_MODEL = os.environ.get("REEL_SCRIPT_MODEL", "gpt-5.6-luna")
 OPENAI_EFFORT = os.environ.get("REEL_SCRIPT_EFFORT", "medium")  # low | medium | high
 OPENAI_PRICE = {"gpt-5.6-luna": (1.0, 6.0), "gpt-5.6-terra": (2.5, 15.0), "gpt-5.6-sol": (5.0, 30.0)}  # $/1M, launch prices
-REEL_BUDGET_INR = float(os.environ.get("REEL_BUDGET_INR", "2"))
+REEL_BUDGET_INR = float(os.environ.get("REEL_BUDGET_INR") or "10")
 USD_INR = float(os.environ.get("USD_INR", "88"))
 SPENT = {"inr": 0.0}  # this reel's OpenAI spend (one dispatch = one reel)
 
 
 def openai_script(system, user):
-    """The reel script from OpenAI, or (None, why). Never spends more than what's left of the reel's budget: the
-    answer's length is capped so even the worst case stays inside it."""
+    """The reel script from OpenAI, or (None, why). The answer may use up to 8,000 tokens (room for high reasoning);
+    only a runaway is stopped (REEL_BUDGET_INR per reel)."""
     import urllib.error
     import urllib.request
     key = os.environ.get("OPENAI_API_KEY")

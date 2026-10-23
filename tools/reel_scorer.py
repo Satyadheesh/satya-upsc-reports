@@ -112,7 +112,9 @@ OUTPUT FIELDS
 
 RULES
 - Use only facts from the article. Do not invent numbers, names, or quotes.
-- Keep the whole spoken script (hook_say + core_say + twist_say + engagement_say) to about 110-140 words, roughly 45-55 seconds of speech.
+- Keep the whole spoken script (hook_say + core_say + twist_say + engagement_say) to 110-140 Hindi words in total,
+  roughly 45-55 seconds of speech. Never more than 140 words: count them. hook_say max 25 words, core_say max 55,
+  twist_say max 40, engagement_say max 20.
 - Make it rich, not padded. Every script carries: (1) one line of background, (2) at least one concrete detail from the
   article: a date, a figure, or a named person or institution, (3) what happens next, if the article says. Skip a point
   rather than invent it.

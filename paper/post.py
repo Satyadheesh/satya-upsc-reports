@@ -22,7 +22,22 @@ from tg.telegram import Bot
 from .build import IST, build_all
 from .render import MONTHS_HI
 
-HINDU_EN, HINDU_HI, ALL = "@thehindu_in_english", "@thehindu_in_hindi", "@newspapers_for_upsc_pdf"
+# Numeric ids (a private channel has no @handle). Yash, 24 Oct 2026: these channels are private, for his own reading.
+HINDU_EN, HINDU_HI, ALL = "-1004343898066", "-1004391165331", "-1004413160494"
+NAMES = {HINDU_EN: "TheHindu in English", HINDU_HI: "TheHindu in Hindi", ALL: "Newspapers for UPSC"}
+
+
+def is_private(bot, chat):
+    """The PDFs carry the papers' original reports and photos: personal use only. Never post to a public channel."""
+    try:
+        info = bot.call("getChat", {"chat_id": chat})
+    except Exception as e:
+        print(f"::error::getChat {NAMES.get(chat, chat)} failed: {str(e)[:120]}")
+        return False
+    if info.get("username"):
+        print(f"::error::{NAMES.get(chat, chat)} is PUBLIC (@{info['username']}): not posting. Make it private first.")
+        return False
+    return True
 LATE_LIMIT = 4 * 3600
 ALBUM_MAX = 10
 
@@ -32,14 +47,11 @@ def day_label(d, hi):
 
 
 def cap_one(name, d, hi):
-    return (f"<b>{name} · {day_label(d, True)}</b>\nपिछले 24 घंटे, संक्षेप में · @satyadheesh" if hi else
-            f"<b>{name} · {day_label(d, False)}</b>\nLast 24 hours in brief · @satyadheesh")
+    return f"<b>{name}</b> · {day_label(d, hi)}"
 
 
 def cap_all(names, d, hi):
-    if hi:
-        return f"<b>आज के अख़बार, संक्षेप में · {day_label(d, True)}</b>\n{', '.join(names)} · @satyadheesh"
-    return f"<b>Today's newspapers in brief · {day_label(d, False)}</b>\n{', '.join(names)} · @satyadheesh"
+    return f"<b>{'आज के अख़बार' if hi else 'Today’s newspapers'}</b> · {day_label(d, hi)}\n{', '.join(names)}"
 
 
 def main():
@@ -50,7 +62,7 @@ def main():
     if a.mode == "check":   # can the bot post in each channel? (nothing is sent)
         bot = Bot()
         me = bot.call("getMe")
-        for ch in (HINDU_EN, HINDU_HI, ALL):
+        for ch in (HINDU_EN, HINDU_HI, ALL):  # by id
             try:
                 chat = bot.call("getChat", {"chat_id": ch})
                 mem = bot.call("getChatMember", {"chat_id": ch, "user_id": me["id"]})
@@ -108,7 +120,11 @@ def main():
             time.sleep(wait)
     bot = Bot()
     failed = 0
+    private = {c: is_private(bot, c) for c in {j[1] for j in jobs}} if a.mode != "test" else {}
     for key, chat, docs, cap in jobs:
+        if a.mode != "test" and not private.get(chat):
+            failed += 1
+            continue
         try:
             msg = bot.documents(chat, docs, cap)
             if a.mode != "test":

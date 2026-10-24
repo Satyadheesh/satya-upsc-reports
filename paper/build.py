@@ -18,10 +18,9 @@ from .data import MIN_STORIES, PAPERS, edition, window
 
 REPORTS = pathlib.Path(__file__).parent.parent / "reports"   # fonts/ live here (render inlines url(fonts/...))
 IST = dt.timezone(dt.timedelta(hours=5, minutes=30))
-FOOTER = ('<div style="width:100%;font:6.5px Helvetica,Arial,sans-serif;color:#857d75;padding:0 10mm;display:flex;'
+FOOTER = ('<div style="width:100%;font:6.5px Helvetica,Arial,sans-serif;color:#857d75;padding:0 11mm;display:flex;'
           'justify-content:space-between;letter-spacing:.08em"><span><b style="color:#141210;letter-spacing:.18em">SATYADHEESH</b>'
-          '&nbsp;&nbsp;·&nbsp;&nbsp;{label}</span><span><b style="color:#229ED9">t.me/satyadheesh</b>&nbsp;&nbsp;·&nbsp;&nbsp;'
-          'satyadheesh.in&nbsp;&nbsp;·&nbsp;&nbsp;<span class="pageNumber"></span> / <span class="totalPages"></span></span></div>')
+          '&nbsp;&nbsp;·&nbsp;&nbsp;{label}</span><span>PAGE <span class="pageNumber"></span> / <span class="totalPages"></span></span></div>')
 
 
 def plan(items):
@@ -57,11 +56,11 @@ def build_all(day=None, only=None, out=None):
             html = render.render(paper, paper_hi, st, lang, day)
             f = REPORTS / f"_paper_{os.getpid()}.html"
             f.write_text(html, encoding="utf-8")
-            page.goto(f.as_uri(), wait_until="load")
+            page.goto(f.as_uri(), wait_until="networkidle", timeout=120000)
             page.evaluate("document.fonts.ready")
             page.wait_for_timeout(200)
-            label = f"{(paper_hi if lang == 'hi' else paper).upper()} {'EDITION' if lang == 'en' else 'संस्करण'} · {day.isoformat()}"
-            pdf = page.pdf(format="A4", print_background=True, prefer_css_page_size=True, display_header_footer=True,
+            label = f"{(paper_hi if lang == 'hi' else paper).upper()} · {day.strftime('%-d %b %Y').upper()} · PERSONAL COPY"
+            pdf = page.pdf(print_background=True, prefer_css_page_size=True, display_header_footer=True,
                            header_template="<div></div>", footer_template=FOOTER.format(label=label))
             f.unlink(missing_ok=True)
             name = file_name(slug, lang, day)

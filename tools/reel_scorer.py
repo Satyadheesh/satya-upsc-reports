@@ -102,6 +102,13 @@ LANGUAGE AND TONE (Yash, 24 Oct 2026: "the Hindi speaks overly Hindi; it must co
 - More swaps: आपसी सहयोग → साथ मिलकर काम · निर्देश देना → कहना · व्यापारिक → कारोबारी (or drop it) · आर्थिक → पैसे का/इकोनॉमी का.
 - Short, spoken sentences. Use ये/वो, "यानी", "मतलब", "सीधी बात", "अब सवाल ये है", "सोचिए". Talk to the viewer as आप.
 - Explain any hard term in the same breath with "यानी" ("SIR, यानी वोटर लिस्ट की जांच").
+- PLAIN STORY FIRST: before anything else, write plain_story_hi: the whole story in 1-2 sentences a shopkeeper or a
+  farmer would understand: who wants what, why, and what happened. Every *_say line must follow that story. If a viewer
+  can't repeat the story to a friend after the reel, the script failed.
+- In a dispute, say in one simple line what EACH side wants and why ("तमिलनाडु कहता है… कर्नाटक का जवाब है…").
+- Numbers: at most 3 in the whole voice script, and only ones a viewer can picture (rupees, people, days, percent, a
+  date). Never rename a technical quantity ("यूनिट", "मात्रा"); drop it, or compare it ("मांग का करीब पांचवां हिस्सा",
+  "आधे से भी कम"). No decimals like 18.402 or 55.35 in speech: say "करीब 18", "आधे से कम".
 - No jargon a common viewer wouldn't say: technical units (TMC/tmcft, cusecs, MW, MoU…) and committee or agency
   acronyms (CWRC, CWMA, NHAI…). Say what they mean instead: "कावेरी पानी कमेटी", "रोज़ इतना पानी", "समझौता". Keep a number
   only if it means something to a viewer; otherwise compare it ("मांग का करीब पांचवां हिस्सा"). Acronyms people already
@@ -132,6 +139,7 @@ INTRODUCE EVERY PERSON (viewers from any state may not know who anyone is)
 - Within hook_say or the start of core_say, add one short context line so a viewer from any state can follow: where this is and why it matters.
 
 OUTPUT FIELDS
+- plain_story_hi: the story in 1-2 plain sentences (see PLAIN STORY FIRST). Not shown on screen.
 - people: every person named anywhere in the *_say lines, in order of first mention: [{"name_hi": "संजय राउत", "role_hi": "शिवसेना (UBT) के सांसद"}]. role_hi is exactly the role you used when introducing them (from the PEOPLE block when they are listed there). Empty list if nobody is named.
 - headline_hi: catchy on-screen headline, max 8 words.
 - subtitle_hi: one short on-screen line under the headline (max 9 words) that adds the key fact the headline leaves out (who, where or how much). No symbols except ₹; empty string if there is nothing to add.
@@ -522,10 +530,20 @@ TEXT_FIELDS = ("headline_hi", "subtitle_hi", "core_title_hi", "core_points_hi", 
 def jargon_problems(script):
     blob = " ".join(" ".join(v) if isinstance(v, list) else str(v or "")
                     for k, v in script.items() if k in SAY_FIELDS or k in TEXT_FIELDS)
+    say = " ".join(str(script.get(k) or "") for k in SAY_FIELDS)
+    out = []
     found = [w for w in JARGON if w in blob]
-    return ([f"too formal/technical for a common viewer: {', '.join(found)}. Say it the way people talk "
-             "(e.g. कमेटी, टारगेट, पाना, साथ काम, कहा, ट्रेनिंग, हुनरमंद; for water/power units say what it means "
-             "or compare it instead of TMC/cusecs)"] if found else [])
+    if found:
+        out.append(f"too formal/technical for a common viewer: {', '.join(found)}. Say it the way people talk "
+                   "(e.g. कमेटी, टारगेट, पाना, साथ काम, कहा, ट्रेनिंग, हुनरमंद; for water/power units say what it means "
+                   "or compare it instead of TMC/cusecs)")
+    if re.search(r"\d+\s*(?:यूनिट|मात्रा)", say) or re.search(r"\d+\.\d{2,}", say):
+        out.append("a number a viewer can't picture (a renamed unit like 'यूनिट' or a decimal like 46.510): drop it or "
+                   "compare it ('आधे से भी कम', 'मांग का करीब पांचवां हिस्सा')")
+    nums = re.findall(r"\d[\d,.]*", say)
+    if len(nums) > 5:
+        out.append(f"{len(nums)} numbers in the voice script: keep the 2-3 that matter, say the rest in words")
+    return out
 
 
 def tags_for_cards(script):
@@ -552,6 +570,7 @@ SCRIPT_SCHEMA = {
                       "required": ["name_hi", "role_hi"], "additionalProperties": False}
         },
         "headline_hi": {"type": "string"},
+        "plain_story_hi": {"type": "string"},
         "engagement_title_hi": {"type": "string"},
         "subtitle_hi": {"type": "string"},
         "hook_say": {"type": "string"},
@@ -569,7 +588,7 @@ SCRIPT_SCHEMA = {
         "engagement_say": {"type": "string"}
     },
     "required": [
-        "people", "headline_hi", "subtitle_hi", "engagement_title_hi", "hook_say", "core_title_hi", "core_points_hi", "core_say",
+        "plain_story_hi", "people", "headline_hi", "subtitle_hi", "engagement_title_hi", "hook_say", "core_title_hi", "core_points_hi", "core_say",
         "twist_stat", "twist_label", "twist_detail_hi", "twist_say", "question_hi", "engagement_say"
     ]
 }
@@ -1048,6 +1067,7 @@ def luna_test(m_db, u_db, ids):
             legal = f" | legal ok={ok} {notes or ''}"
         print(f"## #{aid} [{topic}] {inp['title'][:90]}\n({time.time() - t0:.0f}s, {why}){legal}"
               f"{' | PROBLEMS LEFT: ' + '; '.join(problems) if problems else ''}\n"
+              f"STORY: {sc.get('plain_story_hi')}\n"
               f"PEOPLE: {'; '.join(p.get('name_hi', '') + ' = ' + p.get('role_hi', '') for p in sc.get('people') or [])}\n"
               f"ON SCREEN: {sc.get('headline_hi')} | {sc.get('subtitle_hi')}\n"
               f"HOOK: {sc.get('hook_say')}\nCORE: {sc.get('core_say')}\nTWIST: {sc.get('twist_say')}\n"

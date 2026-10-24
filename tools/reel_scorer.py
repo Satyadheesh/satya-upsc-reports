@@ -993,14 +993,46 @@ def script_inputs(r, topic, fact, persona):
     original = clean_original(decompress(r[6], limit=12000))[:4000]  # ~1,000 tokens: richer context, runner time in check
     political = is_political(topic)
     src_name = "इंडियन एक्सप्रेस" if "indianexpress" in str(r[5] or "").lower() else "द हिंदू"
-    system = SCRIPT_SYSTEM_CHARLIE + SCRIPT_SOURCE_RULES + (SCRIPT_POLITICAL_EXTRA.replace("{source}", src_name) if political else "")
+    variant = os.environ.get("REEL_PROMPT_VARIANT", "")   # experiments only: "short", "no_original"
+    if variant == "short":
+        system = SCRIPT_SYSTEM_SHORT.replace("<source>", src_name)
+    else:
+        system = SCRIPT_SYSTEM_CHARLIE + SCRIPT_SOURCE_RULES + (SCRIPT_POLITICAL_EXTRA.replace("{source}", src_name) if political else "")
     pblock, known = people_block(r[0], title, body, original)
-    head = (f"NEWS ARTICLE\nTitle: {title}\nTopic: {topic}\nSource: {src_name}\nKey Fact: {fact}\n"
-            f"Voice Persona: {persona}\n" + pblock)
-    user_msg = head + f"SUMMARY:\n{body[:1500]}" + (f"\n\nORIGINAL ARTICLE:\n{original}" if original else "")
+    head = (f"NEWS ARTICLE\nTitle: {title}\nTopic: {topic}\nSource: {src_name}\n"
+            + (f"Key Fact: {fact}\n" if variant != "no_original" else "") + f"Voice Persona: {persona}\n" + pblock)
+    user_msg = head + f"SUMMARY:\n{body[:1500]}" + (f"\n\nORIGINAL ARTICLE:\n{original}" if original and variant != "no_original" else "")
     return dict(system=system, head=head, user_msg=user_msg, body=body, original=original, known=known,
                 political=political, title=title)
 
+
+# Experiment (Yash, 24 Oct 2026: "I am not convinced Luna can't write a simple script"): a short, focused prompt.
+SCRIPT_SYSTEM_SHORT = """Write a 45-55 second Hindi news reel script for SatyaDheesh.
+
+Your viewer: an ordinary Indian scrolling on their phone (a shopkeeper in Kanpur, a farmer's son in Bihar). Not following
+this story, not an expert. Talk to them like a friend explaining the news at a chai stall: everyday Hindustani, short
+spoken sentences, English words people actually use (in Devanagari). If a figure, unit, official body or term would make
+them pause, leave it out or say what it means. They must be able to retell the story after watching: who wants what, why,
+and what happened.
+
+Example of the voice:
+"कावेरी के पानी पर कर्नाटक और तमिलनाडु फिर आमने-सामने हैं। तमिलनाडु कहता है, उसके किसानों की फसल सूख रही है, उसे और पानी
+चाहिए। कर्नाटक का जवाब है, इस बार नदी में आधे से भी कम पानी आया, पहले लोगों के पीने का पानी बचाना है।"
+
+Must do:
+- core_say starts with "<source> की रिपोर्ट के मुताबिक". Claims are attributed ("X का कहना है", "आरोप है"); never call
+  anyone guilty. Facts only from the article; never change a number or who did what.
+- The first time you name a person, say who they are ("कर्नाटक के मुख्यमंत्री डी.के. शिवकुमार"). At most 3 named people.
+- No symbols in the *_say lines (write रुपये, परसेंट). ₹ only on screen.
+- Lengths: whole voice 110-140 words; hook_say <=25, core_say <=55, twist_say <=40, engagement_say <=20 words.
+  headline_hi <=8 words, subtitle_hi <=9, core_points_hi 2-3 bullets <=8 words, twist_detail_hi <=10.
+
+Fields: plain_story_hi (the story in 1-2 plain sentences, not shown), people [{name_hi, role_hi}], headline_hi,
+subtitle_hi, hook_say (grab attention), core_title_hi, core_points_hi, core_say (what happened, each side in a dispute),
+twist_stat (a number or word different from the headline's), twist_label, twist_detail_hi, twist_say (ground reality and
+what happens next), question_hi, engagement_title_hi (2-4 words), engagement_say (one natural question).
+Output only the JSON object.
+"""
 
 EDITOR_SYSTEM = """You are the final editor of SatyaDheesh's Hindi news reels. A writer has drafted the script below.
 Your ONLY job: make it land with an ordinary Indian viewer scrolling on their phone, a shopkeeper in Kanpur, a farmer's son
@@ -1051,6 +1083,8 @@ def luna_script(inp, aid):
             if fixed:
                 script_data = fixed
                 problems = intro_problems(script_data, inp["known"])
+        if os.environ.get("REEL_EDIT_PASS", "on") == "off":
+            return script_data, why, problems
         edited, why_e = luna_edit(inp, script_data)
         if edited and len(intro_problems(edited, inp["known"])) <= len(problems):
             script_data, problems = edited, intro_problems(edited, inp["known"])

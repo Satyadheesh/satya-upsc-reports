@@ -144,6 +144,7 @@ OUTPUT FIELDS
 - twist_detail_hi: 1 short on-screen line in Hindi summarizing the ground reality, budget, or contrast (max 10 words, e.g. "प्राइवेट में ₹4,000 तक खर्च, सरकारी से बड़ी राहत").
 - twist_say: 2-3 spoken lines: the ground reality, the key number or the contrast, and what happens next (a hearing, deadline, vote, decision or rollout), if the article says.
 - question_hi: short on-screen question for the engagement card.
+- engagement_title_hi: 2-4 word heading above that question, specific to this story (e.g. "पानी पर आपका फ़ैसला", "पेपर लीक: आगे क्या?"). Not a generic "आपकी राय".
 - engagement_say: one natural, thought-provoking question that invites viewers to comment.
 
 RULES
@@ -510,6 +511,23 @@ def intro_problems(script, known=()):
     return out
 
 
+# Words an ordinary viewer doesn't say (Yash: "connect with the very common man"). Any of them in a spoken or on-screen
+# field -> one rewrite (together with the intro check). Common acronyms (CBI, ED, GST, UPSC, IAS) are fine.
+JARGON = ["टीएमसी", "क्यूसेक", "समिति", "प्राधिकरण", "प्राथमिकता", "लक्ष्य", "हासिल", "सहयोग", "निर्देश", "प्रशिक्षण",
+          "कुशल", "संबंधित", "तत्पश्चात", "उपरोक्त", "संपन्न", "निर्धारित", "विनियमन", "आवश्यक", "पश्चात"]  # not "हवाला": also the money-laundering term
+TEXT_FIELDS = ("headline_hi", "subtitle_hi", "core_title_hi", "core_points_hi", "twist_stat", "twist_label",
+               "twist_detail_hi", "question_hi", "engagement_title_hi")
+
+
+def jargon_problems(script):
+    blob = " ".join(" ".join(v) if isinstance(v, list) else str(v or "")
+                    for k, v in script.items() if k in SAY_FIELDS or k in TEXT_FIELDS)
+    found = [w for w in JARGON if w in blob]
+    return ([f"too formal/technical for a common viewer: {', '.join(found)}. Say it the way people talk "
+             "(e.g. कमेटी, टारगेट, पाना, साथ काम, कहा, ट्रेनिंग, हुनरमंद; for water/power units say what it means "
+             "or compare it instead of TMC/cusecs)"] if found else [])
+
+
 def tags_for_cards(script):
     """{'hook'|'core'|'twist'|'engagement': [{name, role}]}: the card where each person is first named (max 2 per card)."""
     cards = {}
@@ -534,6 +552,7 @@ SCRIPT_SCHEMA = {
                       "required": ["name_hi", "role_hi"], "additionalProperties": False}
         },
         "headline_hi": {"type": "string"},
+        "engagement_title_hi": {"type": "string"},
         "subtitle_hi": {"type": "string"},
         "hook_say": {"type": "string"},
         "core_title_hi": {"type": "string"},
@@ -550,7 +569,7 @@ SCRIPT_SCHEMA = {
         "engagement_say": {"type": "string"}
     },
     "required": [
-        "people", "headline_hi", "subtitle_hi", "hook_say", "core_title_hi", "core_points_hi", "core_say",
+        "people", "headline_hi", "subtitle_hi", "engagement_title_hi", "hook_say", "core_title_hi", "core_points_hi", "core_say",
         "twist_stat", "twist_label", "twist_detail_hi", "twist_say", "question_hi", "engagement_say"
     ]
 }
@@ -745,7 +764,7 @@ def dispatch_daily_reel(u_db, m_db, model=None, force=False):
                 script_data, why, problems = luna_script(inp, aid)
                 if script_data:
                     if problems:
-                        print(f"::warning title=Reel #{aid}: people not introduced::{'; '.join(problems)[:400]}")
+                        print(f"::warning title=Reel #{aid}: script problems left::{'; '.join(problems)[:400]}")
                     last_openai = script_data
                 else:
                     print(f"  OpenAI script not used ({why}); Gemma writes it")
@@ -915,7 +934,7 @@ def dispatch_daily_reel(u_db, m_db, model=None, force=False):
             "say": twist_say
         },
         "engagement": {
-            "headline": "सत्याधीश चर्चा",
+            "headline": (" ".join(str(script_data.get("engagement_title_hi") or "").split())[:40] or "आपकी राय"),
             "question": q_hi,
             "cta": "कमेंट में अपनी राय ज़रूर लिखें!",
             "people": tags.get("engagement", []),
@@ -991,15 +1010,15 @@ def luna_script(inp, aid):
     script_data, why = openai_script(inp["system"], inp["user_msg"])
     problems = []
     if script_data:
-        problems = intro_problems(script_data, inp["known"])
-        if problems:  # one rewrite: introduce the people properly, change nothing else
+        problems = intro_problems(script_data, inp["known"]) + jargon_problems(script_data)
+        if problems:  # one rewrite: fix exactly these, change nothing else
             print(f"  intro check #{aid}: {'; '.join(problems)} -> one rewrite")
             fixed, why2 = openai_script(inp["system"], inp["user_msg"] + "\n\nYOUR PREVIOUS SCRIPT:\n"
                                         + json.dumps(script_data, ensure_ascii=False)
                                         + "\n\nFIX ONLY THIS, keep everything else as it is:\n- " + "\n- ".join(problems))
             if fixed:
                 script_data = fixed
-                problems = intro_problems(script_data, inp["known"])
+                problems = intro_problems(script_data, inp["known"]) + jargon_problems(script_data)
     return script_data, why, problems
 
 
@@ -1028,10 +1047,12 @@ def luna_test(m_db, u_db, ids):
             sc, notes, ok = legal_pass(sc)
             legal = f" | legal ok={ok} {notes or ''}"
         print(f"## #{aid} [{topic}] {inp['title'][:90]}\n({time.time() - t0:.0f}s, {why}){legal}"
-              f"{' | INTRO PROBLEMS: ' + '; '.join(problems) if problems else ''}\n"
+              f"{' | PROBLEMS LEFT: ' + '; '.join(problems) if problems else ''}\n"
               f"PEOPLE: {'; '.join(p.get('name_hi', '') + ' = ' + p.get('role_hi', '') for p in sc.get('people') or [])}\n"
               f"ON SCREEN: {sc.get('headline_hi')} | {sc.get('subtitle_hi')}\n"
               f"HOOK: {sc.get('hook_say')}\nCORE: {sc.get('core_say')}\nTWIST: {sc.get('twist_say')}\n"
+              f"CARD 3: {sc.get('twist_stat')} {sc.get('twist_label')} | {sc.get('twist_detail_hi')}\n"
+              f"CARD 4: {sc.get('engagement_title_hi')} | {sc.get('question_hi')}\n"
               f"END: {sc.get('engagement_say')}\n", flush=True)
 
 

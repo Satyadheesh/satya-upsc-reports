@@ -50,3 +50,10 @@ class IntroCheck(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class JargonCheck(unittest.TestCase):
+    def test_units_and_formal_words_flagged(self):
+        from tools.reel_scorer import jargon_problems
+        self.assertEqual(len(jargon_problems({"hook_say": "तमिलनाडु ने 18 टीएमसीएफटी मांगा", "twist_stat": "3,000 क्यूसेक्स"})), 1)
+        self.assertEqual(jargon_problems({"hook_say": "भारत और रूस ने टारगेट रखा, ये होगा कैसे?"}), [])

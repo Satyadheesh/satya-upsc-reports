@@ -15,7 +15,7 @@ BOLD = re.compile(r"\*\*(.+?)\*\*")
 KICK = {"politics": ("Politics", "राजनीति"), "regional": ("States", "राज्य"), "crime": ("Law & Order", "क़ानून-व्यवस्था"),
         "economy": ("Business", "कारोबार"), "international": ("World", "दुनिया"), "education": ("Education", "शिक्षा"),
         "health": ("Health", "स्वास्थ्य"), "environment": ("Environment", "पर्यावरण"), "sports": ("Sport", "खेल")}
-N_BRIEFS = 7
+N_BRIEFS = 6
 PHOTOS_PER_SECTION = 4
 
 
@@ -189,7 +189,7 @@ figure.big img { max-height: 100mm; object-fit: cover; }
 .c5 { columns: 5; } .c2 { columns: 2; }
 .flead { border-bottom: 2px solid #111; padding-bottom: 2mm; margin-bottom: 3mm; }
 .jump { font: italic 600 8pt 'Source Serif 4', 'Deva', serif; text-indent: 0; color: #9b1c1c; }
-.frow { display: grid; grid-template-columns: 4fr 1.15fr; gap: 6mm; break-after: page; }
+.frow { display: grid; grid-template-columns: 4fr 1.15fr; gap: 6mm; margin-bottom: 4mm; }
 .fmain { display: grid; grid-template-columns: 1fr 1fr; gap: 6mm; }
 .fsec h3 { font: 700 19pt/1.12 'Playfair Display', 'Deva Serif', serif; margin: 0 0 2mm; }
 .hi .fsec h3 { font: 700 15pt/1.4 'Deva Serif', serif; }

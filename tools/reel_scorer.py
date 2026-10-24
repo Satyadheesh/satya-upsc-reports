@@ -1034,6 +1034,32 @@ what happens next), question_hi, engagement_title_hi (2-4 words), engagement_say
 Output only the JSON object.
 """
 
+# Yash, 24 Oct 2026: "Gemma summarises the news in 150-200 crisp words, then the script model writes from that".
+GEMMA_REEL_SUMMARY_SYSTEM = """You write the story summary a reel scriptwriter will work from. Read the article and write
+150-200 words of plain, simple English (short sentences), so that an ordinary viewer could follow the story:
+1. Who is involved: each person with who they are (role, party or state), each organisation with what it does.
+2. What happened, and what each side says or wants, and why.
+3. The single most surprising or human detail in the article.
+4. What happens next, if the article says.
+Numbers: keep money in rupees, people, days, dates and percentages. Turn technical quantities (TMC, cusecs, megawatts,
+tonnes) into comparisons a viewer can picture ("about a fifth of what Tamil Nadu asked for", "less than half the usual
+inflow") instead of the figure. No decimals. Say what an official body does instead of its full name.
+Keep attributions exactly (who said or alleged what); facts only from the article; change nothing.
+Return JSON: {"summary": "..."}"""
+GEMMA_REEL_SUMMARY_SCHEMA = {"type": "object", "properties": {"summary": {"type": "string"}}, "required": ["summary"]}
+
+
+def gemma_reel_summary(model, inp):
+    user = (f"Title: {inp['title']}\n\nSHORT SUMMARY:\n{inp['body'][:1200]}\n\n"
+            + (f"FULL ARTICLE:\n{inp['original'][:3500]}" if inp["original"] else ""))
+    try:
+        return (model.json(GEMMA_REEL_SUMMARY_SYSTEM, user, GEMMA_REEL_SUMMARY_SCHEMA, temperature=0.2,
+                           max_tokens=500) or {}).get("summary", "").strip()
+    except Exception as e:
+        print(f"  Gemma reel summary failed: {type(e).__name__}")
+        return ""
+
+
 BRIEF_SYSTEM = """You prepare a story brief for a Hindi news reel writer. Read the article and write, in simple
 everyday Hindi (the way you would explain it to a neighbour), what an ordinary viewer needs to understand this story:
 - story_hi: the whole story in 2-3 plain sentences: who wants what, why, and what happened or was decided.
@@ -1123,6 +1149,9 @@ def luna_script(inp, aid):
     return script_data, why, problems
 
 
+_GEMMA = {}
+
+
 def luna_test(m_db, u_db, ids):
     """Fast check of the LIVE script writer (Luna) on real stories: same prompt, intro check and legal pass as a real
     reel, no Gemma, nothing saved, dispatched or posted. ids empty -> the 3 newest reel candidates."""
@@ -1139,6 +1168,15 @@ def luna_test(m_db, u_db, ids):
             continue
         inp = script_inputs(r[0], topic, fact, "charlie")
         SPENT["inr"] = 0.0   # the budget is per reel: each test story is its own reel
+        if os.environ.get("REEL_PROMPT_VARIANT") == "gemma_brief":
+            if "m" not in _GEMMA:
+                _GEMMA["m"] = Model(download())
+            tg = time.time()
+            gs = gemma_reel_summary(_GEMMA["m"], inp)
+            print(f"## GEMMA SUMMARY #{aid} ({len(gs.split())} words, {time.time() - tg:.0f}s): {gs}", flush=True)
+            if gs:
+                head = inp["head"].replace(next((l for l in inp["head"].splitlines() if l.startswith("Key Fact:")), "\x00"), "")
+                inp = dict(inp, user_msg=head + "STORY (150-200 words, everything you need):\n" + gs)
         t0 = time.time()
         sc, why, problems = luna_script(inp, aid)
         if not sc:

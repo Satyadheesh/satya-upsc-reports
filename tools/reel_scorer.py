@@ -1064,7 +1064,8 @@ def gemma_model():
 
 
 def gemma_reel_summary(model, inp):
-    system = GEMMA_REEL_SUMMARY_SYSTEM_HI if os.environ.get("REEL_PROMPT_VARIANT") == "gemma_brief_hi" else GEMMA_REEL_SUMMARY_SYSTEM
+    system = (GEMMA_REEL_SUMMARY_SYSTEM_HI if os.environ.get("REEL_PROMPT_VARIANT") in ("gemma_brief_hi", "b3")
+              else GEMMA_REEL_SUMMARY_SYSTEM)
     user = (f"Title: {inp['title']}\n\nSHORT SUMMARY:\n{inp['body'][:1200]}\n\n"
             + (f"FULL ARTICLE:\n{inp['original'][:3500]}" if inp["original"] else ""))
     try:
@@ -1073,6 +1074,59 @@ def gemma_reel_summary(model, inp):
     except Exception as e:
         print(f"  Gemma reel summary failed: {type(e).__name__}")
         return ""
+
+
+# B3 (Yash, 24 Oct 2026: "time doesn't matter, quality does"): Gemma reviews the script against the full article and
+# lists problems; it never rewrites (its rewrites dropped words). Luna fixes exactly the listed problems.
+GEMMA_REVIEW_SYSTEM = """You are the fact and clarity checker for a Hindi news reel. You get the FULL ORIGINAL ARTICLE
+and the reel SCRIPT (JSON). Check every spoken line (hook_say, core_say, twist_say, engagement_say) and every on-screen
+field. Report a problem only when it is real:
+- fact: a number, name, date, place, tense or "who said / did / alleged what" that differs from the article, or a claim
+  not in the article.
+- unclear: a line an ordinary Indian viewer (a shopkeeper, a farmer's son) would not understand the first time they hear
+  it: a technical unit, an official body's name, jargon, a decimal, a vague number like "46 यूनिट", or a confusing sentence.
+- formal: wording that sounds like a news anchor, a textbook or a government note instead of how people talk.
+- legal: an allegation stated as fact, or a claim without who made it.
+- story: after the reel, could the viewer retell who wants what, why, and what happened? If not, say what is missing.
+For each problem give: field, the exact words, the problem type, and a short suggestion (in Hindi where it is wording).
+Do not report style preferences or things that are fine. If everything is fine, return an empty list.
+Return JSON: {"problems": [{"field": "...", "quote": "...", "type": "fact|unclear|formal|legal|story", "fix": "..."}]}"""
+GEMMA_REVIEW_SCHEMA = {"type": "object", "properties": {"problems": {"type": "array", "items": {"type": "object",
+                       "properties": {"field": {"type": "string"}, "quote": {"type": "string"}, "type": {"type": "string"},
+                                      "fix": {"type": "string"}}, "required": ["field", "quote", "type", "fix"]}}},
+                       "required": ["problems"]}
+
+
+def gemma_review(model, inp, script):
+    user = (f"FULL ORIGINAL ARTICLE:\nTitle: {inp['title']}\n{(inp['original'] or inp['body'])[:3500]}\n\n"
+            "SCRIPT:\n" + json.dumps({k: v for k, v in script.items() if k != 'plain_story_hi'}, ensure_ascii=False))
+    try:
+        out = model.json(GEMMA_REVIEW_SYSTEM, user, GEMMA_REVIEW_SCHEMA, temperature=0.1, max_tokens=900) or {}
+        return [p for p in out.get("problems") or [] if isinstance(p, dict) and p.get("quote")]
+    except Exception as e:
+        print(f"  Gemma review failed: {type(e).__name__}")
+        return []
+
+
+def review_loop(inp, aid, script, rounds=2):
+    """Gemma checks, Luna fixes exactly the listed problems; up to `rounds` rounds or until Gemma finds nothing."""
+    for rnd in range(1, rounds + 1):
+        probs = gemma_review(gemma_model(), inp, script)
+        print(f"  B3 review #{aid} round {rnd}: {len(probs)} problem(s)"
+              + "".join(f"\n    - [{p.get('type')}] {p.get('field')}: «{str(p.get('quote'))[:90]}» → {str(p.get('fix'))[:120]}" for p in probs[:8]),
+              flush=True)
+        if not probs:
+            break
+        fixed, why = openai_script(inp["system"], inp["user_msg"] + "\n\nYOUR PREVIOUS SCRIPT:\n"
+                                   + json.dumps(script, ensure_ascii=False)
+                                   + "\n\nA CHECKER FOUND THESE PROBLEMS. Fix exactly these and keep everything else as it is "
+                                   "(same facts, attribution, introductions and limits):\n- "
+                                   + "\n- ".join(f"[{p.get('type')}] {p.get('field')}: \"{p.get('quote')}\" → {p.get('fix')}" for p in probs[:10]))
+        if not fixed:
+            print(f"  B3 fix #{aid} failed ({why}); keeping the last script")
+            break
+        script = fixed
+    return script
 
 
 BRIEF_SYSTEM = """You prepare a story brief for a Hindi news reel writer. Read the article and write, in simple
@@ -1188,7 +1242,9 @@ def luna_test(m_db, u_db, ids):
             continue
         inp = script_inputs(r[0], topic, fact, "charlie")
         SPENT["inr"] = 0.0   # the budget is per reel: each test story is its own reel
-        if os.environ.get("REEL_PROMPT_VARIANT") in ("gemma_brief", "gemma_brief_hi", "gemma_only"):
+        if os.environ.get("REEL_PROMPT_VARIANT") == "b3":
+            os.environ["REEL_PROMPT_VARIANT_B3"] = "1"
+        if os.environ.get("REEL_PROMPT_VARIANT") in ("gemma_brief", "gemma_brief_hi", "gemma_only", "b3"):
             tg = time.time()
             gs = gemma_reel_summary(gemma_model(), inp)
             print(f"## GEMMA SUMMARY #{aid} ({len(gs.split())} words, {time.time() - tg:.0f}s): {gs}", flush=True)
@@ -1206,6 +1262,9 @@ def luna_test(m_db, u_db, ids):
             problems = intro_problems(sc, inp["known"]) if sc else []
         else:
             sc, why, problems = luna_script(inp, aid)
+            if sc and os.environ.get("REEL_PROMPT_VARIANT") == "b3":
+                sc = review_loop(inp, aid, sc)
+                problems = intro_problems(sc, inp["known"])
         if not sc:
             print(f"## {aid}: Luna gave no script ({why})")
             continue

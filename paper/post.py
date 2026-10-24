@@ -55,7 +55,8 @@ def main():
                 chat = bot.call("getChat", {"chat_id": ch})
                 mem = bot.call("getChatMember", {"chat_id": ch, "user_id": me["id"]})
                 ok = mem.get("status") == "administrator" and mem.get("can_post_messages", True)
-                print(f"{ch}: '{chat.get('title')}' bot={mem.get('status')} can_post={mem.get('can_post_messages')} -> {'OK' if ok else 'NOT OK'}")
+                print(f"{ch}: '{chat.get('title')}' id={chat.get('id')} public={'@' + chat['username'] if chat.get('username') else 'no (private)'} "
+                      f"bot={mem.get('status')} can_post={mem.get('can_post_messages')} -> {'OK' if ok else 'NOT OK'}")
             except Exception as e:
                 print(f"{ch}: NOT OK ({str(e)[:160]})")
         return

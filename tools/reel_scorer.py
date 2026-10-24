@@ -1063,9 +1063,42 @@ def gemma_model():
     return _GEMMA["m"]
 
 
+# B4 (Yash, 24 Oct 2026): one simple job per Gemma call: shorten (English) → translate (Hindi) → simplify (Hindi).
+GEMMA_TRANSLATE_SYSTEM = """Translate this news summary into Hindi (Devanagari) faithfully: every fact, name, number, date
+and attribution exactly as in the English. Natural Hindi sentences. Return JSON: {"text": "..."}"""
+GEMMA_SIMPLIFY_SYSTEM = """Rewrite this Hindi news summary so an ordinary Indian viewer understands it the first time
+(a shopkeeper in Kanpur, a farmer's son in Bihar): everyday spoken Hindi (बोलचाल की हिंदी), short sentences; English words
+people use every day are fine, in Devanagari. Replace technical units, decimals, jargon and official bodies' names with
+what they mean or a comparison a viewer can picture ("मांग का करीब पांचवां हिस्सा", "आधे से भी कम", "पानी बांटने वाली
+कमेटी"). Formal or official Hindi becomes the way people talk. Keep EVERY fact, name, money amount, date and attribution
+(who said or alleged what); add nothing; keep it 150-200 words. Return JSON: {"text": "..."}"""
+TEXT_SCHEMA = {"type": "object", "properties": {"text": {"type": "string"}}, "required": ["text"]}
+
+
+def gemma_b4_story(model, inp):
+    """English summary → Hindi translation → plain-Hindi simplification; each step logged. '' on failure."""
+    en = gemma_reel_summary(model, inp)
+    if not en:
+        return ""
+    out = en
+    for step, system in (("translate", GEMMA_TRANSLATE_SYSTEM), ("simplify", GEMMA_SIMPLIFY_SYSTEM)):
+        try:
+            t = time.time()
+            nxt = ((model.json(system, out, TEXT_SCHEMA, temperature=0.2, max_tokens=900) or {}).get("text") or "").strip()
+        except Exception as e:
+            print(f"  B4 {step} failed: {type(e).__name__}; keeping the previous step")
+            break
+        if len(nxt.split()) < 60:   # a step that lost most of the story is not used
+            print(f"  B4 {step}: too short ({len(nxt.split())} words), keeping the previous step")
+            break
+        out = nxt
+        print(f"  B4 {step} ({len(out.split())} words, {time.time() - t:.0f}s): {out}", flush=True)
+    return out
+
+
 def gemma_reel_summary(model, inp):
     system = (GEMMA_REEL_SUMMARY_SYSTEM_HI if os.environ.get("REEL_PROMPT_VARIANT") in ("gemma_brief_hi", "b3")
-              else GEMMA_REEL_SUMMARY_SYSTEM)
+              else GEMMA_REEL_SUMMARY_SYSTEM)   # b4 starts from the English summary
     user = (f"Title: {inp['title']}\n\nSHORT SUMMARY:\n{inp['body'][:1200]}\n\n"
             + (f"FULL ARTICLE:\n{inp['original'][:3500]}" if inp["original"] else ""))
     try:
@@ -1244,9 +1277,10 @@ def luna_test(m_db, u_db, ids):
         SPENT["inr"] = 0.0   # the budget is per reel: each test story is its own reel
         if os.environ.get("REEL_PROMPT_VARIANT") == "b3":
             os.environ["REEL_PROMPT_VARIANT_B3"] = "1"
-        if os.environ.get("REEL_PROMPT_VARIANT") in ("gemma_brief", "gemma_brief_hi", "gemma_only", "b3"):
+        if os.environ.get("REEL_PROMPT_VARIANT") in ("gemma_brief", "gemma_brief_hi", "gemma_only", "b3", "b4", "b4r"):
             tg = time.time()
-            gs = gemma_reel_summary(gemma_model(), inp)
+            gs = (gemma_b4_story(gemma_model(), inp) if os.environ.get("REEL_PROMPT_VARIANT") in ("b4", "b4r")
+                  else gemma_reel_summary(gemma_model(), inp))
             print(f"## GEMMA SUMMARY #{aid} ({len(gs.split())} words, {time.time() - tg:.0f}s): {gs}", flush=True)
             if gs:
                 # Only Gemma's plain summary: no English headline or "Key Fact" (the headline "…18.402 tmcft…" leaked
@@ -1262,7 +1296,7 @@ def luna_test(m_db, u_db, ids):
             problems = intro_problems(sc, inp["known"]) if sc else []
         else:
             sc, why, problems = luna_script(inp, aid)
-            if sc and os.environ.get("REEL_PROMPT_VARIANT") == "b3":
+            if sc and os.environ.get("REEL_PROMPT_VARIANT") in ("b3", "b4r"):
                 sc = review_loop(inp, aid, sc)
                 problems = intro_problems(sc, inp["known"])
         if not sc:

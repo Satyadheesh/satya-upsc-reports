@@ -1,4 +1,5 @@
 """Last-24-hours stories per source for the newspaper-style PDFs (paper/)."""
+import re
 import time
 import zlib
 
@@ -76,7 +77,20 @@ def window(main, trans, hours=24, now=None):
     return items
 
 
+def _key(title):
+    return " ".join(re.findall(r"\w+", title.lower())[:7])
+
+
 def edition(items, source, lang):
-    """The stories of one paper in one language, best first."""
+    """The stories of one paper in one language, best first; one story per event (cluster) and no repeated
+    headlines (the same report is often scraped twice)."""
     out = [i for i in items if i["source"] == source and (lang == "en" or i.get("body_hi"))]
-    return sorted(out, key=lambda i: (-i["score"], -i["ts"]))
+    out.sort(key=lambda i: (-i["score"], -i["ts"]))
+    seen_c, seen_t, keep = set(), set(), []
+    for i in out:
+        k = _key(i["title"])
+        if (i["cluster"] and i["cluster"] in seen_c) or k in seen_t:
+            continue
+        seen_c.add(i["cluster"]); seen_t.add(k)
+        keep.append(i)
+    return keep

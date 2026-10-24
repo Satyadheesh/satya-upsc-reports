@@ -40,6 +40,16 @@ def story(it, hi, cls="", paper_name=""):
     return f'<article class="st {cls}"><h3>{e(t)}</h3>{md(b)}{src}</article>'
 
 
+KICK = {"politics": ("Politics", "राजनीति"), "regional": ("States", "राज्य"), "crime": ("Law & Order", "क़ानून-व्यवस्था"),
+        "economy": ("Business", "कारोबार"), "international": ("World", "दुनिया"), "education": ("Education", "शिक्षा"),
+        "health": ("Health", "स्वास्थ्य"), "environment": ("Environment", "पर्यावरण"), "sports": ("Sport", "खेल")}
+
+
+def kick(it, hi):
+    en, h = KICK.get(it["category"], ("News", "ख़बर"))
+    return h if hi else en
+
+
 def section_of(it):
     for key, en, hi, cats in SECTIONS:
         if cats is None or it["category"] in cats:
@@ -82,11 +92,11 @@ def render(paper, paper_hi, items, lang, day, total_all=None):
         lb = lead["body_hi"] if hi else lead["body"]
         src = (f'<a class="src" href="{e(lead["url"])}">{"मूल रिपोर्ट" if hi else "Original report"}: {e(name)} ↗</a>'
                if lead.get("url") else "")
-        parts.append(f'<section class="lead"><div class="kick">{e(sec_names[section_of(lead)])}</div>'
+        parts.append(f'<section class="lead"><div class="kick">{e(kick(lead, hi))}</div>'
                      f'<h2>{e(lt)}</h2><div class="lead-body">{md(lb)}{src}</div></section>')
     if seconds:
         parts.append('<section class="seconds">' + "".join(
-            f'<div class="sec2"><div class="kick">{e(sec_names[section_of(it)])}</div>{story(it, hi, "", name)}</div>'
+            f'<div class="sec2"><div class="kick">{e(kick(it, hi))}</div>{story(it, hi, "", name)}</div>'
             for it in seconds) + '</section>')
     parts.append(f'<p class="note">{note}</p>')
     for k, *_ in SECTIONS:
@@ -111,10 +121,10 @@ b { font-weight: 600; }
 .topline { display: flex; justify-content: space-between; font: 600 7pt 'Plex Mono', 'Deva', monospace; letter-spacing: .12em;
   border-bottom: 1px solid #141210; padding-bottom: 1.2mm; }
 .row { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; padding: 2.5mm 0 1.5mm; }
-.mast h1 { margin: 0; font: 900 47pt/1 'Playfair Display', serif; letter-spacing: .02em; text-align: center; }
+.mast h1 { margin: 0 4mm; font: 900 40pt/1 'Playfair Display', serif; letter-spacing: .01em; text-align: center; }
 .mast h1.hi { font: 800 44pt/1.15 'Deva Serif', serif; letter-spacing: 0; }
 .ear { font: 7.4pt/1.35 'DM Sans', 'Deva', sans-serif; color: #3d3833; border: 1px solid #141210; padding: 1.6mm 2.2mm;
-  justify-self: start; max-width: 46mm; }
+  justify-self: start; max-width: 38mm; }
 .ear.r { justify-self: end; text-align: right; }
 .ear b { color: #bf4a07; }
 .inside { border-top: 1px solid #141210; padding: 1.2mm 0 1.4mm; font: 7.2pt 'DM Sans', 'Deva', sans-serif;
@@ -128,16 +138,15 @@ b { font-weight: 600; }
 .lead-body { columns: 3; column-gap: 6mm; column-rule: .5pt solid #cfc7ba; font-size: 10pt; }
 .lead-body p:first-child::first-letter { float: left; font: 900 30pt/0.85 'Playfair Display', serif; padding: 1mm 1.5mm 0 0; }
 .hi .lead-body p:first-child::first-letter { float: none; font: inherit; padding: 0; }
-.seconds { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0 6mm; border-bottom: 1px solid #141210;
-  padding-bottom: 2mm; }
-.sec2 { border-top: .5pt solid #cfc7ba; padding-top: 2mm; break-inside: avoid; }
-.seconds .sec2:nth-child(-n+3) { border-top: 0; padding-top: 0; }
+.seconds { columns: 3; column-gap: 6mm; column-rule: .5pt solid #cfc7ba; border-bottom: 1px solid #141210;
+  padding-bottom: 1mm; }
+.sec2 { break-inside: avoid; border-bottom: .5pt solid #e1dacd; margin-bottom: 2.5mm; }
 .seconds h3 { font: 700 12.5pt/1.15 'Playfair Display', 'Deva Serif', serif; }
 .hi .seconds h3 { font: 700 11.5pt/1.4 'Deva Serif', serif; }
 .st { break-inside: avoid; margin: 0 0 3mm; }
 .st h3 { margin: 0 0 1.1mm; font: 700 10.6pt/1.18 'Playfair Display', 'Deva Serif', serif; }
 .hi .st h3 { font: 700 10.2pt/1.45 'Deva Serif', serif; }
-.st p, .lead p { margin: 0 0 1.2mm; text-align: justify; hyphens: auto; }
+.st p, .lead p { margin: 0 0 1.2mm; text-align: left; }
 .hi .st p, .hi .lead p { text-align: left; }
 .src { display: block; font: 6.4pt 'Plex Mono', 'Deva', monospace; color: #857d75; text-decoration: none; letter-spacing: .03em; }
 .note { font: italic 7pt/1.4 'Source Serif 4', 'Deva', serif; color: #6b645c; margin: 1.5mm 0 3mm; text-align: center; }

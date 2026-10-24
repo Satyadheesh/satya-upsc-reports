@@ -83,7 +83,7 @@ jobs:
           X="${{ github.event.inputs.edit_model }}"; [ -n "$X" ] && export REEL_EDIT_MODEL="$X" REEL_BUDGET_INR=40
           V="${{ github.event.inputs.variant }}"
           case "$V" in *noedit*) export REEL_EDIT_PASS=off;; esac
-          case "$V" in short*) export REEL_PROMPT_VARIANT=short;; no_original*) export REEL_PROMPT_VARIANT=no_original;; esac
+          case "$V" in short*) export REEL_PROMPT_VARIANT=short;; no_original*) export REEL_PROMPT_VARIANT=no_original;; brief*) export REEL_PROMPT_VARIANT=brief;; esac
           python -m tools.reel_scorer --luna-test "$IDS" 2>&1 | tee /tmp/lt.txt
           i=0; awk '/^## /{n++} {print > "/tmp/lt_" n ".txt"}' /tmp/lt.txt
           for f in /tmp/lt_*.txt; do echo "::notice title=Luna script $(head -1 $f | cut -c4-30)::$(cut -c1-1500 $f | sed ':a;N;$!ba;s/%/%25/g;s/\n/%0A/g')"; done

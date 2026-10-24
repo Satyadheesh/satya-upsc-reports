@@ -285,7 +285,7 @@ USD_INR = float(os.environ.get("USD_INR", "88"))
 SPENT = {"inr": 0.0}  # this reel's OpenAI spend (one dispatch = one reel)
 
 
-def openai_script(system, user, model=None):
+def openai_script(system, user, model=None, schema_=None):
     """The reel script from OpenAI, or (None, why). The answer may use up to 8,000 tokens (room for high reasoning);
     only a runaway is stopped (REEL_BUDGET_INR per reel)."""
     import urllib.error
@@ -300,11 +300,11 @@ def openai_script(system, user, model=None):
     max_out = int((left_usd - in_tokens * pin / 1e6) / (pout / 1e6))
     if max_out < 1500:
         return None, f"reel budget used (Rs {SPENT['inr']:.2f} of {REEL_BUDGET_INR})"
-    schema = json.loads(json.dumps(SCRIPT_SCHEMA))
+    schema = json.loads(json.dumps(schema_ or SCRIPT_SCHEMA))
     schema["additionalProperties"], schema["required"] = False, list(schema["properties"])
     body = {"model": model, "reasoning_effort": OPENAI_EFFORT, "max_completion_tokens": min(max_out, 8000),
             "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
-            "response_format": {"type": "json_schema", "json_schema": {"name": "reel_script", "schema": schema, "strict": True}}}
+            "response_format": {"type": "json_schema", "json_schema": {"name": "reel_brief" if schema_ else "reel_script", "schema": schema, "strict": True}}}
     req = urllib.request.Request("https://api.openai.com/v1/chat/completions", data=json.dumps(body).encode(), method="POST",
                                  headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"})
     try:
@@ -1034,6 +1034,19 @@ what happens next), question_hi, engagement_title_hi (2-4 words), engagement_say
 Output only the JSON object.
 """
 
+BRIEF_SYSTEM = """You prepare a story brief for a Hindi news reel writer. Read the article and write, in simple
+everyday Hindi (the way you would explain it to a neighbour), what an ordinary viewer needs to understand this story:
+- story_hi: the whole story in 2-3 plain sentences: who wants what, why, and what happened or was decided.
+- facts_hi: 4-6 short facts the reel can use, each in plain Hindi: names with who they are, what each side says, money in
+  rupees, dates, what happens next. Translate figures into something a viewer can picture ("मांग का करीब पांचवां हिस्सा",
+  "आधे से भी कम", "करीब डेढ़ करोड़ रुपये") and leave out technical units, decimals and official body names a viewer
+  wouldn't know (say what the body does instead). Keep attributions: who said or alleged what.
+- Facts only from the article. Do not change any fact.
+Output only the JSON object."""
+BRIEF_SCHEMA = {"type": "object", "properties": {"story_hi": {"type": "string"},
+                "facts_hi": {"type": "array", "items": {"type": "string"}}},
+                "required": ["story_hi", "facts_hi"]}
+
 EDITOR_SYSTEM = """You are the final editor of SatyaDheesh's Hindi news reels. A writer has drafted the script below.
 Your ONLY job: make it land with an ordinary Indian viewer scrolling on their phone, a shopkeeper in Kanpur, a farmer's son
 in Bihar, a nurse in Indore: smart, but not following this story, and with about 50 seconds to spare.
@@ -1069,8 +1082,24 @@ def luna_edit(inp, draft):
     return openai_script(EDITOR_SYSTEM, user, model=EDIT_MODEL)
 
 
+def luna_brief(inp):
+    """Step 1 (Yash, 24 Oct 2026): Luna reads the full original and writes a plain-Hindi brief; the writer then works from
+    the brief, not the dense English report (which pulled the script into its figures and official register)."""
+    user = inp["head"] + f"SUMMARY:\n{inp['body'][:1500]}" + (f"\n\nORIGINAL ARTICLE:\n{inp['original']}" if inp["original"] else "")
+    return openai_script(BRIEF_SYSTEM, user, schema_=BRIEF_SCHEMA)
+
+
 def luna_script(inp, aid):
     """OpenAI (Luna) script + the people-intro check with one rewrite. -> (script or None, why, problems)."""
+    if os.environ.get("REEL_PROMPT_VARIANT") == "brief":
+        brief, why_b = luna_brief(inp)
+        if brief:
+            head = inp["head"].replace(next((l for l in inp["head"].splitlines() if l.startswith("Key Fact:")), "\x00"), "")
+            inp = dict(inp, user_msg=head + "STORY BRIEF (plain Hindi, from the full article):\n" + brief["story_hi"]
+                       + "\n- " + "\n- ".join(brief.get("facts_hi") or []))
+            print(f"  brief #{aid}: {brief['story_hi'][:200]}")
+        else:
+            print(f"  brief #{aid} failed ({why_b}); writing from the article")
     script_data, why = openai_script(inp["system"], inp["user_msg"])
     problems = []
     if script_data:

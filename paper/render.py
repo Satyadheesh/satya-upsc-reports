@@ -67,12 +67,13 @@ def ps(paras, first=False):
     return "".join(f'<p{" class=first" if first and i == 0 else ""}>{inline(p)}</p>' for i, p in enumerate(paras))
 
 
+def has_photo(it):
+    return bool(it.get("image_data"))
+
+
 def fig(it, wide=False, cls=""):
-    url = image_variant(it.get("image"), wide)
-    if not url:
-        return ""
-    return (f'<figure class="{cls}"><img src="{e(url)}" loading="eager" referrerpolicy="no-referrer" '
-            f'onerror="this.closest(\'figure\').remove()"></figure>')
+    data = it.get("image_data")
+    return f'<figure class="{cls}"><img src="{data}"></figure>' if data else ""
 
 
 def story(it, hi, photo=False, tag=""):
@@ -86,7 +87,7 @@ def render(paper, paper_hi, items, lang, day, total_all=None):
     name = paper_hi if hi else {"Times of India": "The Times of India", "Economic Times": "The Economic Times",
                                  "Indian Express": "The Indian Express"}.get(paper, paper)
     sec_names = {k: (h if hi else en) for k, en, h, _ in SECTIONS}
-    with_img = [i for i in items if i.get("image")]
+    with_img = [i for i in items if has_photo(i)]
     lead = (with_img or items)[0]
     seconds = [i for i in with_img if i is not lead][:2]
     briefs = [i for i in items if i is not lead and i not in seconds][:N_BRIEFS]
@@ -127,7 +128,7 @@ def render(paper, paper_hi, items, lang, day, total_all=None):
         if not its:
             continue
         big = len(its) >= 8
-        slead = next((i for i in its if i.get("image") and i["id"] not in front_ids), its[0])
+        slead = next((i for i in its if has_photo(i) and i["id"] not in front_ids), its[0])
         others = [i for i in its if i is not slead]
         s1, srest = take(paras_of(slead, hi), 650)
         tag = ("पहले पन्ने से" if hi else "From Page 1") if slead["id"] in front_ids else ""
@@ -137,7 +138,7 @@ def render(paper, paper_hi, items, lang, day, total_all=None):
                         f'{"(जारी)" if hi else "(continued)"}</div>{ps(srest)}</article>')
         n_ph = 0
         for it in others:
-            ph = bool(it.get("image")) and n_ph < PHOTOS_PER_SECTION and len(paras_of(it, hi)) > 1
+            ph = has_photo(it) and n_ph < PHOTOS_PER_SECTION and len(paras_of(it, hi)) > 1
             n_ph += ph
             cols.append(story(it, hi, ph, ("पहले पन्ने से" if hi else "From Page 1") if it["id"] in front_ids else ""))
         p.append(f'''<section class="sec{' newpage' if big else ''}">

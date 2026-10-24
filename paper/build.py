@@ -23,6 +23,43 @@ FOOTER = ('<div style="width:100%;font:6.5px Helvetica,Arial,sans-serif;color:#8
           '&nbsp;&nbsp;·&nbsp;&nbsp;{label}</span><span>PAGE <span class="pageNumber"></span> / <span class="totalPages"></span></span></div>')
 
 
+def fetch_images(items, workers=16):
+    """Download each story photo once and re-encode it at print size (≤900 px, JPEG q68) as a data URI, so the PDF
+    stays small (embedding the publishers' full-size files made a 24-story edition 13 MB) and nothing depends on the
+    network while printing. A photo that fails to download is simply left out."""
+    import base64
+    import io
+    from concurrent.futures import ThreadPoolExecutor
+
+    import requests
+    from PIL import Image
+
+    from .data import image_variant
+
+    def one(it):
+        url = image_variant(it.get("image"), True)
+        if not url:
+            return
+        try:
+            r = requests.get(url, timeout=20, headers={"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+                                                                       "(KHTML, like Gecko) Chrome/126 Safari/537.36"})
+            if r.status_code != 200 or len(r.content) < 3000:
+                return
+            im = Image.open(io.BytesIO(r.content)).convert("RGB")
+            if im.width < 300:
+                return
+            im.thumbnail((900, 900))
+            buf = io.BytesIO()
+            im.save(buf, "JPEG", quality=68, optimize=True, progressive=True)
+            it["image_data"] = "data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode()
+        except Exception:
+            return
+
+    with ThreadPoolExecutor(workers) as ex:
+        list(ex.map(one, items))
+    print(f"photos: {sum(1 for i in items if i.get('image_data'))}/{sum(1 for i in items if i.get('image'))} downloaded", flush=True)
+
+
 def plan(items):
     """[(paper, slug, paper_hi, lang, stories)] for every paper/language with enough stories."""
     out = []
@@ -44,6 +81,7 @@ def build_all(day=None, only=None, out=None):
     main, trans = main_db(), translation_db()
     items = window(main, trans)
     jobs = [j for j in plan(items) if not only or j[1] in only]
+    fetch_images([i for i in items if i["source"] in {j[0] for j in jobs}])
     print(f"{len(items)} stories in the last 24 h; {len(jobs)} editions: "
           + ", ".join(f"{j[1]}/{j[3]} ({len(j[4])})" for j in jobs), flush=True)
     from playwright.sync_api import sync_playwright
@@ -56,7 +94,7 @@ def build_all(day=None, only=None, out=None):
             html = render.render(paper, paper_hi, st, lang, day)
             f = REPORTS / f"_paper_{os.getpid()}.html"
             f.write_text(html, encoding="utf-8")
-            page.goto(f.as_uri(), wait_until="networkidle", timeout=120000)
+            page.goto(f.as_uri(), wait_until="load", timeout=120000)
             page.evaluate("document.fonts.ready")
             page.wait_for_timeout(200)
             label = f"{(paper_hi if lang == 'hi' else paper).upper()} · {day.strftime('%-d %b %Y').upper()} · PERSONAL COPY"

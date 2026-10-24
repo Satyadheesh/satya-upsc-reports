@@ -36,9 +36,12 @@ on:
       edit_model:
         description: 'luna_test only: model for the plain-language editor pass (blank = same as the writer)'
         default: ''
+      variant:
+        description: 'luna_test only: prompt experiment (short / no_original / short-noedit / noedit); blank = live prompt'
+        default: ''
 
 concurrency:
-  group: ${{ github.event.inputs.luna_test != '' && github.event.inputs.luna_test != null && format('reel-luna-test-{0}-{1}-{2}', github.event.inputs.luna_effort, github.event.inputs.luna_model, github.event.inputs.edit_model) || 'reel-scorer' }}
+  group: ${{ github.event.inputs.luna_test != '' && github.event.inputs.luna_test != null && format('reel-luna-test-{0}-{1}-{2}-{3}', github.event.inputs.luna_effort, github.event.inputs.luna_model, github.event.inputs.edit_model, github.event.inputs.variant) || 'reel-scorer' }}
   cancel-in-progress: false
 
 env:
@@ -78,6 +81,9 @@ jobs:
           E="${{ github.event.inputs.luna_effort }}"; [ -n "$E" ] && export REEL_SCRIPT_EFFORT="$E"
           M="${{ github.event.inputs.luna_model }}"; [ -n "$M" ] && export REEL_SCRIPT_MODEL="$M" REEL_BUDGET_INR=40
           X="${{ github.event.inputs.edit_model }}"; [ -n "$X" ] && export REEL_EDIT_MODEL="$X" REEL_BUDGET_INR=40
+          V="${{ github.event.inputs.variant }}"
+          case "$V" in *noedit*) export REEL_EDIT_PASS=off;; esac
+          case "$V" in short*) export REEL_PROMPT_VARIANT=short;; no_original*) export REEL_PROMPT_VARIANT=no_original;; esac
           python -m tools.reel_scorer --luna-test "$IDS" 2>&1 | tee /tmp/lt.txt
           i=0; awk '/^## /{n++} {print > "/tmp/lt_" n ".txt"}' /tmp/lt.txt
           for f in /tmp/lt_*.txt; do echo "::notice title=Luna script $(head -1 $f | cut -c4-30)::$(cut -c1-1500 $f | sed ':a;N;$!ba;s/%/%25/g;s/\n/%0A/g')"; done

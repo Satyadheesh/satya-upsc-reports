@@ -101,7 +101,15 @@ The *_say fields are synthesized directly by an AI voice model. Neural TTS engin
 - Punctuation for Breathing: Use commas and short sentences to provide natural breath pauses for the AI voice. Avoid long, complex multi-clause sentences.
 The ₹ symbol may appear ONLY in the on-screen fields: headline_hi and twist_stat.
 
+INTRODUCE EVERY PERSON (viewers from any state may not know who anyone is)
+- The FIRST time a person is named in the *_say lines, say who they are in a few words just before the name: role + party or state, e.g. "शिवसेना (UBT) के सांसद संजय राउत", "महाराष्ट्र के मुख्यमंत्री देवेंद्र फडणवीस". After that the name alone is fine.
+- If the person is listed in the PEOPLE block, use that role exactly. If not, describe them only as the article does (e.g. "पार्टी प्रवक्ता", "याचिकाकर्ता"); never invent or guess a title.
+- Name at most 3 people in the whole reel. Anyone else becomes a description without a name ("एक भाजपा नेता", "एक अधिकारी").
+- Parties, agencies and acronyms get their full name once: "प्रवर्तन निदेशालय (ED)", "मतदाता सूची का विशेष गहन पुनरीक्षण (SIR)".
+- Within hook_say or the start of core_say, add one short context line so a viewer from any state can follow: where this is and why it matters.
+
 OUTPUT FIELDS
+- people: every person named anywhere in the *_say lines, in order of first mention: [{"name_hi": "संजय राउत", "role_hi": "शिवसेना (UBT) के सांसद"}]. role_hi is exactly the role you used when introducing them (from the PEOPLE block when they are listed there). Empty list if nobody is named.
 - headline_hi: catchy on-screen headline, max 8 words.
 - subtitle_hi: one short on-screen line under the headline (max 9 words) that adds the key fact the headline leaves out (who, where or how much). No symbols except ₹; empty string if there is nothing to add.
 - hook_say: 1-2 spoken lines that grab attention immediately (a surprising fact, a question, or a contrast).
@@ -381,9 +389,121 @@ def distinct_stat(headline, stat, label, detail, points):
                 return " ".join(x for x in (m.group(1), m.group(2)) if x), ""  # the old label described the old number
     return (label or stat), ""
 
+# People in a reel are introduced (Yash, 24 Oct 2026: "the audience might not even be aware of them"). Roles come
+# from the entity library the promise tracker uses (raam-07/satya-entity-library, public, refreshed by its own
+# pipeline), Hindi file: name_hi / role_hi / party. Fetched once per run; no library = no PEOPLE block, rules still apply.
+ENTITIES_HI_URL = "https://raw.githubusercontent.com/raam-07/satya-entity-library/main/entities_hi.json"
+PEOPLE_CATS = ("cabinet_ministers", "state_chief_ministers", "opposition_leaders", "generic_politicians")
+_PEOPLE = None
+
+
+def library_people():
+    """[{name, name_hi, role_hi, party, keys}] from the entity library; the first entry per name wins (cabinet
+    before chief ministers etc.: the library repeats a few names with an older role)."""
+    global _PEOPLE
+    if _PEOPLE is not None:
+        return _PEOPLE
+    _PEOPLE = []
+    try:
+        import urllib.request
+        with urllib.request.urlopen(ENTITIES_HI_URL, timeout=20) as r:
+            data = json.loads(r.read())
+    except Exception as e:
+        print(f"  entity library not loaded ({type(e).__name__}): people are introduced from the article only")
+        return _PEOPLE
+    seen = set()
+    for cat in PEOPLE_CATS:
+        for p in (data.get("india") or {}).get(cat) or []:
+            name = (p.get("name") or "").strip()
+            if not name or name.lower() in seen or not (p.get("role_hi") or p.get("role")):
+                continue
+            seen.add(name.lower())
+            aliases = p.get("aliases") or []
+            if isinstance(aliases, str):
+                aliases = re.findall(r"'([^']+)'", aliases)
+            # match on the full name, or an alias that is one of the name's own words (Naidu, Fadnavis), never on
+            # descriptive aliases ("Leader of Opposition", "Bengaluru Development")
+            words = {w.lower() for w in re.findall(r"[A-Za-z]+", name) if len(w) >= 4}
+            keys = {name.lower()} | {a.lower() for a in aliases if a.lower() in words}
+            _PEOPLE.append({"name": name, "name_hi": p.get("name_hi") or name, "role_hi": p.get("role_hi") or p.get("role"),
+                            "party": p.get("party_hi") or p.get("party") or "", "keys": keys})
+    return _PEOPLE
+
+
+def people_block(*texts):
+    """The PEOPLE block for the script writer: library people named in the article, with their recorded roles."""
+    text_ = " ".join(t for t in texts if t).lower()
+    found = []
+    for p in library_people():
+        if any(re.search(r"\b" + re.escape(k) + r"\b", text_) for k in p["keys"]):
+            found.append(p)
+    if not found:
+        return "", []
+    lines = [f"- {p['name_hi']} ({p['name']}): {p['role_hi']}" + (f", {p['party']}" if p['party'] and p['party'] not in p['role_hi'] else "")
+             for p in found[:6]]
+    return ("PEOPLE (from our records: use these roles exactly when you introduce them; anyone else only as the "
+            "article describes them)\n" + "\n".join(lines) + "\n"), found
+
+
+SAY_FIELDS = ("hook_say", "core_say", "twist_say", "engagement_say")
+_ROLE_STOP = {"के", "की", "का", "और", "में", "से", "पर", "एक", "तथा", "ने"}
+
+
+def _role_words(role):
+    return {w for w in re.findall(r"[ऀ-ॿ]+|[A-Za-z]+", role or "") if w not in _ROLE_STOP and len(w) >= 2}
+
+
+def intro_problems(script, known=()):
+    """Every person in the voice script must be introduced on first mention: some word of their role within a few
+    words before (or right after) the name. Also: at most 3 named people. -> list of problems ([] = fine).
+    `known`: library people found in the article; one named in the script but missing from `people` counts too."""
+    say = " ".join(str(script.get(k) or "") for k in SAY_FIELDS)
+    people = [p for p in (script.get("people") or []) if isinstance(p, dict) and (p.get("name_hi") or "").strip()]
+    listed = {p["name_hi"].strip() for p in people}
+    for k in known:
+        if k["name_hi"] not in listed and k["name_hi"].split()[-1] in say:
+            people.append({"name_hi": k["name_hi"], "role_hi": k["role_hi"]})
+    out = []
+    named = 0
+    for p in people:
+        name = p["name_hi"].strip()
+        variants = [name] + ([name.split()[-1]] if len(name.split()) > 1 else [])
+        hits = [say.find(v) for v in variants if v in say]
+        if not hits:
+            continue
+        named += 1
+        i = min(hits)
+        window = say[max(0, i - 70):i] + " " + say[i + len(name):i + len(name) + 40]
+        if not (_role_words(p.get("role_hi")) & _role_words(window)):
+            out.append(f"{name} is not introduced on first mention (say: '{p.get('role_hi') or 'role'} {name}')")
+    if named > 3:
+        out.append(f"{named} people are named: keep at most 3, describe the rest without a name")
+    return out
+
+
+def tags_for_cards(script):
+    """{'hook'|'core'|'twist'|'engagement': [{name, role}]}: the card where each person is first named (max 2 per card)."""
+    cards = {}
+    for p in script.get("people") or []:
+        name = (p.get("name_hi") or "").strip() if isinstance(p, dict) else ""
+        if not name:
+            continue
+        variants = [name] + ([name.split()[-1]] if len(name.split()) > 1 else [])
+        for field, card in zip(SAY_FIELDS, ("hook", "core", "twist", "engagement")):
+            if any(v in str(script.get(field) or "") for v in variants):
+                if len(cards.setdefault(card, [])) < 2:
+                    cards[card].append({"name": name, "role": (p.get("role_hi") or "").strip()})
+                break
+    return cards
+
 SCRIPT_SCHEMA = {
     "type": "object",
     "properties": {
+        "people": {
+            "type": "array",
+            "items": {"type": "object", "properties": {"name_hi": {"type": "string"}, "role_hi": {"type": "string"}},
+                      "required": ["name_hi", "role_hi"], "additionalProperties": False}
+        },
         "headline_hi": {"type": "string"},
         "subtitle_hi": {"type": "string"},
         "hook_say": {"type": "string"},
@@ -401,7 +521,7 @@ SCRIPT_SCHEMA = {
         "engagement_say": {"type": "string"}
     },
     "required": [
-        "headline_hi", "subtitle_hi", "hook_say", "core_title_hi", "core_points_hi", "core_say",
+        "people", "headline_hi", "subtitle_hi", "hook_say", "core_title_hi", "core_points_hi", "core_say",
         "twist_stat", "twist_label", "twist_detail_hi", "twist_say", "question_hi", "engagement_say"
     ]
 }
@@ -592,13 +712,26 @@ def dispatch_daily_reel(u_db, m_db, model=None, force=False):
             print(f"  Evaluating candidate #{aid} [{topic}] with persona: {persona} (attempt {voice_attempt + 1})...")
             script_data = None
             system = SCRIPT_SYSTEM_CHARLIE + SCRIPT_SOURCE_RULES + (SCRIPT_POLITICAL_EXTRA.replace("{source}", src_name) if political else "")
+            pblock, known = people_block(r[0], title, body, original)
             head = (f"NEWS ARTICLE\nTitle: {title}\nTopic: {topic}\nSource: {src_name}\nKey Fact: {fact}\n"
-                    f"Voice Persona: {persona}\n")
+                    f"Voice Persona: {persona}\n" + pblock)
             if last_openai:  # only the voice changed: the OpenAI script stays (no second payment)
                 script_data = last_openai
             else:
-                script_data, why = openai_script(system, head + f"SUMMARY:\n{body[:1500]}" + (f"\n\nORIGINAL ARTICLE:\n{original}" if original else ""))
+                user_msg = head + f"SUMMARY:\n{body[:1500]}" + (f"\n\nORIGINAL ARTICLE:\n{original}" if original else "")
+                script_data, why = openai_script(system, user_msg)
                 if script_data:
+                    problems = intro_problems(script_data, known)
+                    if problems:  # one rewrite: introduce the people properly, change nothing else
+                        print(f"  intro check #{aid}: {'; '.join(problems)} -> one rewrite")
+                        fixed, why2 = openai_script(system, user_msg + "\n\nYOUR PREVIOUS SCRIPT:\n"
+                                                    + json.dumps(script_data, ensure_ascii=False)
+                                                    + "\n\nFIX ONLY THIS, keep everything else as it is:\n- " + "\n- ".join(problems))
+                        if fixed:
+                            script_data = fixed
+                            problems = intro_problems(script_data, known)
+                        if problems:
+                            print(f"::warning title=Reel #{aid}: people not introduced::{'; '.join(problems)[:400]}")
                     last_openai = script_data
                 else:
                     print(f"  OpenAI script not used ({why}); Gemma writes it")
@@ -606,6 +739,9 @@ def dispatch_daily_reel(u_db, m_db, model=None, force=False):
                 try:
                     sprompt = fit_prompt(model, system, head, body[:1500], original, max_tokens=800)
                     script_data = model.json(system, sprompt, SCRIPT_SCHEMA, temperature=0.25, max_tokens=800)
+                    problems = intro_problems(script_data, known)
+                    if problems:
+                        print(f"::warning title=Reel #{aid} (Gemma script): people not introduced::{'; '.join(problems)[:400]}")
                 except Exception as e:
                     print(f"  Script generation warning: {e}")
             if script_data:
@@ -733,6 +869,7 @@ def dispatch_daily_reel(u_db, m_db, model=None, force=False):
     hook_badge = "ताज़ा पड़ताल"
     twist_badge = "ज़मीनी हक़ीक़त"
 
+    tags = tags_for_cards(script_data)
     payload = {
         "article_id": aid,
         "persona": persona,
@@ -744,6 +881,7 @@ def dispatch_daily_reel(u_db, m_db, model=None, force=False):
             "badge": hook_badge,
             "title": headline_hi,
             "subtitle": subtitle_hi,
+            "people": tags.get("hook", []),
             "say": hook_say
         },
         "core": {
@@ -751,6 +889,7 @@ def dispatch_daily_reel(u_db, m_db, model=None, force=False):
             "title": core_title,
             "points": core_points,
             "source": source_label,
+            "people": tags.get("core", []),
             "say": core_say
         },
         "twist": {
@@ -758,16 +897,23 @@ def dispatch_daily_reel(u_db, m_db, model=None, force=False):
             "big_stat": twist_stat,
             "stat_label": twist_label,
             "detail": twist_detail,
+            "people": tags.get("twist", []),
             "say": twist_say
         },
         "engagement": {
             "headline": "सत्याधीश चर्चा",
             "question": q_hi,
             "cta": "कमेंट में अपनी राय ज़रूर लिखें!",
+            "people": tags.get("engagement", []),
             "say": eng_say
         }
     }
 
+    # the final script as an annotation (job logs aren't readable from outside): who is introduced how, and the voice lines
+    _txt = ("PEOPLE: " + "; ".join(f"{p.get('name_hi')} = {p.get('role_hi')}" for p in script_data.get("people") or []) + "\n"
+            + f"HEADLINE: {headline_hi} | SUB: {subtitle_hi}\n"
+            + "\n".join(f"{k.upper()}: {script_data.get(k)}" for k in SAY_FIELDS))
+    print(f"::notice title=Reel script #{aid}::" + _txt.replace("%", "%25").replace("\r", "").replace("\n", "%0A")[:6000])
     print(f"\n🚀 Dispatching top viral reel to Satyadheesh/reels:")
     print(f"   Article #{aid} (Score {score}/10) [{topic}]")
     print(f"   Hook: {hook_say[:70]}")

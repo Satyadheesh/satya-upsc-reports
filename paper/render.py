@@ -105,7 +105,7 @@ def render(paper, paper_hi, items, lang, day, total_all=None):
 
     lead_paras = paras_of(lead, hi)
     l1, rest = take(lead_paras, 700)
-    l2, rest2 = take(rest, 1500)
+    l2, rest2 = take(rest, 800)
 
     p = []
     p.append(f'''<header class="mast">
@@ -120,7 +120,7 @@ def render(paper, paper_hi, items, lang, day, total_all=None):
  <div class="cols c5">{ps(l2)}{f'<p class="jump">{cont}: {e(sec_names[section_of(lead)])} →</p>' if rest2 else ""}</div></section>''')
     sec_html = "".join(
         f'<article class="fsec"><div class="kick">{e(kick(it, hi))}</div><h3>{e(title_of(it, hi))}</h3>{fig(it)}'
-        f'<div class="cols c2">{ps(take(paras_of(it, hi), 900)[0], True)}'
+        f'<div class="cols c2">{ps(take(paras_of(it, hi), 600)[0], True)}'
         f'<p class="jump">{cont}: {e(sec_names[section_of(it)])} →</p></div></article>' for it in seconds)
     brief_html = "".join(
         f'<div class="brief"><h4>{e(title_of(it, hi))}</h4><p>{inline(first_sentence(paras_of(it, hi)[0]))}</p></div>'
@@ -180,7 +180,8 @@ p.first, .ftext p:first-child { text-indent: 0; }
 .fgrid, .sgrid { display: grid; grid-template-columns: 3fr 2fr; gap: 6mm; margin-bottom: 3mm; }
 figure { margin: 0 0 2mm; }
 figure img { width: 100%; display: block; }
-figure.big img { max-height: 120mm; object-fit: cover; }
+figure.big img { max-height: 100mm; object-fit: cover; }
+.fsec figure img { max-height: 62mm; object-fit: cover; }
 .ftext { font-size: 11pt; line-height: 1.42; }
 .ftext p.first::first-letter, .flead .ftext p:first-child::first-letter { float: left; font: 900 38pt/.82 'Playfair Display', serif; padding: 1.2mm 1.6mm 0 0; }
 .hi .ftext p:first-child::first-letter { float: none; font: inherit; padding: 0; }
@@ -188,7 +189,7 @@ figure.big img { max-height: 120mm; object-fit: cover; }
 .c5 { columns: 5; } .c2 { columns: 2; }
 .flead { border-bottom: 2px solid #111; padding-bottom: 2mm; margin-bottom: 3mm; }
 .jump { font: italic 600 8pt 'Source Serif 4', 'Deva', serif; text-indent: 0; color: #9b1c1c; }
-.frow { display: grid; grid-template-columns: 4fr 1.15fr; gap: 6mm; break-after: page; break-inside: avoid; }
+.frow { display: grid; grid-template-columns: 4fr 1.15fr; gap: 6mm; break-after: page; }
 .fmain { display: grid; grid-template-columns: 1fr 1fr; gap: 6mm; }
 .fsec h3 { font: 700 19pt/1.12 'Playfair Display', 'Deva Serif', serif; margin: 0 0 2mm; }
 .hi .fsec h3 { font: 700 15pt/1.4 'Deva Serif', serif; }

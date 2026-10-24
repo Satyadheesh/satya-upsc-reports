@@ -24,13 +24,19 @@ def visit(ctx, path, name, errors):
     p = ctx.new_page()
     p.on("pageerror", lambda e: errors.append(f"{name}: {str(e)[:160]}"))
     sep = "&" if "?" in path else "?"
-    r = p.goto(f"{SITE}{path}{sep}v={bust}", wait_until="networkidle", timeout=90000)
-    p.wait_for_timeout(2500)
+    t0 = time.time()
+    try:
+        r = p.goto(f"{SITE}{path}{sep}v={bust}", wait_until="load", timeout=90000)
+    except Exception as e:
+        print(f"{name}: LOAD FAILED {str(e)[:120]}")
+        return p
+    load_s = time.time() - t0
+    p.wait_for_timeout(3500)
     info = p.evaluate("""() => ({cls: document.documentElement.className,
         nav: !!document.querySelector('.desk-nav') && getComputedStyle(document.querySelector('.desk-nav')).display !== 'none',
         overflowX: document.documentElement.scrollWidth > window.innerWidth + 2,
         width: window.innerWidth})""")
-    print(f"{name}: HTTP {r.status if r else '?'} | desk-beta={'desk-beta' in info['cls']} | navbar={info['nav']} "
+    print(f"{name}: HTTP {r.status if r else '?'} in {load_s:.1f}s | desk-beta={'desk-beta' in info['cls']} | navbar={info['nav']} "
           f"| horizontal overflow={info['overflowX']} | width={info['width']}")
     shot(p, name)
     return p

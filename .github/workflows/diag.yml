@@ -40,6 +40,9 @@ jobs:
         with:
           python-version: '3.10'
       - run: pip install libsql-client qrcode numpy
+      - name: Browser (screenshot scripts only)
+        if: ${{ github.event.inputs.script == 'diag_screens.py' }}
+        run: pip install playwright && python -m playwright install --with-deps chromium
       - name: Run
         env:
           SATYA_UPSC_DB_URL: ${{ secrets.NEW_UPSC_DB_URL }}

@@ -722,11 +722,7 @@ def dispatch_daily_reel(u_db, m_db, model=None, force=False):
             continue
 
         r = art_rows[0]
-        title = r[1] or r[0]
-        body = decompress(r[2], limit=4000)
-        original = clean_original(decompress(r[6], limit=12000))[:4000]  # ~1,000 tokens: richer context, runner time in check
         political = is_political(topic)
-        src_name = "इंडियन एक्सप्रेस" if "indianexpress" in str(r[5] or "").lower() else "द हिंदू"
 
         # Initial persona selection based on topic
         persona = "matilda" if str(topic).lower() in female_topics else "charlie"
@@ -735,27 +731,16 @@ def dispatch_daily_reel(u_db, m_db, model=None, force=False):
         for voice_attempt in range(2):
             print(f"  Evaluating candidate #{aid} [{topic}] with persona: {persona} (attempt {voice_attempt + 1})...")
             script_data = None
-            system = SCRIPT_SYSTEM_CHARLIE + SCRIPT_SOURCE_RULES + (SCRIPT_POLITICAL_EXTRA.replace("{source}", src_name) if political else "")
-            pblock, known = people_block(r[0], title, body, original)
-            head = (f"NEWS ARTICLE\nTitle: {title}\nTopic: {topic}\nSource: {src_name}\nKey Fact: {fact}\n"
-                    f"Voice Persona: {persona}\n" + pblock)
+            inp = script_inputs(r, topic, fact, persona)
+            title, body, original = inp["title"], inp["body"], inp["original"]
+            system, head, known = inp["system"], inp["head"], inp["known"]
             if last_openai:  # only the voice changed: the OpenAI script stays (no second payment)
                 script_data = last_openai
             else:
-                user_msg = head + f"SUMMARY:\n{body[:1500]}" + (f"\n\nORIGINAL ARTICLE:\n{original}" if original else "")
-                script_data, why = openai_script(system, user_msg)
+                script_data, why, problems = luna_script(inp, aid)
                 if script_data:
-                    problems = intro_problems(script_data, known)
-                    if problems:  # one rewrite: introduce the people properly, change nothing else
-                        print(f"  intro check #{aid}: {'; '.join(problems)} -> one rewrite")
-                        fixed, why2 = openai_script(system, user_msg + "\n\nYOUR PREVIOUS SCRIPT:\n"
-                                                    + json.dumps(script_data, ensure_ascii=False)
-                                                    + "\n\nFIX ONLY THIS, keep everything else as it is:\n- " + "\n- ".join(problems))
-                        if fixed:
-                            script_data = fixed
-                            problems = intro_problems(script_data, known)
-                        if problems:
-                            print(f"::warning title=Reel #{aid}: people not introduced::{'; '.join(problems)[:400]}")
+                    if problems:
+                        print(f"::warning title=Reel #{aid}: people not introduced::{'; '.join(problems)[:400]}")
                     last_openai = script_data
                 else:
                     print(f"  OpenAI script not used ({why}); Gemma writes it")
@@ -979,6 +964,72 @@ def dispatch_daily_reel(u_db, m_db, model=None, force=False):
         send_telegram_alert(err_msg)
 
 
+def script_inputs(r, topic, fact, persona):
+    """The exact prompt the live reel uses. r = (title, rephrased_title, rephrased_article, category, image_url, url,
+    content) from articles. -> dict(system, head, user_msg, body, original, known, political, title)."""
+    title = r[1] or r[0]
+    body = decompress(r[2], limit=4000)
+    original = clean_original(decompress(r[6], limit=12000))[:4000]  # ~1,000 tokens: richer context, runner time in check
+    political = is_political(topic)
+    src_name = "इंडियन एक्सप्रेस" if "indianexpress" in str(r[5] or "").lower() else "द हिंदू"
+    system = SCRIPT_SYSTEM_CHARLIE + SCRIPT_SOURCE_RULES + (SCRIPT_POLITICAL_EXTRA.replace("{source}", src_name) if political else "")
+    pblock, known = people_block(r[0], title, body, original)
+    head = (f"NEWS ARTICLE\nTitle: {title}\nTopic: {topic}\nSource: {src_name}\nKey Fact: {fact}\n"
+            f"Voice Persona: {persona}\n" + pblock)
+    user_msg = head + f"SUMMARY:\n{body[:1500]}" + (f"\n\nORIGINAL ARTICLE:\n{original}" if original else "")
+    return dict(system=system, head=head, user_msg=user_msg, body=body, original=original, known=known,
+                political=political, title=title)
+
+
+def luna_script(inp, aid):
+    """OpenAI (Luna) script + the people-intro check with one rewrite. -> (script or None, why, problems)."""
+    script_data, why = openai_script(inp["system"], inp["user_msg"])
+    problems = []
+    if script_data:
+        problems = intro_problems(script_data, inp["known"])
+        if problems:  # one rewrite: introduce the people properly, change nothing else
+            print(f"  intro check #{aid}: {'; '.join(problems)} -> one rewrite")
+            fixed, why2 = openai_script(inp["system"], inp["user_msg"] + "\n\nYOUR PREVIOUS SCRIPT:\n"
+                                        + json.dumps(script_data, ensure_ascii=False)
+                                        + "\n\nFIX ONLY THIS, keep everything else as it is:\n- " + "\n- ".join(problems))
+            if fixed:
+                script_data = fixed
+                problems = intro_problems(script_data, inp["known"])
+    return script_data, why, problems
+
+
+def luna_test(m_db, u_db, ids):
+    """Fast check of the LIVE script writer (Luna) on real stories: same prompt, intro check and legal pass as a real
+    reel, no Gemma, nothing saved, dispatched or posted. ids empty -> the 3 newest reel candidates."""
+    if not ids:
+        ids = [int(r[0]) for r in u_db.execute(
+            "SELECT article_id FROM reel_candidates WHERE viral_score >= 6 ORDER BY created_at DESC LIMIT 3").rows]
+    for aid in ids:
+        c = u_db.execute("SELECT topic, wow_fact FROM reel_candidates WHERE article_id = ?", [aid]).rows
+        topic, fact = (str(c[0][0]), str(c[0][1])) if c else ("politics", "")
+        r = m_db.execute("SELECT title, rephrased_title, rephrased_article, category, image_url, url, content "
+                         "FROM articles WHERE id = ?", [aid]).rows
+        if not r:
+            print(f"## {aid}: not found")
+            continue
+        inp = script_inputs(r[0], topic, fact, "charlie")
+        t0 = time.time()
+        sc, why, problems = luna_script(inp, aid)
+        if not sc:
+            print(f"## {aid}: Luna gave no script ({why})")
+            continue
+        legal = ""
+        if inp["political"]:
+            sc, notes, ok = legal_pass(sc)
+            legal = f" | legal ok={ok} {notes or ''}"
+        print(f"## #{aid} [{topic}] {inp['title'][:90]}\n({time.time() - t0:.0f}s, {why}){legal}"
+              f"{' | INTRO PROBLEMS: ' + '; '.join(problems) if problems else ''}\n"
+              f"PEOPLE: {'; '.join(p.get('name_hi', '') + ' = ' + p.get('role_hi', '') for p in sc.get('people') or [])}\n"
+              f"ON SCREEN: {sc.get('headline_hi')} | {sc.get('subtitle_hi')}\n"
+              f"HOOK: {sc.get('hook_say')}\nCORE: {sc.get('core_say')}\nTWIST: {sc.get('twist_say')}\n"
+              f"END: {sc.get('engagement_say')}\n", flush=True)
+
+
 def script_test(m_db, u_db, ids):
     """Write (and review) the reel script for these article ids and print it, with prompt sizes and timings.
     Nothing is saved or dispatched."""
@@ -1023,7 +1074,12 @@ def main():
     ap.add_argument("--dispatch", action="store_true", help="Force dispatch of top candidate")
     ap.add_argument("--no-dispatch", action="store_true", help="Do not trigger reels repo")
     ap.add_argument("--script-test", default="", help="comma-separated article ids: write and review their scripts, print only")
+    ap.add_argument("--luna-test", default=None, help="article ids (comma-separated, or empty = 3 newest candidates): "
+                                                      "the live Luna script only, fast, print only")
     args = ap.parse_args()
+    if args.luna_test is not None:
+        luna_test(main_db(), upsc_db(), [int(x) for x in args.luna_test.split(",") if x.strip().isdigit()])
+        return
     if args.script_test:
         script_test(main_db(), upsc_db(), [int(x) for x in args.script_test.split(",") if x.strip().isdigit()])
         return

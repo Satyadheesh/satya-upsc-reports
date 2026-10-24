@@ -54,7 +54,7 @@ jobs:
           key: pw-chromium-${{ runner.os }}-v1
       - name: Install
         run: |
-          pip install libsql-client requests qrcode playwright
+          pip install libsql-client requests qrcode playwright pillow
           python -m playwright install --with-deps chromium
           [ "$MODE" = preview ] && sudo apt-get install -y -q poppler-utils >/dev/null || true
       - name: Build / post

@@ -206,7 +206,7 @@ figure.big img { max-height: 120mm; object-fit: cover; }
 .st h3 { font: 700 13pt/1.13 'Source Serif 4', 'Deva Serif', serif; margin: 0 0 1.4mm; break-after: avoid; }
 .hi .st h3 { font: 700 11.5pt/1.45 'Deva Serif', serif; }
 .st figure { break-inside: avoid; }
-.c5 { column-fill: auto; }
+
 """
 
 

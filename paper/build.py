@@ -97,9 +97,9 @@ def build_all(day=None, only=None, out=None):
             page.goto(f.as_uri(), wait_until="load", timeout=120000)
             page.evaluate("document.fonts.ready")
             page.wait_for_timeout(200)
+            page.evaluate("window.fitAll && window.fitAll()")
             label = f"{(paper_hi if lang == 'hi' else paper).upper()} · {day.strftime('%-d %b %Y').upper()} · PERSONAL COPY"
-            pdf = page.pdf(print_background=True, prefer_css_page_size=True, display_header_footer=True,
-                           header_template="<div></div>", footer_template=FOOTER.format(label=label))
+            pdf = page.pdf(print_background=True, prefer_css_page_size=True)  # pages carry their own header/footer
             f.unlink(missing_ok=True)
             name = file_name(slug, lang, day)
             res[(slug, lang)] = (pdf, name, paper, paper_hi, len(st))

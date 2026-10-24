@@ -65,6 +65,14 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.10'
+      - name: Start the newspaper PDFs (newspapers.yml posts them at the same 05:00 IST)
+        if: env.KIND == 'daily' && env.MODE == 'scheduled'
+        continue-on-error: true
+        run: |
+          curl -s -o /dev/null -w "newspapers.yml dispatch: HTTP %{http_code}\n" -X POST \
+            -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/newspapers.yml/dispatches" \
+            -d '{"ref":"main","inputs":{"mode":"scheduled"}}'
       - run: pip install libsql-client requests qrcode
       - run: python -c "import tg.post, tg.whoami"   # every import the posting job needs (qrcode broke it on 4 Oct)
       - run: python -m unittest discover -s tests -t . -p 'test_tg.py'

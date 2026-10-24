@@ -6,10 +6,9 @@ name: Newspapers (Telegram)
 # run starts (cron-job.org primary); the crons below are only a backup. telegram_posts makes reruns post only
 # what is missing.
 on:
-  # Schedule switched on once Yash approves the sample PDFs:
-  # schedule:
-  #   - cron: '55 22 * * *'   # 04:25 IST (backup start)
-  #   - cron: '0 2 * * *'     # 07:30 IST catch-up (posts only what is missing)
+  schedule:                 # live since 24 Oct 2026 (Yash approved the broadsheet design)
+    - cron: '55 22 * * *'   # 04:25 IST (backup start; telegram.yml's daily run dispatches this one first)
+    - cron: '0 2 * * *'     # 07:30 IST catch-up (posts only what is missing)
   workflow_dispatch:
     inputs:
       mode:

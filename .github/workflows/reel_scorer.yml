@@ -25,7 +25,7 @@ on:
         description: 'Article ids (comma-separated): write and review their reel scripts with Gemma, print only (slow)'
         default: ''
       luna_test:
-        description: 'FAST test of the live script writer (Luna) only: article ids (comma-separated) or "latest" (3 newest candidates). Prints scripts, posts nothing'
+        description: 'Test of the live script pipeline (B4r) only: article ids (comma-separated) or "latest" (3 newest candidates). Prints scripts, posts nothing'
         default: ''
       luna_effort:
         description: 'luna_test only: reasoning effort to try (low / medium / high); blank = the live setting'
@@ -52,11 +52,13 @@ env:
   SATYA_UPSC_DB_TOKEN: ${{ secrets.NEW_UPSC_DB_TOKEN || secrets.SATYA_UPSC_DB_TOKEN }}
   KIT_MODEL_REPO: unsloth/gemma-4-12b-it-GGUF
   KIT_MODEL_FILE: gemma-4-12b-it-Q4_K_M.gguf
-  # Reel scripts: OpenAI GPT-5.6 Luna (Gemma writes them if this fails); ~Rs 0.2 per reel at medium.
+  # Reel scripts (B4r, live since 24 Oct 2026): Gemma story (English → Hindi → plain Hindi) → Luna script → Gemma checks,
+  # Luna fixes; ~Rs 2-4 per reel. Repo variable REEL_PIPELINE=luna goes back to Luna alone.
   # Without a code change (repo variables): REEL_SCRIPT_EFFORT = low | medium | high; REEL_BUDGET_INR = runaway guard per reel (default 10).
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
   REEL_SCRIPT_MODEL: gpt-5.6-luna
   REEL_SCRIPT_EFFORT: ${{ vars.REEL_SCRIPT_EFFORT || 'medium' }}
+  REEL_PIPELINE: ${{ vars.REEL_PIPELINE || 'b4r' }}
   REEL_BUDGET_INR: ${{ vars.REEL_BUDGET_INR || '10' }}
 
 jobs:
@@ -105,7 +107,7 @@ jobs:
   score:
     if: github.event.inputs.luna_test == '' || github.event.inputs.luna_test == null
     runs-on: ubuntu-latest
-    timeout-minutes: 75   # scoring ~25 min + scripts (~7 min each, more with the original article); was 45, runs reached 44
+    timeout-minutes: 120   # scoring ~25 min + B4r scripts (~10-13 min per candidate: 3 Gemma story steps, Luna, 2 Gemma checks); was 75
     permissions:
       contents: read
       actions: read

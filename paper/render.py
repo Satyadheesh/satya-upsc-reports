@@ -143,7 +143,7 @@ def render(paper, paper_hi, items, lang, day, total_all=None):
     for key, en, h, cats, maxp in SECTIONS:
         pool = groups[key]
         n_photo = sum(1 for i in pool if photo(i))
-        if n_photo < 2 and key != "more":
+        if n_photo < 3 and key != "more":
             groups["more"] = groups.get("more", []) + pool   # too thin for its own page: into More News
             continue
         sec = h if hi else en
@@ -151,21 +151,25 @@ def render(paper, paper_hi, items, lang, day, total_all=None):
             if pno == 0:
                 ld = pick(pool, 1, True, 500) or pick(pool, 1, True)
                 mid = pick(pool, 2, True, 250)
-                if not ld:
+                if not ld or len(mid) < 2:      # a section page needs a lead and two photo stories
+                    used.difference_update({i["id"] for i in ld + mid})
+                    if pno == 0:
+                        groups["more"] = groups.get("more", []) + pool
                     break
                 br = pick(pool, BRIEFS_PAGE, False)
-                body_pages.append((sec, f'''<div class="grid p1">{lead(ld[0], hi)}
+                body_pages.append((sec, f'''<div class="grid p1{'' if br else ' noband'}">{lead(ld[0], hi)}
  {"".join(story(it, hi, f"m{i}", 1) for i, it in enumerate(mid))}
- {briefs(br, hi, "संक्षेप में" if hi else "In brief", "briefs band")}</div>'''))
+ {briefs(br, hi, "संक्षेप में" if hi else "In brief", "briefs band") if br else ""}</div>'''))
             else:
                 top = pick(pool, 2, True, 250)
                 bot = pick(pool, 3, True, 200)
-                if len(top) < 2:
+                if len(top) < 2 or len(bot) < 3:   # never print a page with empty slots
+                    used.difference_update({i["id"] for i in top + bot})
                     break
                 br = pick(pool, BRIEFS_PAGE, False)
-                body_pages.append((sec, f'''<div class="grid p2">{"".join(story(it, hi, f"t{i}", 2) for i, it in enumerate(top))}
+                body_pages.append((sec, f'''<div class="grid p2{'' if br else ' noband'}">{"".join(story(it, hi, f"t{i}", 2) for i, it in enumerate(top))}
  {"".join(story(it, hi, f"b{i}", 1) for i, it in enumerate(bot))}
- {briefs(br, hi, "संक्षेप में" if hi else "In brief", "briefs band")}</div>'''))
+ {briefs(br, hi, "संक्षेप में" if hi else "In brief", "briefs band") if br else ""}</div>'''))
         if key not in secs_present and any(s == sec for s, _ in body_pages):
             secs_present.append(sec)
 
@@ -229,6 +233,8 @@ b { font-weight: 600; }
 .p1 .lead { grid-area: lead; } .m0 { grid-area: m0; } .m1 { grid-area: m1; } .p1 .band, .p2 .band { grid-area: br; }
 /* section page 2+: two big photo stories, three smaller, briefs band */
 .p2 { grid-template-rows: 44% 1fr 20%; grid-template-areas: "t0 t0 t0 t1 t1 t1" "b0 b0 b1 b1 b2 b2" "br br br br br br"; }
+.p2.noband { grid-template-rows: 55% 1fr; grid-template-areas: "t0 t0 t0 t1 t1 t1" "b0 b0 b1 b1 b2 b2"; }
+.p1.noband { grid-template-rows: 60% 1fr; grid-template-areas: "lead lead lead lead lead lead" "m0 m0 m0 m1 m1 m1"; }
 .t0 { grid-area: t0; } .t1 { grid-area: t1; } .b0 { grid-area: b0; } .b1 { grid-area: b1; } .b2 { grid-area: b2; }
 .slot { display: flex; flex-direction: column; min-height: 0; overflow: hidden; border-top: 2px solid #111; padding-top: 2mm; }
 .slot figure { margin: 0 0 2.2mm; flex: 1 1 46%; min-height: 32mm; max-height: 55%; overflow: hidden; }

@@ -45,9 +45,18 @@ def fetch_images(items, workers=16):
                                                                        "(KHTML, like Gecko) Chrome/126 Safari/537.36"})
             if r.status_code != 200 or len(r.content) < 3000:
                 return
+            if "thehindu.com" in url and "thgim.com" not in url:
+                return   # The Hindu's own-site images are its grey logo placeholder; real photos come from th-i.thgim.com
             im = Image.open(io.BytesIO(r.content)).convert("RGB")
             if im.width < 300:
                 return
+            g = im.convert("L").resize((64, 36))
+            px = list(g.getdata())
+            light = sum(1 for v in px if v > 200) / len(px)
+            mean = sum(px) / len(px)
+            sd = (sum((v - mean) ** 2 for v in px) / len(px)) ** .5
+            if light > .55 or sd < 28:
+                return   # logo / placeholder / blank card, not a news photo
             im.thumbnail((900, 900))
             buf = io.BytesIO()
             im.save(buf, "JPEG", quality=68, optimize=True, progressive=True)

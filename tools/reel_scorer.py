@@ -97,6 +97,9 @@ LANGUAGE AND TONE (Yash, 24 Oct 2026: "the Hindi speaks overly Hindi; it must co
   कुशल कामगार → हुनरमंद लोग/स्किल्ड वर्कर · प्रशिक्षण संस्थान → ट्रेनिंग सेंटर · हिस्सेदारी → हिस्सा · सहयोग → साथ काम ·
   संबंधित मंत्रालय → सरकार/मंत्रालय · निर्णय → फ़ैसला · न्यायालय → कोर्ट · याचिका → अर्ज़ी/केस · प्रतिशत → परसेंट ·
   आवश्यक → ज़रूरी · पश्चात/उपरांत → बाद · द्वारा → ने (रिपोर्ट की ओर से → रिपोर्ट में) · किया जाएगा → करेंगे/होगा.
+- Simpler words, same facts: never change a number, a tense or who did what while simplifying. "है" stays "है" (what IS
+  true now), a plan stays a plan, a demand stays a demand.
+- More swaps: आपसी सहयोग → साथ मिलकर काम · निर्देश देना → कहना · व्यापारिक → कारोबारी (or drop it) · आर्थिक → पैसे का/इकोनॉमी का.
 - Short, spoken sentences. Use ये/वो, "यानी", "मतलब", "सीधी बात", "अब सवाल ये है", "सोचिए". Talk to the viewer as आप.
 - Explain any hard term in the same breath with "यानी" ("SIR, यानी वोटर लिस्ट की जांच").
 - Make it matter to an ordinary person: one line on what this means for people like the viewer (prices, jobs, fees,
@@ -118,7 +121,7 @@ The ₹ symbol may appear ONLY in the on-screen fields: headline_hi and twist_st
 
 INTRODUCE EVERY PERSON (viewers from any state may not know who anyone is)
 - The FIRST time a person is named in the *_say lines, say who they are in a few words just before the name: role + party or state, e.g. "शिवसेना (UBT) के सांसद संजय राउत", "महाराष्ट्र के मुख्यमंत्री देवेंद्र फडणवीस". After that the name alone is fine.
-- Everyone already knows the top offices: say just "प्रधानमंत्री मोदी", "गृह मंत्री अमित शाह", "राहुल गांधी" (no party, no full formal title). Party only when it matters to the story.
+- Everyone already knows the top offices: say "प्रधानमंत्री मोदी", "गृह मंत्री अमित शाह" (the office, no party). Party only when it matters to the story. Every named person still gets a role: people[].role_hi is never empty.
 - If the person is listed in the PEOPLE block, use that role (for the top offices above, just the office is enough). If not, describe them only as the article does (e.g. "पार्टी प्रवक्ता", "याचिकाकर्ता"); never invent or guess a title.
 - Name at most 3 people in the whole reel. Anyone else becomes a description without a name ("एक भाजपा नेता", "एक अधिकारी").
 - Parties, agencies and acronyms get their full name once: "प्रवर्तन निदेशालय (ED)", "मतदाता सूची का विशेष गहन पुनरीक्षण (SIR)".
@@ -476,6 +479,10 @@ def intro_problems(script, known=()):
     say = " ".join(str(script.get(k) or "") for k in SAY_FIELDS)
     people = [p for p in (script.get("people") or []) if isinstance(p, dict) and (p.get("name_hi") or "").strip()]
     listed = {p["name_hi"].strip() for p in people}
+    lib = {k["name_hi"]: k["role_hi"] for k in known}
+    for p in people:   # a listed person with an empty role is checked against the library role (or any role word)
+        if not (p.get("role_hi") or "").strip():
+            p["role_hi"] = lib.get(p["name_hi"].strip(), "")
     for k in known:
         if k["name_hi"] not in listed and k["name_hi"].split()[-1] in say:
             people.append({"name_hi": k["name_hi"], "role_hi": k["role_hi"]})
@@ -490,7 +497,8 @@ def intro_problems(script, known=()):
         named += 1
         i = min(hits)
         window = say[max(0, i - 70):i] + " " + say[i + len(name):i + len(name) + 40]
-        if not (_role_words(p.get("role_hi")) & _role_words(window)):
+        role = (p.get("role_hi") or "").strip()
+        if not role or not (_role_words(role) & _role_words(window)):
             out.append(f"{name} is not introduced on first mention (say: '{p.get('role_hi') or 'role'} {name}')")
     if named > 3:
         out.append(f"{named} people are named: keep at most 3, describe the rest without a name")

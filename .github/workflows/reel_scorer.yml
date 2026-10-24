@@ -22,11 +22,14 @@ on:
         type: boolean
         default: false
       script_test:
-        description: 'Article ids (comma-separated): write and review their reel scripts, print only'
+        description: 'Article ids (comma-separated): write and review their reel scripts with Gemma, print only (slow)'
+        default: ''
+      luna_test:
+        description: 'FAST test of the live script writer (Luna) only: article ids (comma-separated) or "latest" (3 newest candidates). Prints scripts, posts nothing'
         default: ''
 
 concurrency:
-  group: reel-scorer
+  group: ${{ github.event.inputs.luna_test != '' && github.event.inputs.luna_test != null && 'reel-luna-test' || 'reel-scorer' }}
   cancel-in-progress: false
 
 env:
@@ -45,7 +48,30 @@ env:
   REEL_BUDGET_INR: ${{ vars.REEL_BUDGET_INR || '10' }}
 
 jobs:
+  luna_test:
+    # ~1-2 min: no Gemma, no model download. The same prompt, intro check and legal pass as a live reel.
+    if: github.event.inputs.luna_test != '' && github.event.inputs.luna_test != null
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository }}-core
+          token: ${{ secrets.CORE_TOKEN }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - run: pip install -q libsql-client requests
+      - name: Luna scripts
+        run: |
+          IDS="${{ github.event.inputs.luna_test }}"; [ "$IDS" = latest ] && IDS=""
+          case "$IDS" in *[!0-9,]*) echo "::error::bad ids"; exit 1;; esac
+          python -m tools.reel_scorer --luna-test "$IDS" 2>&1 | tee /tmp/lt.txt
+          i=0; awk '/^## /{n++} {print > "/tmp/lt_" n ".txt"}' /tmp/lt.txt
+          for f in /tmp/lt_*.txt; do echo "::notice title=Luna script $(head -1 $f | cut -c4-30)::$(cut -c1-600 $f | sed ':a;N;$!ba;s/%/%25/g;s/\n/%0A/g')"; done
+
   score:
+    if: github.event.inputs.luna_test == '' || github.event.inputs.luna_test == null
     runs-on: ubuntu-latest
     timeout-minutes: 75   # scoring ~25 min + scripts (~7 min each, more with the original article); was 45, runs reached 44
     permissions:

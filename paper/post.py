@@ -44,9 +44,21 @@ def cap_all(names, d, hi):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--mode", default="dry-run", choices=["dry-run", "test", "now", "scheduled"])
+    ap.add_argument("--mode", default="dry-run", choices=["dry-run", "test", "now", "scheduled", "check"])
     ap.add_argument("--at", default="05:00")
     a = ap.parse_args()
+    if a.mode == "check":   # can the bot post in each channel? (nothing is sent)
+        bot = Bot()
+        me = bot.call("getMe")
+        for ch in (HINDU_EN, HINDU_HI, ALL):
+            try:
+                chat = bot.call("getChat", {"chat_id": ch})
+                mem = bot.call("getChatMember", {"chat_id": ch, "user_id": me["id"]})
+                ok = mem.get("status") == "administrator" and mem.get("can_post_messages", True)
+                print(f"{ch}: '{chat.get('title')}' bot={mem.get('status')} can_post={mem.get('can_post_messages')} -> {'OK' if ok else 'NOT OK'}")
+            except Exception as e:
+                print(f"{ch}: NOT OK ({str(e)[:160]})")
+        return
     now = dt.datetime.now(IST)
     day = now.date()
     h, m = (int(x) for x in a.at.split(":"))

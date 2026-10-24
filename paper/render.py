@@ -10,7 +10,7 @@ from .data import SECTIONS
 
 MONTHS_HI = ["जनवरी", "फ़रवरी", "मार्च", "अप्रैल", "मई", "जून", "जुलाई", "अगस्त", "सितंबर", "अक्टूबर", "नवंबर", "दिसंबर"]
 DAYS_HI = ["सोमवार", "मंगलवार", "बुधवार", "गुरुवार", "शुक्रवार", "शनिवार", "रविवार"]
-FRONT = 7          # stories on the front page (1 lead + 6)
+FRONT = 6          # stories on the front page (1 lead + 5): more spills onto page 2 half-empty
 BOLD = re.compile(r"\*\*(.+?)\*\*")
 
 
@@ -155,7 +155,7 @@ b { font-weight: 600; }
   font: 900 13pt 'Playfair Display', 'Deva Serif', serif; letter-spacing: .04em; text-transform: uppercase;
   break-after: avoid; }
 .hi .bar { font: 800 12.5pt 'Deva Serif', serif; letter-spacing: 0; }
-.cols { columns: 3; column-gap: 6mm; column-rule: .5pt solid #cfc7ba; }
+.cols { columns: 3; column-gap: 6mm; column-rule: .5pt solid #cfc7ba; column-fill: auto; }
 .cols .st { border-bottom: .5pt solid #e1dacd; padding-bottom: 2mm; }
 """
 

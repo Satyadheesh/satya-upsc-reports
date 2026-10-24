@@ -277,6 +277,7 @@ def legal_pass(script):
 # the fallback. ~Rs 0.2 per reel at medium. Rs 2 is a target, not a hard limit (Yash, 24 Oct): the only cap is a runaway
 # guard (REEL_BUDGET_INR, default Rs 10 per reel, counted at Luna's launch price $1 / $6 per 1M tokens).
 OPENAI_MODEL = os.environ.get("REEL_SCRIPT_MODEL", "gpt-5.6-luna")
+EDIT_MODEL = os.environ.get("REEL_EDIT_MODEL") or None   # the plain-language editor pass; None = OPENAI_MODEL
 OPENAI_EFFORT = os.environ.get("REEL_SCRIPT_EFFORT", "medium")  # low | medium | high
 OPENAI_PRICE = {"gpt-5.6-luna": (1.0, 6.0), "gpt-5.6-terra": (2.5, 15.0), "gpt-5.6-sol": (5.0, 30.0)}  # $/1M, launch prices
 REEL_BUDGET_INR = float(os.environ.get("REEL_BUDGET_INR") or "10")
@@ -284,7 +285,7 @@ USD_INR = float(os.environ.get("USD_INR", "88"))
 SPENT = {"inr": 0.0}  # this reel's OpenAI spend (one dispatch = one reel)
 
 
-def openai_script(system, user):
+def openai_script(system, user, model=None):
     """The reel script from OpenAI, or (None, why). The answer may use up to 8,000 tokens (room for high reasoning);
     only a runaway is stopped (REEL_BUDGET_INR per reel)."""
     import urllib.error
@@ -292,7 +293,8 @@ def openai_script(system, user):
     key = os.environ.get("OPENAI_API_KEY")
     if not key:
         return None, "no OPENAI_API_KEY"
-    pin, pout = OPENAI_PRICE.get(OPENAI_MODEL, (5.0, 30.0))
+    model = model or OPENAI_MODEL
+    pin, pout = OPENAI_PRICE.get(model, (5.0, 30.0))
     left_usd = (REEL_BUDGET_INR - SPENT["inr"]) / USD_INR
     in_tokens = len(system + user) / 2.5  # generous estimate (Hindi/English mix)
     max_out = int((left_usd - in_tokens * pin / 1e6) / (pout / 1e6))
@@ -300,7 +302,7 @@ def openai_script(system, user):
         return None, f"reel budget used (Rs {SPENT['inr']:.2f} of {REEL_BUDGET_INR})"
     schema = json.loads(json.dumps(SCRIPT_SCHEMA))
     schema["additionalProperties"], schema["required"] = False, list(schema["properties"])
-    body = {"model": OPENAI_MODEL, "reasoning_effort": OPENAI_EFFORT, "max_completion_tokens": min(max_out, 8000),
+    body = {"model": model, "reasoning_effort": OPENAI_EFFORT, "max_completion_tokens": min(max_out, 8000),
             "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
             "response_format": {"type": "json_schema", "json_schema": {"name": "reel_script", "schema": schema, "strict": True}}}
     req = urllib.request.Request("https://api.openai.com/v1/chat/completions", data=json.dumps(body).encode(), method="POST",
@@ -315,7 +317,7 @@ def openai_script(system, user):
     u = out.get("usage") or {}
     cost = (u.get("prompt_tokens", 0) * pin + u.get("completion_tokens", 0) * pout) / 1e6 * USD_INR
     SPENT["inr"] += cost
-    print(f"  OpenAI {OPENAI_MODEL} ({OPENAI_EFFORT}): {u.get('prompt_tokens')} in, {u.get('completion_tokens')} out "
+    print(f"  OpenAI {model} ({OPENAI_EFFORT}): {u.get('prompt_tokens')} in, {u.get('completion_tokens')} out "
           f"({(u.get('completion_tokens_details') or {}).get('reasoning_tokens')} thinking), at most Rs {cost:.2f} "
           f"(reel so far Rs {SPENT['inr']:.2f})", flush=True)
     try:
@@ -1032,7 +1034,7 @@ def luna_edit(inp, draft):
     """Second pass: the plain-language editor (a separate, single-purpose prompt). -> (edited or None, why)."""
     user = ("ARTICLE (for facts only):\n" + inp["head"] + f"SUMMARY:\n{inp['body'][:1500]}\n\n"
             "DRAFT SCRIPT:\n" + json.dumps(draft, ensure_ascii=False))
-    return openai_script(EDITOR_SYSTEM, user)
+    return openai_script(EDITOR_SYSTEM, user, model=EDIT_MODEL)
 
 
 def luna_script(inp, aid):
@@ -1083,7 +1085,7 @@ def luna_test(m_db, u_db, ids):
         if inp["political"]:
             sc, notes, ok = legal_pass(sc)
             legal = f" | legal ok={ok} {notes or ''}"
-        print(f"## #{aid} [{topic}] {OPENAI_MODEL} {inp['title'][:70]}\n({time.time() - t0:.0f}s, Rs {SPENT['inr']:.2f}){legal}"
+        print(f"## #{aid} [{topic}] {OPENAI_MODEL}{' + edit ' + EDIT_MODEL if EDIT_MODEL else ''} {inp['title'][:70]}\n({time.time() - t0:.0f}s, Rs {SPENT['inr']:.2f}){legal}"
               f"{' | PROBLEMS LEFT: ' + '; '.join(problems) if problems else ''}\n"
               f"STORY: {sc.get('plain_story_hi')}\n"
               f"PEOPLE: {'; '.join(p.get('name_hi', '') + ' = ' + p.get('role_hi', '') for p in sc.get('people') or [])}\n"

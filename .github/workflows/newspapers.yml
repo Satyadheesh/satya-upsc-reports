@@ -15,7 +15,7 @@ on:
       mode:
         description: 'preview = build PDFs to the previews branch; dry-run = build, post nothing; test = post now to TELEGRAM_TEST_CHAT_ID; now = post now to the channels; scheduled = wait for 05:00 IST, then post'
         type: choice
-        options: [preview, dry-run, test, now, scheduled]
+        options: [preview, check, dry-run, test, now, scheduled]
         default: preview
 
 concurrency:
@@ -62,7 +62,7 @@ jobs:
           set -o pipefail
           if [ "$MODE" = preview ]; then python -m paper.build --out out 2>&1 | tee build.log
           else python -m paper.post --mode "$MODE" --at 05:00 2>&1 | tee build.log; fi
-          echo "::notice title=Newspapers ($MODE)::$(grep -E 'stories in the last|\.pdf:|posted|already|error|waiting' build.log | cut -c1-200 | sed ':a;N;$!ba;s/%/%25/g;s/\n/%0A/g')"
+          echo "::notice title=Newspapers ($MODE)::$(grep -E 'stories in the last|\.pdf:|posted|already|error|waiting|OK' build.log | cut -c1-200 | sed ':a;N;$!ba;s/%/%25/g;s/\n/%0A/g')"
       - name: Publish preview
         if: ${{ always() && env.MODE == 'preview' }}
         run: |

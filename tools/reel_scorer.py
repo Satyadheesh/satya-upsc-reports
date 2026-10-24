@@ -474,10 +474,10 @@ def people_block(*texts):
             found.append(p)
     if not found:
         return "", []
-    lines = [f"- {p['name_hi']} ({p['name']}): {p['role_hi']}" + (f", {p['party']}" if p['party'] and p['party'] not in p['role_hi'] else "")
+    lines = [f"- {p['name_hi']} ({p['name']}): {p['role_hi']}" + (f"  [party: {p['party']}]" if p['party'] and p['party'] not in p['role_hi'] else "")
              for p in found[:6]]
-    return ("PEOPLE (from our records: use these roles exactly when you introduce them; anyone else only as the "
-            "article describes them)\n" + "\n".join(lines) + "\n"), found
+    return ("PEOPLE (from our records: introduce them with this role, said naturally; mention the party only when it "
+            "matters to the story; anyone else only as the article describes them)\n" + "\n".join(lines) + "\n"), found
 
 
 SAY_FIELDS = ("hook_say", "core_say", "twist_say", "engagement_say")
@@ -1000,6 +1000,41 @@ def script_inputs(r, topic, fact, persona):
                 political=political, title=title)
 
 
+EDITOR_SYSTEM = """You are the final editor of SatyaDheesh's Hindi news reels. A writer has drafted the script below.
+Your ONLY job: make it land with an ordinary Indian viewer scrolling on their phone, a shopkeeper in Kanpur, a farmer's son
+in Bihar, a nurse in Indore: smart, but not following this story, and with about 50 seconds to spare.
+
+Go line by line and ask: would that viewer understand this the first time they hear it, and would a friend talk like this?
+- If a line sounds like a news anchor, a textbook or an official press note, say it the way people actually talk:
+  everyday Hindustani, short sentences, "आप"; everyday English words people use are welcome (in Devanagari).
+- If a number, unit, official body, legal or technical term would make the viewer pause, drop it, compare it to
+  something they can picture, or say what it means. A number nobody can picture is worse than no number.
+- Make sure the story is clear: who wants what, why, and what happened or was decided. In a dispute, each side's position
+  in one simple line.
+- Keep every fact true and unchanged: numbers you keep, tenses, who said or did what. Add nothing that isn't in the draft
+  or the article.
+- Keep, exactly: "<source> की रिपोर्ट के मुताबिक" and every "आरोप"/"दावा"/attribution (legal safety); each person's
+  introduction on first mention; the length limits; the JSON keys. Keep plain_story_hi consistent with the new lines.
+- On-screen fields (headline, subtitle, points, stat, labels, question, card titles) follow the same test.
+
+How the edit should sound (real lines from drafts that missed):
+  Draft: "कावेरी जल विनियमन समिति ने बिलिगुंडलु पर 15 दिन तक 3,000 क्यूसेक्स पानी छोड़ने का निर्देश दिया।"
+  Edited: "अब पानी बांटने वाली कमेटी ने बीच का रास्ता निकाला: 15 दिन तक कर्नाटक रोज़ कुछ पानी छोड़ेगा, लेकिन ये तमिलनाडु
+  की मांग का करीब पांचवां हिस्सा ही है।"
+  Draft: "दोनों देशों ने 2030 तक व्यापार को 100 अरब डॉलर तक पहुंचाने का लक्ष्य निर्धारित किया है। संबंधित मंत्रालय सहयोग आगे बढ़ाएंगे।"
+  Edited: "भारत और रूस ने टारगेट रखा है, 2030 तक आपस में 100 बिलियन डॉलर का कारोबार। अब सवाल ये है, ये होगा कैसे?"
+
+Return the full edited script as the same JSON object. If a line is already right, keep it.
+"""
+
+
+def luna_edit(inp, draft):
+    """Second pass: the plain-language editor (a separate, single-purpose prompt). -> (edited or None, why)."""
+    user = ("ARTICLE (for facts only):\n" + inp["head"] + f"SUMMARY:\n{inp['body'][:1500]}\n\n"
+            "DRAFT SCRIPT:\n" + json.dumps(draft, ensure_ascii=False))
+    return openai_script(EDITOR_SYSTEM, user)
+
+
 def luna_script(inp, aid):
     """OpenAI (Luna) script + the people-intro check with one rewrite. -> (script or None, why, problems)."""
     script_data, why = openai_script(inp["system"], inp["user_msg"])
@@ -1014,6 +1049,12 @@ def luna_script(inp, aid):
             if fixed:
                 script_data = fixed
                 problems = intro_problems(script_data, inp["known"])
+        edited, why_e = luna_edit(inp, script_data)
+        if edited and len(intro_problems(edited, inp["known"])) <= len(problems):
+            script_data, problems = edited, intro_problems(edited, inp["known"])
+            print(f"  plain-language edit #{aid}: applied")
+        else:
+            print(f"  plain-language edit #{aid}: kept the draft ({why_e or 'the edit lost a person introduction'})")
     return script_data, why, problems
 
 

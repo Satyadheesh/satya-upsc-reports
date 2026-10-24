@@ -1034,6 +1034,8 @@ what happens next), question_hi, engagement_title_hi (2-4 words), engagement_say
 Output only the JSON object.
 """
 
+_GEMMA = {}
+
 # Yash, 24 Oct 2026: "Gemma summarises the news in 150-200 crisp words, then the script model writes from that".
 GEMMA_REEL_SUMMARY_SYSTEM = """You write the story summary a reel scriptwriter will work from. Read the article and write
 150-200 words of plain, simple English (short sentences), so that an ordinary viewer could follow the story:
@@ -1049,12 +1051,25 @@ Return JSON: {"summary": "..."}"""
 GEMMA_REEL_SUMMARY_SCHEMA = {"type": "object", "properties": {"summary": {"type": "string"}}, "required": ["summary"]}
 
 
+GEMMA_REEL_SUMMARY_SYSTEM_HI = GEMMA_REEL_SUMMARY_SYSTEM.replace(
+    "150-200 words of plain, simple English (short sentences)",
+    "150-200 words of plain, everyday spoken Hindi in Devanagari (बोलचाल की हिंदी, short sentences; English words people "
+    "use every day are fine, written in Devanagari; never formal or official Hindi)")
+
+
+def gemma_model():
+    if "m" not in _GEMMA:
+        _GEMMA["m"] = Model(download(), n_ctx=8192)
+    return _GEMMA["m"]
+
+
 def gemma_reel_summary(model, inp):
+    system = GEMMA_REEL_SUMMARY_SYSTEM_HI if os.environ.get("REEL_PROMPT_VARIANT") == "gemma_brief_hi" else GEMMA_REEL_SUMMARY_SYSTEM
     user = (f"Title: {inp['title']}\n\nSHORT SUMMARY:\n{inp['body'][:1200]}\n\n"
             + (f"FULL ARTICLE:\n{inp['original'][:3500]}" if inp["original"] else ""))
     try:
-        return (model.json(GEMMA_REEL_SUMMARY_SYSTEM, user, GEMMA_REEL_SUMMARY_SCHEMA, temperature=0.2,
-                           max_tokens=500) or {}).get("summary", "").strip()
+        return (model.json(system, user, GEMMA_REEL_SUMMARY_SCHEMA, temperature=0.2,
+                           max_tokens=700) or {}).get("summary", "").strip()
     except Exception as e:
         print(f"  Gemma reel summary failed: {type(e).__name__}")
         return ""
@@ -1140,16 +1155,21 @@ def luna_script(inp, aid):
                 problems = intro_problems(script_data, inp["known"])
         if os.environ.get("REEL_EDIT_PASS", "on") == "off":
             return script_data, why, problems
-        edited, why_e = luna_edit(inp, script_data)
+        if os.environ.get("REEL_EDIT_PASS") == "gemma":
+            try:
+                user = ("ARTICLE (for facts only):\n" + inp["head"] + f"SUMMARY:\n{inp['body'][:1500]}\n\n"
+                        "DRAFT SCRIPT:\n" + json.dumps(script_data, ensure_ascii=False))
+                edited, why_e = gemma_model().json(EDITOR_SYSTEM, user, SCRIPT_SCHEMA, temperature=0.2, max_tokens=1400), "gemma"
+            except Exception as e:
+                edited, why_e = None, f"gemma edit failed: {type(e).__name__}"
+        else:
+            edited, why_e = luna_edit(inp, script_data)
         if edited and len(intro_problems(edited, inp["known"])) <= len(problems):
             script_data, problems = edited, intro_problems(edited, inp["known"])
             print(f"  plain-language edit #{aid}: applied")
         else:
             print(f"  plain-language edit #{aid}: kept the draft ({why_e or 'the edit lost a person introduction'})")
     return script_data, why, problems
-
-
-_GEMMA = {}
 
 
 def luna_test(m_db, u_db, ids):
@@ -1168,17 +1188,22 @@ def luna_test(m_db, u_db, ids):
             continue
         inp = script_inputs(r[0], topic, fact, "charlie")
         SPENT["inr"] = 0.0   # the budget is per reel: each test story is its own reel
-        if os.environ.get("REEL_PROMPT_VARIANT") == "gemma_brief":
-            if "m" not in _GEMMA:
-                _GEMMA["m"] = Model(download())
+        if os.environ.get("REEL_PROMPT_VARIANT") in ("gemma_brief", "gemma_brief_hi", "gemma_only"):
             tg = time.time()
-            gs = gemma_reel_summary(_GEMMA["m"], inp)
+            gs = gemma_reel_summary(gemma_model(), inp)
             print(f"## GEMMA SUMMARY #{aid} ({len(gs.split())} words, {time.time() - tg:.0f}s): {gs}", flush=True)
             if gs:
                 head = inp["head"].replace(next((l for l in inp["head"].splitlines() if l.startswith("Key Fact:")), "\x00"), "")
                 inp = dict(inp, user_msg=head + "STORY (150-200 words, everything you need):\n" + gs)
         t0 = time.time()
-        sc, why, problems = luna_script(inp, aid)
+        if os.environ.get("REEL_PROMPT_VARIANT") == "gemma_only":   # Gemma writes the script itself (comparison)
+            try:
+                sc, why = gemma_model().json(inp["system"], inp["user_msg"], SCRIPT_SCHEMA, temperature=0.25, max_tokens=1400), "gemma"
+            except Exception as e:
+                sc, why = None, f"gemma script failed: {type(e).__name__}"
+            problems = intro_problems(sc, inp["known"]) if sc else []
+        else:
+            sc, why, problems = luna_script(inp, aid)
         if not sc:
             print(f"## {aid}: Luna gave no script ({why})")
             continue
@@ -1186,7 +1211,7 @@ def luna_test(m_db, u_db, ids):
         if inp["political"]:
             sc, notes, ok = legal_pass(sc)
             legal = f" | legal ok={ok} {notes or ''}"
-        print(f"## #{aid} [{topic}] {OPENAI_MODEL}{' + edit ' + EDIT_MODEL if EDIT_MODEL else ''} {inp['title'][:70]}\n({time.time() - t0:.0f}s, Rs {SPENT['inr']:.2f}){legal}"
+        print(f"## #{aid} [{topic}] {os.environ.get('REEL_PROMPT_VARIANT') or 'live'}/{os.environ.get('REEL_EDIT_PASS') or 'edit'} {OPENAI_MODEL}{' + edit ' + EDIT_MODEL if EDIT_MODEL else ''} {inp['title'][:50]}\n({time.time() - t0:.0f}s, Rs {SPENT['inr']:.2f}){legal}"
               f"{' | PROBLEMS LEFT: ' + '; '.join(problems) if problems else ''}\n"
               f"STORY: {sc.get('plain_story_hi')}\n"
               f"PEOPLE: {'; '.join(p.get('name_hi', '') + ' = ' + p.get('role_hi', '') for p in sc.get('people') or [])}\n"

@@ -487,8 +487,9 @@ def intro_problems(script, known=()):
     for p in people:   # a listed person with an empty role is checked against the library role (or any role word)
         if not (p.get("role_hi") or "").strip():
             p["role_hi"] = lib.get(p["name_hi"].strip(), "")
-    for k in known:   # a library person the script didn't list counts only if their FULL name is spoken
-        if k["name_hi"] not in listed and k["name_hi"] in say:     # (a shared surname like "गोयल" is not enough)
+    for k in known:   # a library person the script didn't list: full name spoken, or a surname no listed person shares
+        sur = k["name_hi"].split()[-1]                             # (Brijesh Goyal's "गोयल" must not flag Piyush Goyal)
+        if k["name_hi"] not in listed and (k["name_hi"] in say or (sur in say and not any(sur in n for n in listed))):
             people.append({"name_hi": k["name_hi"], "role_hi": k["role_hi"]})
     out = []
     named = 0

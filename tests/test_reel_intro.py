@@ -18,6 +18,12 @@ class IntroCheck(unittest.TestCase):
               "hook_say": "संजय राउत ने बड़ा दावा किया है।", "core_say": "", "twist_say": "", "engagement_say": ""}
         self.assertEqual(len(intro_problems(sc)), 1)
 
+    def test_shared_surname_is_not_another_person(self):
+        known = [{"name_hi": "पियूष गोयल", "role_hi": "वाणिज्य मंत्री"}]
+        sc = {"people": [{"name_hi": "ब्रिजेश गोयल", "role_hi": "सीटीआई चेयरमैन"}],
+              "hook_say": "सीटीआई चेयरमैन ब्रिजेश गोयल ने कहा। गोयल ने लिखा।", "core_say": "", "twist_say": "", "engagement_say": ""}
+        self.assertEqual(intro_problems(sc, known), [])
+
     def test_library_person_missing_from_people(self):
         known = [{"name_hi": "देवेंद्र फडणवीस", "role_hi": "महाराष्ट्र के मुख्यमंत्री"}]
         sc = {"people": [], "hook_say": "फडणवीस ने जवाब दिया।", "core_say": "", "twist_say": "", "engagement_say": ""}

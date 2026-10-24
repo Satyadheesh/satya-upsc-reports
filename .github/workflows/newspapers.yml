@@ -1,0 +1,76 @@
+name: Newspapers (Telegram)
+
+# Newspaper-style PDFs of the last 24 hours (paper/ in the core repo): The Hindu English -> @thehindu_in_english,
+# The Hindu Hindi -> @thehindu_in_hindi, every paper in English and Hindi -> @newspapers_for_upsc_pdf.
+# Posted at 05:00 IST with the main channel's daily report: telegram.yml dispatches this workflow when its daily
+# run starts (cron-job.org primary); the crons below are only a backup. telegram_posts makes reruns post only
+# what is missing.
+on:
+  schedule:
+    - cron: '55 22 * * *'   # 04:25 IST (backup start)
+    - cron: '0 2 * * *'     # 07:30 IST catch-up (posts only what is missing)
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'preview = build PDFs to the previews branch; dry-run = build, post nothing; test = post now to TELEGRAM_TEST_CHAT_ID; now = post now to the channels; scheduled = wait for 05:00 IST, then post'
+        type: choice
+        options: [preview, dry-run, test, now, scheduled]
+        default: preview
+
+concurrency:
+  group: newspapers-${{ github.event.inputs.mode == 'preview' && 'preview' || 'post' }}
+  cancel-in-progress: false
+
+env:
+  CORE_TOKEN: ${{ secrets.CORE_TOKEN }}
+  PYTHONPATH: ${{ github.workspace }}/.ci
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      MODE: ${{ github.event.inputs.mode || 'scheduled' }}
+      SATYA_DB_URL: ${{ secrets.SATYA_DB_URL }}
+      SATYA_DB_TOKEN: ${{ secrets.SATYA_DB_TOKEN }}
+      SATYA_UPSC_DB_URL: ${{ secrets.NEW_UPSC_DB_URL }}
+      SATYA_UPSC_DB_TOKEN: ${{ secrets.NEW_UPSC_DB_TOKEN }}
+      SATYA_TRANSLATION_DB_URL: ${{ secrets.NEW_TRANSLATION_DB_URL }}
+      SATYA_TRANSLATION_DB_TOKEN: ${{ secrets.NEW_TRANSLATION_DB_TOKEN }}
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_TEST_CHAT_ID: ${{ secrets.TELEGRAM_TEST_CHAT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository }}-core
+          token: ${{ secrets.CORE_TOKEN }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: pw-chromium-${{ runner.os }}-v1
+      - name: Install
+        run: |
+          pip install libsql-client requests qrcode playwright
+          python -m playwright install --with-deps chromium
+          [ "$MODE" = preview ] && sudo apt-get install -y -q poppler-utils >/dev/null || true
+      - name: Build / post
+        run: |
+          set -o pipefail
+          if [ "$MODE" = preview ]; then python -m paper.build --out out 2>&1 | tee build.log
+          else python -m paper.post --mode "$MODE" --at 05:00 2>&1 | tee build.log; fi
+          echo "::notice title=Newspapers ($MODE)::$(grep -E 'stories in the last|\.pdf:|posted|already|error|waiting' build.log | cut -c1-200 | sed ':a;N;$!ba;s/%/%25/g;s/\n/%0A/g')"
+      - name: Publish preview
+        if: ${{ always() && env.MODE == 'preview' }}
+        run: |
+          set -e
+          mkdir -p out && cp build.log out/ || true
+          rm -rf /tmp/wt && mkdir /tmp/wt && cd /tmp/wt && git init -q
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git remote add origin "https://x-access-token:${CORE_TOKEN}@github.com/${GITHUB_REPOSITORY}-core.git"
+          if git fetch -q --depth 1 origin previews; then git checkout -q -b previews FETCH_HEAD; else git checkout -q --orphan previews; fi
+          rm -rf paper && mkdir -p paper && cp "$GITHUB_WORKSPACE"/out/* paper/ 2>/dev/null || true
+          git add -A && git commit -qm "newspaper preview ${GITHUB_RUN_ID}" && git push -q origin HEAD:previews

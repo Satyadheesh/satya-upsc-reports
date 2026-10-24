@@ -174,7 +174,7 @@ p.first, .ftext p:first-child { text-indent: 0; }
 .hi .flead h2 { font: 800 32pt/1.3 'Deva Serif', serif; }
 .fgrid, .sgrid { display: grid; grid-template-columns: 3fr 2fr; gap: 6mm; margin-bottom: 3mm; }
 figure { margin: 0 0 2mm; }
-figure img { width: 100%; display: block; filter: grayscale(12%) contrast(1.03); }
+figure img { width: 100%; display: block; }
 figure.big img { max-height: 120mm; object-fit: cover; }
 .ftext { font-size: 11pt; line-height: 1.42; }
 .ftext p.first::first-letter, .flead .ftext p:first-child::first-letter { float: left; font: 900 38pt/.82 'Playfair Display', serif; padding: 1.2mm 1.6mm 0 0; }

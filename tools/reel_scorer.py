@@ -1073,6 +1073,7 @@ def luna_test(m_db, u_db, ids):
             print(f"## {aid}: not found")
             continue
         inp = script_inputs(r[0], topic, fact, "charlie")
+        SPENT["inr"] = 0.0   # the budget is per reel: each test story is its own reel
         t0 = time.time()
         sc, why, problems = luna_script(inp, aid)
         if not sc:
@@ -1082,7 +1083,7 @@ def luna_test(m_db, u_db, ids):
         if inp["political"]:
             sc, notes, ok = legal_pass(sc)
             legal = f" | legal ok={ok} {notes or ''}"
-        print(f"## #{aid} [{topic}] {inp['title'][:90]}\n({time.time() - t0:.0f}s, {why}){legal}"
+        print(f"## #{aid} [{topic}] {OPENAI_MODEL} {inp['title'][:70]}\n({time.time() - t0:.0f}s, Rs {SPENT['inr']:.2f}){legal}"
               f"{' | PROBLEMS LEFT: ' + '; '.join(problems) if problems else ''}\n"
               f"STORY: {sc.get('plain_story_hi')}\n"
               f"PEOPLE: {'; '.join(p.get('name_hi', '') + ' = ' + p.get('role_hi', '') for p in sc.get('people') or [])}\n"

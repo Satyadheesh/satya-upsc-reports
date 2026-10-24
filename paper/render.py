@@ -104,7 +104,7 @@ def briefs(items, hi, title=None, cls="briefs"):
 
 def bar(name, sec, day, hi, page_no):
     return (f'<header class="bar"><span class="sname">{e(sec)}</span>'
-            f'<span class="sinfo">{e(name)} · {e(date_line(day, hi))}</span></header>')
+            f'<span class="sinfo">{e(name)} · {"वेब एक्सटेंडेड संस्करण" if hi else "Web Extended Edition"} · {e(date_line(day, hi))}</span></header>')
 
 
 # ---------------------------------------------------------------- pages
@@ -179,6 +179,7 @@ def render(paper, paper_hi, items, lang, day, total_all=None):
  <div class="strip"><span>{"निजी प्रति" if hi else "PERSONAL COPY"}</span><span>{e(date_line(day, hi)) if hi else e(date_line(day, hi)).upper()}</span>
   <span>{total} {"पृष्ठ" if hi else "PAGES"}</span></div>
  <h1 class="{'hi' if hi else ''}">{e(name)}</h1>
+ <div class="edition">{"वेब एक्सटेंडेड संस्करण" if hi else "WEB EXTENDED EDITION"}</div>
  <div class="strip2"><b>{"अंदर" if hi else "INSIDE"}</b> {e(index)}</div></header>'''
     front = f'''<div class="grid front">{lead(f_lead[0], hi, "lead flead") if f_lead else ""}
  {briefs(f_br, hi, "संक्षेप में" if hi else "In Brief", "briefs rail")}
@@ -186,12 +187,12 @@ def render(paper, paper_hi, items, lang, day, total_all=None):
     out = [f'<section class="page">{mast}{front}{foot(name, day, hi, 1, total)}</section>']
     for n, (sec, html_) in enumerate(body_pages, 2):
         out.append(f'<section class="page">{bar(name, sec, day, hi, n)}{html_}{foot(name, day, hi, n, total)}</section>')
-    return f'''<!doctype html><html lang="{lang}"><head><meta charset="utf-8"><title>{e(name)} — {e(date_line(day, hi))}</title>
+    return f'''<!doctype html><html lang="{lang}"><head><meta charset="utf-8"><title>{e(name)} — {"वेब एक्सटेंडेड संस्करण" if hi else "Web Extended Edition"} — {e(date_line(day, hi))}</title>
 <style>{FONTS}{CSS}</style></head><body class="{'hi' if hi else 'en'}">{"".join(out)}<script>{FIT_JS}</script></body></html>'''
 
 
 def foot(name, day, hi, n, total):
-    return (f'<footer class="pfoot"><span>{e(name)} · {e(date_line(day, hi))}</span>'
+    return (f'<footer class="pfoot"><span>{e(name)} · {"वेब एक्सटेंडेड संस्करण" if hi else "Web Extended Edition"} · {e(date_line(day, hi))}</span>'
             f'<span>{"निजी प्रति · सत्याधीश द्वारा संकलित" if hi else "Personal copy · compiled by SatyaDheesh"}</span>'
             f'<span>{"पृष्ठ" if hi else "PAGE"} {n} / {total}</span></footer>')
 
@@ -264,6 +265,8 @@ h2, h3, h4 { margin: 0; flex: none; }
 .mast { text-align: center; margin-bottom: 4mm; flex: none; }
 .strip { display: flex; justify-content: space-between; font: 600 7.4pt 'Plex Mono', 'Deva', monospace; letter-spacing: .1em;
   border-bottom: 1px solid #111; padding-bottom: 1.2mm; }
+.edition { font: 700 9pt 'DM Sans', 'Deva', sans-serif; letter-spacing: .32em; color: #9b1c1c; margin: -1mm 0 2mm; }
+.hi .edition { letter-spacing: .06em; font-size: 10pt; }
 .mast h1 { margin: 2mm 0 1.5mm; font: 900 74pt/1 'Playfair Display', serif; letter-spacing: -.01em; }
 .mast h1.hi { font: 800 64pt/1.2 'Deva Serif', serif; }
 .strip2 { border-top: 3px double #111; border-bottom: 1.5px solid #111; padding: 1.3mm 0; font: 8pt 'DM Sans', 'Deva', sans-serif; }

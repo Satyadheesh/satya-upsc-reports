@@ -46,12 +46,16 @@ def day_label(d, hi):
     return f"{d.day} {MONTHS_HI[d.month - 1]} {d.year}" if hi else d.strftime("%-d %b %Y")
 
 
+EXT = {False: "Web Extended Edition", True: "वेब एक्सटेंडेड संस्करण"}
+
+
 def cap_one(name, d, hi):
-    return f"<b>{name}</b> · {day_label(d, hi)}"
+    return f"<b>{name}</b> — {EXT[hi]} · {day_label(d, hi)}"
 
 
 def cap_all(names, d, hi):
-    return f"<b>{'आज के अख़बार' if hi else 'Today’s newspapers'}</b> · {day_label(d, hi)}\n{', '.join(names)}"
+    return (f"<b>{'आज के अख़बार' if hi else 'Today’s newspapers'}</b> — {EXT[hi]} · {day_label(d, hi)}\n"
+            f"{', '.join(names)}")
 
 
 def main():

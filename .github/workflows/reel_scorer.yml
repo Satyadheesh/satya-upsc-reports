@@ -68,7 +68,7 @@ jobs:
           case "$IDS" in *[!0-9,]*) echo "::error::bad ids"; exit 1;; esac
           python -m tools.reel_scorer --luna-test "$IDS" 2>&1 | tee /tmp/lt.txt
           i=0; awk '/^## /{n++} {print > "/tmp/lt_" n ".txt"}' /tmp/lt.txt
-          for f in /tmp/lt_*.txt; do echo "::notice title=Luna script $(head -1 $f | cut -c4-30)::$(cut -c1-600 $f | sed ':a;N;$!ba;s/%/%25/g;s/\n/%0A/g')"; done
+          for f in /tmp/lt_*.txt; do echo "::notice title=Luna script $(head -1 $f | cut -c4-30)::$(cut -c1-1500 $f | sed ':a;N;$!ba;s/%/%25/g;s/\n/%0A/g')"; done
 
   score:
     if: github.event.inputs.luna_test == '' || github.event.inputs.luna_test == null

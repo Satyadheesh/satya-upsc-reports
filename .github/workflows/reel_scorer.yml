@@ -61,10 +61,10 @@ env:
 
 jobs:
   luna_test:
-    # ~1-2 min: no Gemma, no model download. The same prompt, intro check and legal pass as a live reel.
+    # Prints scripts, posts nothing. Without a Gemma variant ~1-2 min; Gemma variants (summary / B3 review loop) longer.
     if: github.event.inputs.luna_test != '' && github.event.inputs.luna_test != null
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
         with:
@@ -76,16 +76,16 @@ jobs:
       - run: pip install -q libsql-client requests
       # variant gemma_brief needs Gemma 4 12B on the runner (same cache and install as the scorer job)
       - name: Free disk for model weights
-        if: contains(github.event.inputs.variant, 'gemma') || contains(github.event.inputs.variant, 'gedit')
+        if: contains(github.event.inputs.variant, 'gemma') || contains(github.event.inputs.variant, 'gedit') || contains(github.event.inputs.variant, 'b3')
         run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
       - name: Cache model weights
-        if: contains(github.event.inputs.variant, 'gemma') || contains(github.event.inputs.variant, 'gedit')
+        if: contains(github.event.inputs.variant, 'gemma') || contains(github.event.inputs.variant, 'gedit') || contains(github.event.inputs.variant, 'b3')
         uses: actions/cache@v4
         with:
           path: models
           key: gguf-${{ env.KIT_MODEL_FILE }}
       - name: Install llama-cpp
-        if: contains(github.event.inputs.variant, 'gemma') || contains(github.event.inputs.variant, 'gedit')
+        if: contains(github.event.inputs.variant, 'gemma') || contains(github.event.inputs.variant, 'gedit') || contains(github.event.inputs.variant, 'b3')
         run: pip install -q -r requirements.txt --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu
       - name: Luna scripts
         run: |
@@ -97,7 +97,7 @@ jobs:
           V="${{ github.event.inputs.variant }}"
           case "$V" in *noedit*) export REEL_EDIT_PASS=off;; *gedit*) export REEL_EDIT_PASS=gemma;; esac
           case "$V" in short*) export REEL_PROMPT_VARIANT=short;; no_original*) export REEL_PROMPT_VARIANT=no_original;; brief*) export REEL_PROMPT_VARIANT=brief;;
-            gemma_hi*) export REEL_PROMPT_VARIANT=gemma_brief_hi;; gemma_only*) export REEL_PROMPT_VARIANT=gemma_only;; gemma*) export REEL_PROMPT_VARIANT=gemma_brief;; esac
+            b3*) export REEL_PROMPT_VARIANT=b3;; gemma_hi*) export REEL_PROMPT_VARIANT=gemma_brief_hi;; gemma_only*) export REEL_PROMPT_VARIANT=gemma_only;; gemma*) export REEL_PROMPT_VARIANT=gemma_brief;; esac
           python -m tools.reel_scorer --luna-test "$IDS" 2>&1 | tee /tmp/lt.txt
           i=0; awk '/^## /{n++} {print > "/tmp/lt_" n ".txt"}' /tmp/lt.txt
           for f in /tmp/lt_*.txt; do echo "::notice title=Luna script $(head -1 $f | cut -c4-30)::$(cut -c1-2200 $f | sed ':a;N;$!ba;s/%/%25/g;s/\n/%0A/g')"; done

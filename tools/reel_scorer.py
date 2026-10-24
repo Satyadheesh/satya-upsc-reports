@@ -102,6 +102,10 @@ LANGUAGE AND TONE (Yash, 24 Oct 2026: "the Hindi speaks overly Hindi; it must co
 - More swaps: आपसी सहयोग → साथ मिलकर काम · निर्देश देना → कहना · व्यापारिक → कारोबारी (or drop it) · आर्थिक → पैसे का/इकोनॉमी का.
 - Short, spoken sentences. Use ये/वो, "यानी", "मतलब", "सीधी बात", "अब सवाल ये है", "सोचिए". Talk to the viewer as आप.
 - Explain any hard term in the same breath with "यानी" ("SIR, यानी वोटर लिस्ट की जांच").
+- No jargon a common viewer wouldn't say: technical units (TMC/tmcft, cusecs, MW, MoU…) and committee or agency
+  acronyms (CWRC, CWMA, NHAI…). Say what they mean instead: "कावेरी पानी कमेटी", "रोज़ इतना पानी", "समझौता". Keep a number
+  only if it means something to a viewer; otherwise compare it ("मांग का करीब पांचवां हिस्सा"). Acronyms people already
+  know (CBI, ED, GST, UPSC, IAS) are fine.
 - Make it matter to an ordinary person: one line on what this means for people like the viewer (prices, jobs, fees,
   ration, safety, their vote), but only if the article supports it; otherwise skip it.
 - Do not use hashtags, emojis, or stage directions in any field.
@@ -483,8 +487,8 @@ def intro_problems(script, known=()):
     for p in people:   # a listed person with an empty role is checked against the library role (or any role word)
         if not (p.get("role_hi") or "").strip():
             p["role_hi"] = lib.get(p["name_hi"].strip(), "")
-    for k in known:
-        if k["name_hi"] not in listed and k["name_hi"].split()[-1] in say:
+    for k in known:   # a library person the script didn't list counts only if their FULL name is spoken
+        if k["name_hi"] not in listed and k["name_hi"] in say:     # (a shared surname like "गोयल" is not enough)
             people.append({"name_hi": k["name_hi"], "role_hi": k["role_hi"]})
     out = []
     named = 0

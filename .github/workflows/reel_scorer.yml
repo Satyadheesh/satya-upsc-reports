@@ -30,9 +30,12 @@ on:
       luna_effort:
         description: 'luna_test only: reasoning effort to try (low / medium / high); blank = the live setting'
         default: ''
+      luna_model:
+        description: 'luna_test only: model to try (gpt-5.6-luna / gpt-5.6-terra / gpt-5.6-sol); blank = the live model'
+        default: ''
 
 concurrency:
-  group: ${{ github.event.inputs.luna_test != '' && github.event.inputs.luna_test != null && format('reel-luna-test-{0}', github.event.inputs.luna_effort) || 'reel-scorer' }}
+  group: ${{ github.event.inputs.luna_test != '' && github.event.inputs.luna_test != null && format('reel-luna-test-{0}-{1}', github.event.inputs.luna_effort, github.event.inputs.luna_model) || 'reel-scorer' }}
   cancel-in-progress: false
 
 env:
@@ -70,6 +73,7 @@ jobs:
           IDS="${{ github.event.inputs.luna_test }}"; [ "$IDS" = latest ] && IDS=""
           case "$IDS" in *[!0-9,]*) echo "::error::bad ids"; exit 1;; esac
           E="${{ github.event.inputs.luna_effort }}"; [ -n "$E" ] && export REEL_SCRIPT_EFFORT="$E"
+          M="${{ github.event.inputs.luna_model }}"; [ -n "$M" ] && export REEL_SCRIPT_MODEL="$M" REEL_BUDGET_INR=40
           python -m tools.reel_scorer --luna-test "$IDS" 2>&1 | tee /tmp/lt.txt
           i=0; awk '/^## /{n++} {print > "/tmp/lt_" n ".txt"}' /tmp/lt.txt
           for f in /tmp/lt_*.txt; do echo "::notice title=Luna script $(head -1 $f | cut -c4-30)::$(cut -c1-1500 $f | sed ':a;N;$!ba;s/%/%25/g;s/\n/%0A/g')"; done

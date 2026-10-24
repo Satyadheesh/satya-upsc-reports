@@ -86,40 +86,38 @@ SCRIPT_SYSTEM_CHARLIE = """You are an expert Indian short-form news storyteller 
 TASK
 Read the news article below and write a Reel narration script in Hindi (Devanagari script). The script has 4 parts: Hook, Core, Twist, Engagement. Return it as a single JSON object with the exact keys listed under OUTPUT FIELDS.
 
-LANGUAGE AND TONE (Yash, 24 Oct 2026: "the Hindi speaks overly Hindi; it must connect with the very common man")
-- Talk like a friend explaining the news to a neighbour at a chai stall in a small north Indian town: बोलचाल की
-  हिंदुस्तानी, never a news anchor, a textbook or a government circular.
-- Use the words ordinary people actually say. Everyday English words are GOOD when people use them that way; write them in
-  Devanagari: कोर्ट, केस, पुलिस, वोट, पार्टी, सरकार, स्कीम, टारगेट, ट्रेनिंग, बजट, टैक्स, डील, रिपोर्ट, जॉब, परसेंट,
-  बिलियन, मीटिंग, प्लान, फ़ीस, बिल.
-- Avoid shuddh/Sanskritised or official words when a common word exists. Say the right-hand one:
-  हासिल करना → पाना/पूरा करना · लक्ष्य → टारगेट · व्यापार → कारोबार/ट्रेड · निवेश → पैसा लगाना (निवेश once with "यानी" is ok) ·
-  कुशल कामगार → हुनरमंद लोग/स्किल्ड वर्कर · प्रशिक्षण संस्थान → ट्रेनिंग सेंटर · हिस्सेदारी → हिस्सा · सहयोग → साथ काम ·
-  संबंधित मंत्रालय → सरकार/मंत्रालय · निर्णय → फ़ैसला · न्यायालय → कोर्ट · याचिका → अर्ज़ी/केस · प्रतिशत → परसेंट ·
-  आवश्यक → ज़रूरी · पश्चात/उपरांत → बाद · द्वारा → ने (रिपोर्ट की ओर से → रिपोर्ट में) · किया जाएगा → करेंगे/होगा.
-- Simpler words, same facts: never change a number, a tense or who did what while simplifying. "है" stays "है" (what IS
-  true now), a plan stays a plan, a demand stays a demand.
-- More swaps: आपसी सहयोग → साथ मिलकर काम · निर्देश देना → कहना · व्यापारिक → कारोबारी (or drop it) · आर्थिक → पैसे का/इकोनॉमी का.
-- Short, spoken sentences. Use ये/वो, "यानी", "मतलब", "सीधी बात", "अब सवाल ये है", "सोचिए". Talk to the viewer as आप.
-- Explain any hard term in the same breath with "यानी" ("SIR, यानी वोटर लिस्ट की जांच").
-- PLAIN STORY FIRST: before anything else, write plain_story_hi: the whole story in 1-2 sentences a shopkeeper or a
-  farmer would understand: who wants what, why, and what happened. Every *_say line must follow that story. If a viewer
-  can't repeat the story to a friend after the reel, the script failed.
-- In a dispute, say in one simple line what EACH side wants and why ("तमिलनाडु कहता है… कर्नाटक का जवाब है…").
-- Numbers: at most 3 in the whole voice script, and only ones a viewer can picture (rupees, people, days, percent, a
-  date). Never rename a technical quantity ("यूनिट", "मात्रा"); drop it, or compare it ("मांग का करीब पांचवां हिस्सा",
-  "आधे से भी कम"). No decimals like 18.402 or 55.35 in speech: say "करीब 18", "आधे से कम".
-- No jargon a common viewer wouldn't say: technical units (TMC/tmcft, cusecs, MW, MoU…) and committee or agency
-  acronyms (CWRC, CWMA, NHAI…). Say what they mean instead: "कावेरी पानी कमेटी", "रोज़ इतना पानी", "समझौता". Keep a number
-  only if it means something to a viewer; otherwise compare it ("मांग का करीब पांचवां हिस्सा"). Acronyms people already
-  know (CBI, ED, GST, UPSC, IAS) are fine.
-- Make it matter to an ordinary person: one line on what this means for people like the viewer (prices, jobs, fees,
-  ration, safety, their vote), but only if the article supports it; otherwise skip it.
+WHO YOU ARE TALKING TO (Yash, 24 Oct 2026: "the script needs to connect with the very common man")
+Your viewer is an ordinary Indian scrolling on their phone: a shopkeeper in Kanpur, a farmer's son in Bihar, a nurse in
+Indore, a college student in Patna. Smart, but not following this story, not an expert, and they have about 50 seconds.
+They speak everyday Hindustani: Hindi mixed with the English words everyone uses (कोर्ट, पुलिस, वोट, टारगेट, जॉब…).
+
+HOW TO WRITE FOR THEM
+1. Understand the story yourself first. Write plain_story_hi: the whole story in 1-2 sentences you would tell a neighbour
+   at a chai stall: who wants what, why, and what happened or was decided. Every *_say line follows that story; nothing
+   that doesn't serve it goes in.
+2. Talk, don't read. Say it the way you would explain it to that neighbour: short spoken sentences, "आप", the words people
+   actually use. Not a news anchor, not a textbook, not a government press note. Wherever a formal or official word comes
+   to mind, use the word an ordinary person would say instead.
+3. Translate the system into life. Committees, authorities, legal and technical terms, units (like TMC, cusecs, MW) and
+   acronyms mean nothing to this viewer: say what they DO or what they MEAN ("पानी बांटने वाली कमेटी", "रोज़ कुछ पानी").
+   Explain an unavoidable term in the same breath with "यानी".
+4. Numbers: only the 2-3 a viewer can picture (rupees, people, days, a percent, a date). Never rename a technical quantity
+   into a vague word; compare it instead ("मांग का करीब पांचवां हिस्सा", "आधे से भी कम"). No decimals in speech.
+5. In a dispute, give each side one simple line: what it wants and why.
+6. Make it matter: one line on what this means for people like the viewer (prices, jobs, fees, water, safety, their
+   vote), only if the article supports it.
+7. Simpler words, same facts: never change a number, a tense or who did what while simplifying.
+8. Read it back as that shopkeeper before you answer: could he repeat the story to a friend? Would any word or number make
+   him pause? If so, rewrite that line.
 - Do not use hashtags, emojis, or stage directions in any field.
 
-EXAMPLE of the tone (same facts):
-  Too formal: "दोनों देशों ने 2030 तक व्यापार को 100 अरब डॉलर तक पहुंचाने का लक्ष्य निर्धारित किया है। संबंधित मंत्रालय सहयोग आगे बढ़ाएंगे।"
-  Right: "भारत और रूस ने टारगेट रखा है, 2030 तक आपस में 100 बिलियन डॉलर का कारोबार। अब सवाल ये है, ये होगा कैसे?"
+EXAMPLE (an inter-state water dispute):
+  Bad (an official note read aloud): "कावेरी जल विनियमन समिति ने बिलिगुंडलु पर 15 दिन तक 3,000 क्यूसेक्स पानी छोड़ने का
+  निर्देश दिया। कर्नाटक के बांधों में 46.510 यूनिट पानी है।"
+  Good: "कावेरी के पानी पर कर्नाटक और तमिलनाडु फिर आमने-सामने हैं। तमिलनाडु कहता है, उसके किसानों की फसल सूख रही है, उसे
+  और पानी चाहिए। कर्नाटक का जवाब है, इस बार नदी में आधे से भी कम पानी आया, पहले लोगों के पीने का पानी बचाना है। अब पानी
+  बांटने वाली कमेटी ने बीच का रास्ता निकाला: 15 दिन तक कर्नाटक रोज़ कुछ पानी छोड़ेगा, लेकिन ये मांग का करीब पांचवां
+  हिस्सा ही है।"
 
 VOICE / TTS ENGINE LIMITATIONS & PHONETIC RULES (Critical)
 The *_say fields are synthesized directly by an AI voice model. Neural TTS engines struggle with literary grammar, complex inflections, and stacked character markers:
@@ -139,7 +137,7 @@ INTRODUCE EVERY PERSON (viewers from any state may not know who anyone is)
 - Within hook_say or the start of core_say, add one short context line so a viewer from any state can follow: where this is and why it matters.
 
 OUTPUT FIELDS
-- plain_story_hi: the story in 1-2 plain sentences (see PLAIN STORY FIRST). Not shown on screen.
+- plain_story_hi: the story in 1-2 plain sentences (step 1 of HOW TO WRITE FOR THEM). Not shown on screen.
 - people: every person named anywhere in the *_say lines, in order of first mention: [{"name_hi": "संजय राउत", "role_hi": "शिवसेना (UBT) के सांसद"}]. role_hi is exactly the role you used when introducing them (from the PEOPLE block when they are listed there). Empty list if nobody is named.
 - headline_hi: catchy on-screen headline, max 8 words.
 - subtitle_hi: one short on-screen line under the headline (max 9 words) that adds the key fact the headline leaves out (who, where or how much). No symbols except ₹; empty string if there is nothing to add.
@@ -516,33 +514,6 @@ def intro_problems(script, known=()):
             out.append(f"{name} is not introduced on first mention (say: '{p.get('role_hi') or 'role'} {name}')")
     if named > 3:
         out.append(f"{named} people are named: keep at most 3, describe the rest without a name")
-    return out
-
-
-# Words an ordinary viewer doesn't say (Yash: "connect with the very common man"). Any of them in a spoken or on-screen
-# field -> one rewrite (together with the intro check). Common acronyms (CBI, ED, GST, UPSC, IAS) are fine.
-JARGON = ["टीएमसी", "क्यूसेक", "समिति", "प्राधिकरण", "प्राथमिकता", "लक्ष्य", "हासिल", "सहयोग", "निर्देश", "प्रशिक्षण",
-          "कुशल", "संबंधित", "तत्पश्चात", "उपरोक्त", "संपन्न", "निर्धारित", "विनियमन", "आवश्यक", "पश्चात"]  # not "हवाला": also the money-laundering term
-TEXT_FIELDS = ("headline_hi", "subtitle_hi", "core_title_hi", "core_points_hi", "twist_stat", "twist_label",
-               "twist_detail_hi", "question_hi", "engagement_title_hi")
-
-
-def jargon_problems(script):
-    blob = " ".join(" ".join(v) if isinstance(v, list) else str(v or "")
-                    for k, v in script.items() if k in SAY_FIELDS or k in TEXT_FIELDS)
-    say = " ".join(str(script.get(k) or "") for k in SAY_FIELDS)
-    out = []
-    found = [w for w in JARGON if w in blob]
-    if found:
-        out.append(f"too formal/technical for a common viewer: {', '.join(found)}. Say it the way people talk "
-                   "(e.g. कमेटी, टारगेट, पाना, साथ काम, कहा, ट्रेनिंग, हुनरमंद; for water/power units say what it means "
-                   "or compare it instead of TMC/cusecs)")
-    if re.search(r"\d+\s*(?:यूनिट|मात्रा)", say) or re.search(r"\d+\.\d{2,}", say):
-        out.append("a number a viewer can't picture (a renamed unit like 'यूनिट' or a decimal like 46.510): drop it or "
-                   "compare it ('आधे से भी कम', 'मांग का करीब पांचवां हिस्सा')")
-    nums = re.findall(r"\d[\d,.]*", say)
-    if len(nums) > 5:
-        out.append(f"{len(nums)} numbers in the voice script: keep the 2-3 that matter, say the rest in words")
     return out
 
 
@@ -1029,7 +1000,7 @@ def luna_script(inp, aid):
     script_data, why = openai_script(inp["system"], inp["user_msg"])
     problems = []
     if script_data:
-        problems = intro_problems(script_data, inp["known"]) + jargon_problems(script_data)
+        problems = intro_problems(script_data, inp["known"])
         if problems:  # one rewrite: fix exactly these, change nothing else
             print(f"  intro check #{aid}: {'; '.join(problems)} -> one rewrite")
             fixed, why2 = openai_script(inp["system"], inp["user_msg"] + "\n\nYOUR PREVIOUS SCRIPT:\n"
@@ -1037,7 +1008,7 @@ def luna_script(inp, aid):
                                         + "\n\nFIX ONLY THIS, keep everything else as it is:\n- " + "\n- ".join(problems))
             if fixed:
                 script_data = fixed
-                problems = intro_problems(script_data, inp["known"]) + jargon_problems(script_data)
+                problems = intro_problems(script_data, inp["known"])
     return script_data, why, problems
 
 

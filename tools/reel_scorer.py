@@ -725,6 +725,8 @@ def dispatch_daily_reel(u_db, m_db, model=None, force=False):
         print("  No new high viral candidate (score >= 7) available to dispatch right now.")
         return
 
+    if model is None and os.environ.get("REEL_PIPELINE", "b4r") != "luna":
+        model = gemma_model()   # B4r needs Gemma anyway; the quality gate then runs too
     approved_candidate = None
     approved_script = None
     approved_persona = None
@@ -734,6 +736,7 @@ def dispatch_daily_reel(u_db, m_db, model=None, force=False):
 
     for cand in candidates:
         aid, topic, score, hook, fact, why = int(cand[0]), str(cand[1]), int(cand[2]), str(cand[3]), str(cand[4]), str(cand[5])
+        SPENT["inr"] = 0.0   # the runaway guard is per reel: each candidate is its own reel (B4r costs ~Rs 2-4)
         art_rows = m_db.execute(
             "SELECT title, rephrased_title, rephrased_article, category, image_url, url, content "
             "FROM articles WHERE id = ?",
@@ -758,7 +761,7 @@ def dispatch_daily_reel(u_db, m_db, model=None, force=False):
             if last_openai:  # only the voice changed: the OpenAI script stays (no second payment)
                 script_data = last_openai
             else:
-                script_data, why, problems = luna_script(inp, aid)
+                script_data, why, problems = live_script(inp, aid)
                 if script_data:
                     if problems:
                         print(f"::warning title=Reel #{aid}: script problems left::{'; '.join(problems)[:400]}")
@@ -1122,6 +1125,9 @@ field. Report a problem only when it is real:
 - legal: an allegation stated as fact, or a claim without who made it.
 - story: after the reel, could the viewer retell who wants what, why, and what happened? If not, say what is missing.
 For each problem give: field, the exact words, the problem type, and a short suggestion (in Hindi where it is wording).
+"<newspaper> की रिपोर्ट के मुताबिक" (e.g. "द हिंदू की रिपोर्ट के मुताबिक") is the channel's required credit to the newspaper
+the story comes from, even though the article does not name itself: never report it. Never suggest an explanation in
+brackets; suggest the plain word or phrase people use instead.
 Do not report style preferences or things that are fine. If everything is fine, return an empty list.
 Return JSON: {"problems": [{"field": "...", "quote": "...", "type": "fact|unclear|formal|legal|story", "fix": "..."}]}"""
 GEMMA_REVIEW_SCHEMA = {"type": "object", "properties": {"problems": {"type": "array", "items": {"type": "object",
@@ -1217,7 +1223,7 @@ def luna_brief(inp):
     return openai_script(BRIEF_SYSTEM, user, schema_=BRIEF_SCHEMA)
 
 
-def luna_script(inp, aid):
+def luna_script(inp, aid, edit=None):
     """OpenAI (Luna) script + the people-intro check with one rewrite. -> (script or None, why, problems)."""
     if os.environ.get("REEL_PROMPT_VARIANT") == "brief":
         brief, why_b = luna_brief(inp)
@@ -1240,9 +1246,10 @@ def luna_script(inp, aid):
             if fixed:
                 script_data = fixed
                 problems = intro_problems(script_data, inp["known"])
-        if os.environ.get("REEL_EDIT_PASS", "on") == "off":
+        edit = edit or os.environ.get("REEL_EDIT_PASS", "on")
+        if edit == "off":
             return script_data, why, problems
-        if os.environ.get("REEL_EDIT_PASS") == "gemma":
+        if edit == "gemma":
             try:
                 user = ("ARTICLE (for facts only):\n" + inp["head"] + f"SUMMARY:\n{inp['body'][:1500]}\n\n"
                         "DRAFT SCRIPT:\n" + json.dumps(script_data, ensure_ascii=False))
@@ -1257,6 +1264,58 @@ def luna_script(inp, aid):
         else:
             print(f"  plain-language edit #{aid}: kept the draft ({why_e or 'the edit lost a person introduction'})")
     return script_data, why, problems
+
+
+# Spoken and on-screen lines are Hindi: an English word in Latin letters ("deadline", "wetlands") is a slip of the writer.
+# All-caps short forms (ED, CID, KPSC) are fine. No word is banned: Luna writes the word in Devanagari or says it plainly.
+LATIN_WORD = re.compile(r"\b[A-Za-z][a-z]{2,}\b")
+
+
+def latin_problems(script):
+    out = []
+    for k, v in (script or {}).items():
+        if k == "people":
+            continue
+        words = sorted({w for s in (v if isinstance(v, list) else [v]) if isinstance(s, str) for w in LATIN_WORD.findall(s)})
+        if words:
+            out.append(f"{k}: {', '.join(words)} written in English letters: write it in Devanagari (or the plain Hindi word people use)")
+    return out
+
+
+def b4r_script(inp, aid):
+    """LIVE reel script (Yash picked it on 24 Oct 2026 after testing B2/B3/B4/B4r on the same stories): Gemma shortens
+    the article in English → translates to Hindi → simplifies the Hindi; Luna writes the script from that story only (no
+    editor pass); Gemma checks it against the full article and Luna fixes exactly the listed problems (up to 2 rounds);
+    then the English-letters check with one rewrite. -> (script or None, why, problems)"""
+    tg = time.time()
+    gs = gemma_b4_story(gemma_model(), inp)
+    print(f"  B4 story #{aid} ({len(gs.split())} words, {time.time() - tg:.0f}s): {gs}", flush=True)
+    if gs:
+        # Only Gemma's plain story: no English headline or "Key Fact" (the headline "…18.402 tmcft…" leaked its figure).
+        head = "\n".join(l for l in inp["head"].splitlines() if not l.startswith(("Key Fact:", "Title:"))) + "\n"
+        inp = dict(inp, user_msg=head + "STORY (150-200 words, everything you need):\n" + gs)
+    else:
+        print(f"  B4 story #{aid} failed: Luna writes from the article")
+    sc, why, problems = luna_script(inp, aid, edit="off")
+    if not sc:
+        return None, why, problems
+    sc = review_loop(inp, aid, sc)
+    latin = latin_problems(sc)
+    if latin:
+        print(f"  English-letters check #{aid}: {'; '.join(latin)} -> one rewrite")
+        fixed, _ = openai_script(inp["system"], inp["user_msg"] + "\n\nYOUR PREVIOUS SCRIPT:\n"
+                                 + json.dumps(sc, ensure_ascii=False)
+                                 + "\n\nFIX ONLY THIS, keep everything else as it is:\n- " + "\n- ".join(latin))
+        if fixed and len(intro_problems(fixed, inp["known"])) <= len(intro_problems(sc, inp["known"])):
+            sc = fixed
+    return sc, why, intro_problems(sc, inp["known"]) + latin_problems(sc)
+
+
+def live_script(inp, aid):
+    """The live script pipeline: B4r; REEL_PIPELINE=luna (repo variable) goes back to Luna alone without a code change."""
+    if os.environ.get("REEL_PIPELINE", "b4r") == "luna":
+        return luna_script(inp, aid)
+    return b4r_script(inp, aid)
 
 
 def luna_test(m_db, u_db, ids):
@@ -1277,9 +1336,9 @@ def luna_test(m_db, u_db, ids):
         SPENT["inr"] = 0.0   # the budget is per reel: each test story is its own reel
         if os.environ.get("REEL_PROMPT_VARIANT") == "b3":
             os.environ["REEL_PROMPT_VARIANT_B3"] = "1"
-        if os.environ.get("REEL_PROMPT_VARIANT") in ("gemma_brief", "gemma_brief_hi", "gemma_only", "b3", "b4", "b4r"):
+        if os.environ.get("REEL_PROMPT_VARIANT") in ("gemma_brief", "gemma_brief_hi", "gemma_only", "b3", "b4"):
             tg = time.time()
-            gs = (gemma_b4_story(gemma_model(), inp) if os.environ.get("REEL_PROMPT_VARIANT") in ("b4", "b4r")
+            gs = (gemma_b4_story(gemma_model(), inp) if os.environ.get("REEL_PROMPT_VARIANT") == "b4"
                   else gemma_reel_summary(gemma_model(), inp))
             print(f"## GEMMA SUMMARY #{aid} ({len(gs.split())} words, {time.time() - tg:.0f}s): {gs}", flush=True)
             if gs:
@@ -1288,7 +1347,9 @@ def luna_test(m_db, u_db, ids):
                 head = "\n".join(l for l in inp["head"].splitlines() if not l.startswith(("Key Fact:", "Title:"))) + "\n"
                 inp = dict(inp, user_msg=head + "STORY (150-200 words, everything you need):\n" + gs)
         t0 = time.time()
-        if os.environ.get("REEL_PROMPT_VARIANT") == "gemma_only":   # Gemma writes the script itself (comparison)
+        if os.environ.get("REEL_PROMPT_VARIANT", "") in ("", "b4r"):   # the live pipeline, exactly
+            sc, why, problems = live_script(inp, aid)
+        elif os.environ.get("REEL_PROMPT_VARIANT") == "gemma_only":   # Gemma writes the script itself (comparison)
             try:
                 sc, why = gemma_model().json(inp["system"], inp["user_msg"], SCRIPT_SCHEMA, temperature=0.25, max_tokens=1400), "gemma"
             except Exception as e:
@@ -1296,7 +1357,7 @@ def luna_test(m_db, u_db, ids):
             problems = intro_problems(sc, inp["known"]) if sc else []
         else:
             sc, why, problems = luna_script(inp, aid)
-            if sc and os.environ.get("REEL_PROMPT_VARIANT") in ("b3", "b4r"):
+            if sc and os.environ.get("REEL_PROMPT_VARIANT") == "b3":
                 sc = review_loop(inp, aid, sc)
                 problems = intro_problems(sc, inp["known"])
         if not sc:
@@ -1407,7 +1468,7 @@ def main():
         return
 
     print(f"Evaluating {len(candidates)} new articles with Gemma 4 12B ({MODEL_NAME})...")
-    model = Model(download())
+    model = gemma_model()   # one Gemma (8k context) for scoring, the B4r script steps and the quality gate
     global FEEDBACK
     FEEDBACK = audience_feedback(u_db)
     if FEEDBACK:

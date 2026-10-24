@@ -51,3 +51,14 @@ class IntroCheck(unittest.TestCase):
 if __name__ == "__main__":
     unittest.main()
 
+
+
+def test_latin_problems():
+    from tools.reel_scorer import latin_problems
+    sc = {"core_say": "कोर्ट ने चार महीने की deadline दी, ED और KPSC जांच करेंगे।", "core_points_hi": ["9 साल", "wetlands बचेंगे"],
+          "people": [{"name_hi": "x", "role_hi": "Rafale"}], "hook_say": "तालाब बचेंगे।"}
+    probs = latin_problems(sc)
+    assert len(probs) == 2
+    assert probs[0].startswith("core_say: deadline")          # ED / KPSC (short forms) are fine
+    assert probs[1].startswith("core_points_hi: wetlands")
+    assert latin_problems({"hook_say": "सब ठीक है।"}) == []

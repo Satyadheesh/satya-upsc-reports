@@ -86,35 +86,23 @@ def headlines(main, trans, notes, n=5, hi=False):
     return out
 
 
-def caption(period, items, heads, hi=False, both=False):
-    head = f"<b>{esc(title(period, hi))}</b>\n"
-    head += (f"<i>सत्याधीश · {items} नोट्स</i>\n" if hi else f"<i>SatyaDheesh · {items} notes</i>\n")
-    if both:
-        head += ("सार (जल्दी दोहराव) + विस्तृत नोट्स (तथ्य, प्रश्न)\n" if hi else "Brief (quick revision) + Detailed notes (facts, questions)\n")
-    head += "\n"
-    foot = (f"\n<a href=\"{page_url(period, True)}\">ऑनलाइन पढ़ें</a> · <a href=\"https://satyadheesh.in/upsc/reports?lang=hi\">सभी रिपोर्ट</a>"
-            if hi else
-            f"\n<a href=\"{page_url(period)}\">Read online</a> · <a href=\"https://satyadheesh.in/upsc/reports\">All reports</a>")
-    label = "मुख्य ख़बरें:\n" if hi else "Top stories:\n"
-    lines = []
-    for i, (t, paper) in enumerate(heads, 1):
-        line = f"{i}. {esc(t)} <i>({paper})</i>\n"
-        if len(head + label + "".join(lines) + line + foot) > CAPTION_MAX:
-            break
-        lines.append(line)
-    return head + (label + "".join(lines) if lines else "") + foot
+def caption(period, items, heads=None, hi=False, both=False):
+    """Short on purpose (Yash, 24 Oct 2026): title, one line of what's inside, one link. `heads` is no longer shown."""
+    if hi:
+        what = f"{items} नोट्स" + (" · सार + विस्तृत" if both else "")
+        return f"<b>{esc(title(period, True))}</b>\n{what} · <a href=\"{page_url(period, True)}\">ऑनलाइन पढ़ें</a>"
+    what = f"{items} notes" + (" · Brief + Detailed" if both else "")
+    return f"<b>{esc(title(period))}</b>\n{what} · <a href=\"{page_url(period)}\">Read online</a>"
 
 
 def ssc_caption(period, items, hi=False):
-    """The SSC one-liner PDF's caption (the SSC edition of the same report period)."""
+    """The SSC one-liner PDF's caption: short, like the UPSC one."""
     k = {"daily": "", "weekly": ("साप्ताहिक " if hi else "Weekly "), "monthly": ("मासिक " if hi else "Monthly ")}[period["kind"]]
     if hi:
-        return (f"<b>एसएससी {k}करेंट अफेयर्स — {esc(label(period, True))}</b>\n<i>सत्याधीश · {items} वन-लाइनर प्रश्न-उत्तर</i>\n"
-                "SSC CGL, CHSL, MTS, रेलवे और राज्य परीक्षाओं के लिए: हर प्रश्न, उत्तर और मुख्य तथ्य।\n\n"
-                f"<a href=\"{ssc_page_url(period, True)}\">ऑनलाइन पढ़ें</a> · <a href=\"https://satyadheesh.in/ssc?lang=hi\">विषय के अनुसार सभी प्रश्न</a>")
-    return (f"<b>SSC {k}Current Affairs — {esc(label(period))}</b>\n<i>SatyaDheesh · {items} one-liner questions</i>\n"
-            "For SSC CGL, CHSL, MTS, Railways and state exams: every question with its answer and key fact.\n\n"
-            f"<a href=\"{ssc_page_url(period)}\">Read online</a> · <a href=\"https://satyadheesh.in/ssc\">All questions by topic</a>")
+        return (f"<b>एसएससी {k}करेंट अफेयर्स — {esc(label(period, True))}</b>\n"
+                f"{items} वन-लाइनर प्रश्न-उत्तर · <a href=\"{ssc_page_url(period, True)}\">ऑनलाइन पढ़ें</a>")
+    return (f"<b>SSC {k}Current Affairs — {esc(label(period))}</b>\n"
+            f"{items} one-liner questions · <a href=\"{ssc_page_url(period)}\">Read online</a>")
 
 
 def _clip(s, n):

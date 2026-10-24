@@ -103,11 +103,12 @@ The ₹ symbol may appear ONLY in the on-screen fields: headline_hi and twist_st
 
 OUTPUT FIELDS
 - headline_hi: catchy on-screen headline, max 8 words.
+- subtitle_hi: one short on-screen line under the headline (max 9 words) that adds the key fact the headline leaves out (who, where or how much). No symbols except ₹; empty string if there is nothing to add.
 - hook_say: 1-2 spoken lines that grab attention immediately (a surprising fact, a question, or a contrast).
 - core_title_hi: short title for the core news card, max 8 words.
 - core_points_hi: exactly 2 or 3 very short on-screen bullet points in Hindi (e.g. ["22 नए सरकारी केंद्र शुरू", "किडनी के मरीज़ों को सीधा फ़ायदा", "सत्यापित डेटा"]). Max 8 words per bullet.
 - core_say: 3-4 spoken lines: what actually happened, in simple and concrete terms (who, what, where, how much), plus one line of background (how we got here).
-- twist_stat: the single key number or word shown on screen (e.g. "₹999" or "22 केंद्र").
+- twist_stat: the single key number or word shown on screen (e.g. "₹999" or "22 केंद्र"). It must be a DIFFERENT number or word from any in headline_hi: the viewer has already seen that one.
 - twist_label: short label for that number (e.g. "डायलिसिस फ़ीस" or "नए केंद्र").
 - twist_detail_hi: 1 short on-screen line in Hindi summarizing the ground reality, budget, or contrast (max 10 words, e.g. "प्राइवेट में ₹4,000 तक खर्च, सरकारी से बड़ी राहत").
 - twist_say: 2-3 spoken lines: the ground reality, the key number or the contrast, and what happens next (a hearing, deadline, vote, decision or rollout), if the article says.
@@ -339,10 +340,52 @@ SUITABILITY_POLITICAL_EXTRA = """
    - it ends on a question, not a verdict, and does not cheer or mock a party.
 """
 
+# On-screen source label from the article's host (it said TheHindu for every non-Indian-Express story).
+SOURCE_LABELS = {
+    "thehindu": "TheHindu", "indianexpress": "TheIndianExpress", "ndtv": "NDTV", "timesofindia": "TimesOfIndia",
+    "indiatimes": "TimesOfIndia", "economictimes": "EconomicTimes", "hindustantimes": "HindustanTimes",
+    "livemint": "Mint", "indiatoday": "IndiaToday", "deccanherald": "DeccanHerald", "tribuneindia": "TheTribune",
+    "telegraphindia": "TheTelegraph", "bbc": "BBC", "aljazeera": "AlJazeera", "reuters": "Reuters",
+    "onmanorama": "Onmanorama", "greaterkashmir": "GreaterKashmir", "odishabytes": "OdishaBytes",
+    "thesouthfirst": "TheSouthFirst", "telanganatoday": "TelanganaToday", "wired": "Wired", "techcrunch": "TechCrunch",
+    "theguardian": "TheGuardian", "scmp": "SCMP", "dawn": "Dawn",
+}
+
+
+def source_label_for(url):
+    from urllib.parse import urlparse
+    host = (urlparse(url or "").hostname or "").lower()
+    if host.startswith("economictimes."):
+        return "EconomicTimes"
+    for key, label in SOURCE_LABELS.items():
+        if key in host.split("."):
+            return label
+    parts = [p for p in host.split(".") if p and p not in ("www", "m", "amp", "com", "in", "co", "org", "net", "uk")]
+    return parts[0].capitalize() if parts else "TheHindu"
+
+
+_NUMS = re.compile(r"\d[\d,.]*")
+
+
+def distinct_stat(headline, stat, label, detail, points):
+    """Card 3's big number must not repeat the hook's (the 24 Oct reel showed '50,000 रुपये' on cards 1, 2 and 3).
+    If it does, use another number from the detail line or the bullet points (with the word after it), else the
+    label itself as the big word."""
+    seen = {n.replace(",", "") for n in _NUMS.findall(headline or "")}
+    mine = {n.replace(",", "") for n in _NUMS.findall(stat or "")}
+    if not mine or not (mine & seen):
+        return stat, label
+    for text_ in [detail or ""] + list(points or []):
+        for m in re.finditer(r"(₹?\d[\d,.]*)\s*(\S+)?", text_):
+            if m.group(1).lstrip("₹").replace(",", "") not in seen:
+                return " ".join(x for x in (m.group(1), m.group(2)) if x), ""  # the old label described the old number
+    return (label or stat), ""
+
 SCRIPT_SCHEMA = {
     "type": "object",
     "properties": {
         "headline_hi": {"type": "string"},
+        "subtitle_hi": {"type": "string"},
         "hook_say": {"type": "string"},
         "core_title_hi": {"type": "string"},
         "core_points_hi": {
@@ -358,7 +401,7 @@ SCRIPT_SCHEMA = {
         "engagement_say": {"type": "string"}
     },
     "required": [
-        "headline_hi", "hook_say", "core_title_hi", "core_points_hi", "core_say",
+        "headline_hi", "subtitle_hi", "hook_say", "core_title_hi", "core_points_hi", "core_say",
         "twist_stat", "twist_label", "twist_detail_hi", "twist_say", "question_hi", "engagement_say"
     ]
 }
@@ -683,9 +726,9 @@ def dispatch_daily_reel(u_db, m_db, model=None, force=False):
     if not twist_detail:
         twist_detail = "सत्यापित ज़मीनी रिपोर्ट"
 
-    source_label = "TheHindu"
-    if "indianexpress" in source_url.lower():
-        source_label = "TheIndianExpress"
+    source_label = source_label_for(source_url)
+    subtitle_hi = " ".join(str(script_data.get("subtitle_hi") or "").split())
+    twist_stat, twist_label = distinct_stat(headline_hi, twist_stat, twist_label, twist_detail, core_points)
 
     hook_badge = "ताज़ा पड़ताल"
     twist_badge = "ज़मीनी हक़ीक़त"
@@ -700,7 +743,7 @@ def dispatch_daily_reel(u_db, m_db, model=None, force=False):
         "hook": {
             "badge": hook_badge,
             "title": headline_hi,
-            "subtitle": "सत्याधीश रिपोर्ट",
+            "subtitle": subtitle_hi,
             "say": hook_say
         },
         "core": {

@@ -15,7 +15,7 @@ BOLD = re.compile(r"\*\*(.+?)\*\*")
 KICK = {"politics": ("Politics", "राजनीति"), "regional": ("States", "राज्य"), "crime": ("Law & Order", "क़ानून-व्यवस्था"),
         "economy": ("Business", "कारोबार"), "international": ("World", "दुनिया"), "education": ("Education", "शिक्षा"),
         "health": ("Health", "स्वास्थ्य"), "environment": ("Environment", "पर्यावरण"), "sports": ("Sport", "खेल")}
-N_BRIEFS = 12
+N_BRIEFS = 7
 PHOTOS_PER_SECTION = 4
 
 
@@ -51,6 +51,11 @@ def paras_of(it, hi):
     if hi:
         return [p.strip() for p in re.split(r"\n+", it["body_hi"]) if p.strip()]
     return it.get("orig") or [p.strip() for p in re.split(r"\n+", it["body"]) if p.strip()]
+
+
+def first_sentence(p, n=150):
+    m = re.match(r"(.{40,%d}?[.!?।])\s" % n, p + " ")
+    return m.group(1) if m else (p[:n].rsplit(" ", 1)[0] + "…" if len(p) > n else p)
 
 
 def take(paras, limit):
@@ -118,7 +123,7 @@ def render(paper, paper_hi, items, lang, day, total_all=None):
         f'<div class="cols c2">{ps(take(paras_of(it, hi), 900)[0], True)}'
         f'<p class="jump">{cont}: {e(sec_names[section_of(it)])} →</p></div></article>' for it in seconds)
     brief_html = "".join(
-        f'<div class="brief"><h4>{e(title_of(it, hi))}</h4><p>{inline(take(paras_of(it, hi), 160)[0][0])}</p></div>'
+        f'<div class="brief"><h4>{e(title_of(it, hi))}</h4><p>{inline(first_sentence(paras_of(it, hi)[0]))}</p></div>'
         for it in briefs if paras_of(it, hi))
     p.append(f'<div class="frow"><div class="fmain">{sec_html}</div><aside class="rail"><div class="railh">'
              f'{"संक्षेप में" if hi else "IN BRIEF"}</div>{brief_html}</aside></div>')
@@ -183,7 +188,7 @@ figure.big img { max-height: 120mm; object-fit: cover; }
 .c5 { columns: 5; } .c2 { columns: 2; }
 .flead { border-bottom: 2px solid #111; padding-bottom: 2mm; margin-bottom: 3mm; }
 .jump { font: italic 600 8pt 'Source Serif 4', 'Deva', serif; text-indent: 0; color: #9b1c1c; }
-.frow { display: grid; grid-template-columns: 4fr 1.15fr; gap: 6mm; break-after: page; }
+.frow { display: grid; grid-template-columns: 4fr 1.15fr; gap: 6mm; break-after: page; break-inside: avoid; }
 .fmain { display: grid; grid-template-columns: 1fr 1fr; gap: 6mm; }
 .fsec h3 { font: 700 19pt/1.12 'Playfair Display', 'Deva Serif', serif; margin: 0 0 2mm; }
 .hi .fsec h3 { font: 700 15pt/1.4 'Deva Serif', serif; }

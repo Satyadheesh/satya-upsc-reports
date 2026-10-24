@@ -1193,7 +1193,9 @@ def luna_test(m_db, u_db, ids):
             gs = gemma_reel_summary(gemma_model(), inp)
             print(f"## GEMMA SUMMARY #{aid} ({len(gs.split())} words, {time.time() - tg:.0f}s): {gs}", flush=True)
             if gs:
-                head = inp["head"].replace(next((l for l in inp["head"].splitlines() if l.startswith("Key Fact:")), "\x00"), "")
+                # Only Gemma's plain summary: no English headline or "Key Fact" (the headline "…18.402 tmcft…" leaked
+                # its figure into the script).
+                head = "\n".join(l for l in inp["head"].splitlines() if not l.startswith(("Key Fact:", "Title:"))) + "\n"
                 inp = dict(inp, user_msg=head + "STORY (150-200 words, everything you need):\n" + gs)
         t0 = time.time()
         if os.environ.get("REEL_PROMPT_VARIANT") == "gemma_only":   # Gemma writes the script itself (comparison)

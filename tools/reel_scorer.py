@@ -1172,6 +1172,7 @@ THIS REEL: ONE STORY, ONE POINT (the viewer is an ordinary Indian who does not f
   anywhere, on screen either ("1.69 करोड़" is said "करीब पौने दो करोड़").
 - Say whose loss or gain it is in everyday terms when the story shows it (whose money, whose rice, whose ticket).
 - Leave out procedure, background and side details. If a line needs explaining, it doesn't belong in the reel.
+- Every line adds something new: never say the same point twice.
 - engagement_say: one short question an ordinary viewer can answer from their own life or opinion in a word or two,
   never about procedure or timelines, and only one question.
 - Never add anything that isn't in the story.
@@ -1180,6 +1181,8 @@ GEMMA_B5_REVIEW_EXTRA = """
 This reel is for an ordinary Indian who does not follow the news, and tells ONE story with ONE point. Also report:
 - too_much: a name, office, abbreviation, number, procedure or side detail the viewer does not need to follow the main
   point. The fix is to cut it (say what to cut).
+A repeated point is too_much. A fix never brings in a name, office, fund or abbreviation the viewer wouldn't know: say
+what it is in plain words instead.
 Report "story" only when the main point (what happened and why it matters to the viewer) is unclear, never because a
 detail from the article is missing.
 Allowed problem types: fact|unclear|formal|legal|story|too_much. Write "fix" in simple English (what to change), not
@@ -1297,7 +1300,8 @@ def review_loop(inp, aid, script, rounds=2, extra=""):
                                    + "\n\nA CHECKER FOUND THESE PROBLEMS. Fix exactly these and keep everything else as it is "
                                    "(same facts, attribution, introductions and limits). The checker's quotes may be slightly "
                                    "garbled: find the line it means and write the fix in your own words; never leave a "
-                                   "sentence without its subject:\n- "
+                                   "sentence without its subject; if a fix brings in an office, fund or abbreviation, say what "
+                                   "it is in plain words, not its short form (police, CBI, ED, CID, Supreme Court are known):\n- "
                                    + "\n- ".join(f"[{p.get('type')}] {p.get('field')}: \"{p.get('quote')}\" → {p.get('fix')}" for p in probs[:10]))
         if not fixed:
             print(f"  B3 fix #{aid} failed ({why}); keeping the last script")

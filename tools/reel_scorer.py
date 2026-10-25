@@ -42,6 +42,61 @@ Answer in JSON:
 - "why": One short sentence explaining the score
 """
 
+# v2 (Yash, 26 Oct 2026: "the selection is not good enough, a normal Indian who is not so intellectual won't understand"):
+# the common-man test first. A minister's corruption backed by a raid/FIR/chargesheet/court/audit passes; court procedure,
+# agency processes, party affairs and government systems don't. Test with --select-test; live with REEL_SELECT=v2.
+SYSTEM_COMMON = """You are the executive producer of SatyaDheesh's Hindi news reels for ORDINARY Indians: a shopkeeper in
+Kanpur, a farmer's son in Bihar, a nurse in Indore, a college student in Patna. Smart people who do not follow the news
+closely and have no background on any story. Score how well this story will work for them as a 50-second reel (0 to 10).
+
+FIRST, THE COMMON-MAN TEST. Write "one_line_hi": the whole story in one plain Hindi sentence that a neighbour would
+understand with no background. Then ask two questions:
+A. Would they understand that sentence without knowing any institution, procedure, law or earlier episode?
+B. Does it touch their life or something they feel strongly about? For example: money in their pocket (prices, petrol,
+   LPG, gold, taxes, salaries, pensions, loans, bank and UPI rules), jobs, exams and results, farming and crops, trains
+   and travel, health and hospitals, schools, government schemes and payments, weather and floods, safety, public money
+   stolen or wasted (a minister or officer accused of taking crores, backed by a raid, FIR, chargesheet, court order or
+   audit), a promise made to people, cricket, films, a real human story, a record or a wonder from India.
+If the answer to A or B is no, the story scores at most 4. Stories that usually fail: court procedure (appeals, hearings,
+petitions about how a case was handled), agency and government processes, party organisation and internal fights,
+government software and systems, reports and committees, diplomatic statements, stories that need earlier background,
+and stories that matter mainly to people who follow politics or policy closely. A political story passes only when it
+is about something people feel (prices, jobs, a promise, a scheme, public money, a scam backed by official action).
+
+THEN SCORE the stories that pass (add these up):
+1. Touches the viewer's life or money, or makes them angry, proud or amazed (0-4)
+2. Simple to tell: one clear point, few names, no jargon needed (0-2)
+3. Scroll-stopping hook: a surprising contrast, a number a viewer can picture, or a question (0-2)
+4. Talkability: would they forward it on WhatsApp to family saying "देखो ये"? (0-2)
+
+CAPS:
+- A foreign story with no direct effect on ordinary Indians scores at most 4.
+
+WHAT TO REJECT (Score 0):
+- Routine partisan name-calling, spokesperson bickering, or unverified verbal allegations without official records.
+- Mundane procedural press releases or local party committee reshuffles.
+- Violent crimes, murders, sexual offenses, tragic deaths, accidents with casualties, grief/mourning.
+- Personal celebrity scandals, divorces, custody battles.
+- Defamation hazards (claims must be grounded in official records, EC filings, CAG audits, affidavits, or established data).
+
+Answer in JSON:
+- "one_line_hi": the story in one plain Hindi sentence (Devanagari)
+- "viral_score": Integer 0 to 10 (7+ means excellent reel material, 0 if rejection criteria met)
+- "topic": Short category string (e.g. "politics_funding", "corruption", "prices", "jobs_exams", "schemes", "cinema", "infrastructure", "science_space", "consumer_hack", "defence", "curiosity", "sports", "economy", "weather")
+- "hook_angle": A compelling opening hook or question in conversational Hindi (Devanagari)
+- "wow_fact": The single most impressive number, record, or fact in the story
+- "why": One short sentence explaining the score
+"""
+SCHEMA_COMMON = {"type": "object", "properties": {"one_line_hi": {"type": "string"},
+                 "viral_score": {"type": "integer", "minimum": 0, "maximum": 10}, "topic": {"type": "string"},
+                 "hook_angle": {"type": "string"}, "wow_fact": {"type": "string"}, "why": {"type": "string"}},
+                 "required": ["one_line_hi", "viral_score", "topic", "hook_angle", "wow_fact", "why"]}
+
+
+def select_v2():
+    return os.environ.get("REEL_SELECT", "v1") == "v2"
+
+
 SCHEMA = {
     "type": "object",
     "properties": {
@@ -519,8 +574,9 @@ def intro_problems(script, known=()):
         role = (p.get("role_hi") or "").strip()
         if not role or not (_role_words(role) & _role_words(window)):
             out.append(f"{name} is not introduced on first mention (say: '{p.get('role_hi') or 'role'} {name}')")
-    if named > 3:
-        out.append(f"{named} people are named: keep at most 3, describe the rest without a name")
+    cap = 2 if "b5" in (os.environ.get("REEL_PROMPT_VARIANT", ""), os.environ.get("REEL_PIPELINE", "b4r")) else 3
+    if named > cap:
+        out.append(f"{named} people are named: keep at most {cap}, describe the rest without a name")
     return out
 
 
@@ -1078,13 +1134,55 @@ what they mean or a comparison a viewer can picture ("मांग का कर
 TEXT_SCHEMA = {"type": "object", "properties": {"text": {"type": "string"}}, "required": ["text"]}
 
 
-def gemma_b4_story(model, inp):
+# B5 (Yash, 26 Oct 2026: scripts too dense for a common man): one story, one point. Same steps as B4r; the prompts
+# keep only what the viewer needs (B4's "keep every fact" made each step add detail).
+GEMMA_B5_STORY_SYSTEM = """You tell a news story to an ordinary Indian who does not follow the news (a shopkeeper in
+Kanpur, a farmer's son in Bihar). Read the article and write 100-150 words of plain, simple English (short sentences) for
+a reel scriptwriter:
+1. The one main thing that happened, in the first sentence.
+2. Why it matters to an ordinary person, only if the article shows it or it is plainly true (a price, a job, money,
+   safety, a promise). Never invent.
+3. The one or two details that make it real: one number a viewer can picture, one human detail.
+4. What happens next, if the article says.
+Rules: name at most 2 people; everyone else by their role ("a minister", "the officer"). No abbreviations and no names of
+offices, departments, laws, systems or schemes people don't already know (police, CBI, ED, Supreme Court, RBI are known):
+say what they do instead. Numbers only if a viewer can picture them, rounded, money in rupees. Leave out procedure,
+background, side stories and who-said-what that doesn't change the story. Keep every attribution exact (who said or
+alleged what); an allegation stays an allegation. Facts only from the article; change nothing.
+Return JSON: {"summary": "..."}"""
+GEMMA_B5_SIMPLIFY_SYSTEM = GEMMA_SIMPLIFY_SYSTEM.replace(
+    "Keep EVERY fact, name, money amount, date and attribution\n(who said or alleged what); add nothing; keep it 150-200 words.",
+    "Keep the facts that are in it exactly right and every\nattribution (who said or alleged what); add nothing; drop any "
+    "detail an ordinary viewer doesn't need; 100-150 words.")
+B5_WRITER_EXTRA = """
+THIS REEL: ONE STORY, ONE POINT (the viewer is an ordinary Indian who does not follow the news)
+- Open with what happened and why the viewer should care, in the words they use at home.
+- Name at most 2 people; everyone else by their role.
+- No abbreviations and no names of offices, departments, laws or systems the viewer wouldn't know: say what they do
+  ("चुनाव कराने वाली संस्था", "जांच एजेंसी"). Police, CBI, ED, Supreme Court are fine.
+- At most two numbers in the whole reel, rounded, ones a viewer can picture.
+- Leave out procedure, background and side details. If a line needs explaining, it doesn't belong in the reel.
+- Never add anything that isn't in the story.
+"""
+GEMMA_B5_REVIEW_EXTRA = """
+This reel is for an ordinary Indian who does not follow the news, and tells ONE story with ONE point. Also report:
+- too_much: a name, office, abbreviation, number, procedure or side detail the viewer does not need to follow the main
+  point. The fix is to cut it (say what to cut).
+Report "story" only when the main point (what happened and why it matters to the viewer) is unclear, never because a
+detail from the article is missing.
+Allowed problem types: fact|unclear|formal|legal|story|too_much."""
+
+
+def gemma_b4_story(model, inp, v="b4"):
     """English summary → Hindi translation → plain-Hindi simplification; each step logged. '' on failure."""
-    en = gemma_reel_summary(model, inp)
+    en = gemma_reel_summary(model, inp, system=GEMMA_B5_STORY_SYSTEM if v == "b5" else None)
     if not en:
         return ""
     out = en
-    for step, system in (("translate", GEMMA_TRANSLATE_SYSTEM), ("simplify", GEMMA_SIMPLIFY_SYSTEM)):
+    if v == "b5":
+        print(f"  B5 story (English, {len(en.split())} words): {en}", flush=True)
+    for step, system in (("translate", GEMMA_TRANSLATE_SYSTEM),
+                         ("simplify", GEMMA_B5_SIMPLIFY_SYSTEM if v == "b5" else GEMMA_SIMPLIFY_SYSTEM)):
         try:
             t = time.time()
             nxt = ((model.json(system, out, TEXT_SCHEMA, temperature=0.2, max_tokens=900) or {}).get("text") or "").strip()
@@ -1099,9 +1197,9 @@ def gemma_b4_story(model, inp):
     return out
 
 
-def gemma_reel_summary(model, inp):
-    system = (GEMMA_REEL_SUMMARY_SYSTEM_HI if os.environ.get("REEL_PROMPT_VARIANT") in ("gemma_brief_hi", "b3")
-              else GEMMA_REEL_SUMMARY_SYSTEM)   # b4 starts from the English summary
+def gemma_reel_summary(model, inp, system=None):
+    system = system or (GEMMA_REEL_SUMMARY_SYSTEM_HI if os.environ.get("REEL_PROMPT_VARIANT") in ("gemma_brief_hi", "b3")
+                        else GEMMA_REEL_SUMMARY_SYSTEM)   # b4 starts from the English summary
     user = (f"Title: {inp['title']}\n\nSHORT SUMMARY:\n{inp['body'][:1200]}\n\n"
             + (f"FULL ARTICLE:\n{inp['original'][:3500]}" if inp["original"] else ""))
     try:
@@ -1136,21 +1234,21 @@ GEMMA_REVIEW_SCHEMA = {"type": "object", "properties": {"problems": {"type": "ar
                        "required": ["problems"]}
 
 
-def gemma_review(model, inp, script):
+def gemma_review(model, inp, script, extra=""):
     user = (f"FULL ORIGINAL ARTICLE:\nTitle: {inp['title']}\n{(inp['original'] or inp['body'])[:3500]}\n\n"
             "SCRIPT:\n" + json.dumps({k: v for k, v in script.items() if k != 'plain_story_hi'}, ensure_ascii=False))
     try:
-        out = model.json(GEMMA_REVIEW_SYSTEM, user, GEMMA_REVIEW_SCHEMA, temperature=0.1, max_tokens=900) or {}
+        out = model.json(GEMMA_REVIEW_SYSTEM + extra, user, GEMMA_REVIEW_SCHEMA, temperature=0.1, max_tokens=900) or {}
         return [p for p in out.get("problems") or [] if isinstance(p, dict) and p.get("quote")]
     except Exception as e:
         print(f"  Gemma review failed: {type(e).__name__}")
         return []
 
 
-def review_loop(inp, aid, script, rounds=2):
+def review_loop(inp, aid, script, rounds=2, extra=""):
     """Gemma checks, Luna fixes exactly the listed problems; up to `rounds` rounds or until Gemma finds nothing."""
     for rnd in range(1, rounds + 1):
-        probs = gemma_review(gemma_model(), inp, script)
+        probs = gemma_review(gemma_model(), inp, script, extra)
         print(f"  B3 review #{aid} round {rnd}: {len(probs)} problem(s)"
               + "".join(f"\n    - [{p.get('type')}] {p.get('field')}: «{str(p.get('quote'))[:90]}» → {str(p.get('fix'))[:120]}" for p in probs[:8]),
               flush=True)
@@ -1282,14 +1380,16 @@ def latin_problems(script):
     return out
 
 
-def b4r_script(inp, aid):
+def b4r_script(inp, aid, v="b4r"):
     """LIVE reel script (Yash picked it on 24 Oct 2026 after testing B2/B3/B4/B4r on the same stories): Gemma shortens
     the article in English → translates to Hindi → simplifies the Hindi; Luna writes the script from that story only (no
     editor pass); Gemma checks it against the full article and Luna fixes exactly the listed problems (up to 2 rounds);
     then the English-letters check with one rewrite. -> (script or None, why, problems)"""
     tg = time.time()
-    gs = gemma_b4_story(gemma_model(), inp)
-    print(f"  B4 story #{aid} ({len(gs.split())} words, {time.time() - tg:.0f}s): {gs}", flush=True)
+    if v == "b5":
+        inp = dict(inp, system=inp["system"] + B5_WRITER_EXTRA)
+    gs = gemma_b4_story(gemma_model(), inp, v="b5" if v == "b5" else "b4")
+    print(f"  {v.upper()} story #{aid} ({len(gs.split())} words, {time.time() - tg:.0f}s): {gs}", flush=True)
     if gs:
         # Only Gemma's plain story: no English headline or "Key Fact" (the headline "…18.402 tmcft…" leaked its figure).
         head = "\n".join(l for l in inp["head"].splitlines() if not l.startswith(("Key Fact:", "Title:"))) + "\n"
@@ -1299,7 +1399,7 @@ def b4r_script(inp, aid):
     sc, why, problems = luna_script(inp, aid, edit="off")
     if not sc:
         return None, why, problems
-    sc = review_loop(inp, aid, sc)
+    sc = review_loop(inp, aid, sc, extra=GEMMA_B5_REVIEW_EXTRA if v == "b5" else "")
     latin = latin_problems(sc)
     if latin:
         print(f"  English-letters check #{aid}: {'; '.join(latin)} -> one rewrite")
@@ -1313,9 +1413,10 @@ def b4r_script(inp, aid):
 
 def live_script(inp, aid):
     """The live script pipeline: B4r; REEL_PIPELINE=luna (repo variable) goes back to Luna alone without a code change."""
-    if os.environ.get("REEL_PIPELINE", "b4r") == "luna":
+    pipe = os.environ.get("REEL_PIPELINE", "b4r")
+    if pipe == "luna":
         return luna_script(inp, aid)
-    return b4r_script(inp, aid)
+    return b4r_script(inp, aid, v="b5" if pipe == "b5" else "b4r")
 
 
 def luna_test(m_db, u_db, ids):
@@ -1349,6 +1450,8 @@ def luna_test(m_db, u_db, ids):
         t0 = time.time()
         if os.environ.get("REEL_PROMPT_VARIANT", "") in ("", "b4r"):   # the live pipeline, exactly
             sc, why, problems = live_script(inp, aid)
+        elif os.environ.get("REEL_PROMPT_VARIANT") == "b5":
+            sc, why, problems = b4r_script(inp, aid, v="b5")
         elif os.environ.get("REEL_PROMPT_VARIANT") == "gemma_only":   # Gemma writes the script itself (comparison)
             try:
                 sc, why = gemma_model().json(inp["system"], inp["user_msg"], SCRIPT_SCHEMA, temperature=0.25, max_tokens=1400), "gemma"
@@ -1415,16 +1518,77 @@ def script_test(m_db, u_db, ids):
         print(f"review: {json.dumps(rv, ensure_ascii=False)}\n", flush=True)
 
 
+def rank(rows):
+    """rows: (aid, topic, score, published_at) -> the dispatch order (qualifying stories only)."""
+    q = [r for r in rows if int(r[2]) >= 7 or (is_political(r[1]) and int(r[2]) >= 6)]
+    return sorted(q, key=lambda r: (int(r[2]) + (1 if is_political(r[1]) else 0), r[3] or 0), reverse=True)
+
+
+def select_test(m_db, u_db, n=70, scripts=3):
+    """Read-only: re-score the last 24 h's scored stories with the common-man rubric (v2), show the old vs new picks,
+    then write B5 scripts for the new top `scripts`. Nothing is saved, dispatched or posted."""
+    now = int(time.time())
+    old = u_db.execute("SELECT article_id, topic, viral_score, published_at FROM reel_candidates WHERE created_at >= ? "
+                       "ORDER BY (viral_score >= 6) DESC, created_at DESC LIMIT ?", [now - 24 * 3600, n]).rows   # every old contender + the newest others
+    posted = {int(r[0]) for r in u_db.execute("SELECT article_id FROM reel_posts").rows}
+    ids = [int(r[0]) for r in old]
+    arts = {}
+    for chunk in [ids[i:i + 50] for i in range(0, len(ids), 50)]:
+        ph = ",".join("?" * len(chunk))
+        for r in m_db.execute(f"SELECT id, title, rephrased_title, rephrased_article, category FROM articles WHERE id IN ({ph})", chunk).rows:
+            arts[int(r[0])] = r
+    model = gemma_model()
+    new, line = [], {}
+    t0 = time.time()
+    for o in old:
+        a = arts.get(int(o[0]))
+        if not a:
+            continue
+        prompt = f"Title: {a[2] or a[1]}\nCategory: {a[4]}\nArticle Body:\n{decompress(a[3])[:1000]}\n"
+        try:
+            res = model.json(SYSTEM_COMMON, prompt, SCHEMA_COMMON, temperature=0.1, max_tokens=400)
+        except Exception as e:
+            print(f"  #{o[0]} rescore failed: {type(e).__name__}")
+            continue
+        new.append((int(o[0]), str(res.get("topic") or o[1]), int(res.get("viral_score") or 0), o[3]))
+        line[int(o[0])] = (str(res.get("one_line_hi") or ""), str(res.get("why") or ""))
+    print(f"(re-scored {len(new)} stories in {time.time() - t0:.0f}s)")
+    title = lambda aid: ((arts.get(aid) or [0, "", ""])[2] or (arts.get(aid) or [0, ""])[1] or "")[:80]
+    oldr, newr = [r for r in rank(old) if int(r[0]) not in posted], [r for r in rank(new) if r[0] not in posted]
+    oldsc = {int(r[0]): int(r[2]) for r in old}
+    print("## SELECT: what the OLD rules would pick next (not yet reeled)")
+    for r in oldr[:8]:
+        print(f"#{r[0]} old {r[2]} [{r[1]}] {title(int(r[0]))}")
+    print("## SELECT: what the NEW common-man rules would pick next (not yet reeled)")
+    for r in newr[:8]:
+        print(f"#{r[0]} new {r[2]} (old {oldsc.get(r[0])}) [{r[1]}] {title(r[0])}\n   = {line[r[0]][0]}")
+    print("## SELECT: old picks the new rules drop")
+    newsc = {r[0]: r[2] for r in new}
+    for r in oldr[:8]:
+        aid = int(r[0])
+        if aid not in [x[0] for x in newr[:8]]:
+            print(f"#{aid} old {r[2]} → new {newsc.get(aid)}: {title(aid)}\n   why: {line.get(aid, ('', ''))[1]}")
+    top = [r[0] for r in newr[:scripts]]
+    if top:
+        os.environ["REEL_PROMPT_VARIANT"] = "b5"
+        luna_test(m_db, u_db, top)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--batch", type=int, default=30, help="Number of unscored articles to evaluate")
     ap.add_argument("--dry-run", action="store_true", help="Print scores without writing to DB")
     ap.add_argument("--dispatch", action="store_true", help="Force dispatch of top candidate")
     ap.add_argument("--no-dispatch", action="store_true", help="Do not trigger reels repo")
+    ap.add_argument("--select-test", action="store_true", help="re-score the last 24 h with the common-man rules, "
+                    "show old vs new picks and B5 scripts for the new top 3; print only")
     ap.add_argument("--script-test", default="", help="comma-separated article ids: write and review their scripts, print only")
     ap.add_argument("--luna-test", default=None, help="article ids (comma-separated, or empty = 3 newest candidates): "
                                                       "the live Luna script only, fast, print only")
     args = ap.parse_args()
+    if args.select_test:
+        select_test(main_db(), upsc_db())
+        return
     if args.luna_test is not None:
         luna_test(main_db(), upsc_db(), [int(x) for x in args.luna_test.split(",") if x.strip().isdigit()])
         return
@@ -1484,7 +1648,8 @@ def main():
             f"Article Body:\n{art['body'][:1000]}\n"
         )
         try:
-            res = model.json(SYSTEM + FEEDBACK, prompt, SCHEMA, temperature=0.1, max_tokens=250)
+            res = (model.json(SYSTEM_COMMON + FEEDBACK, prompt, SCHEMA_COMMON, temperature=0.1, max_tokens=400) if select_v2()
+                   else model.json(SYSTEM + FEEDBACK, prompt, SCHEMA, temperature=0.1, max_tokens=250))
             score = int(res.get("viral_score") or 0)
             topic = str(res.get("topic") or art["category"])
             hook = str(res.get("hook_angle") or "")

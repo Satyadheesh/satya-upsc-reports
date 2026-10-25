@@ -755,11 +755,11 @@ def dispatch_daily_reel(u_db, m_db, model=None, force=False):
         candidates = u_db.execute(
             "SELECT c.article_id, c.topic, c.viral_score, c.hook_angle, c.wow_fact, c.why, c.published_at "
             "FROM reel_candidates c "
-            "WHERE c.viral_score >= 6 AND c.created_at >= ? "
+            "WHERE c.viral_score >= 6 AND c.created_at >= ? AND c.model LIKE ? "
             "  AND c.article_id NOT IN (SELECT article_id FROM reel_posts) "
             "ORDER BY c.viral_score DESC, c.published_at DESC "
             "LIMIT 40",
-            [since]
+            [since, "%+common" if select_v2() else "%"]   # v2: only stories scored by the common-man rules
         ).rows
         # political stories get the most traction (Yash, 22 Oct 2026): +1 when ranking, and they qualify from 6
         candidates = [c for c in candidates if int(c[2]) >= 7 or (is_political(c[1]) and int(c[2]) >= 6)]
@@ -1686,7 +1686,9 @@ def main():
 
     # Find articles from the last 24 hours not yet scored in reel_candidates
     since = now - 24 * 3600
-    already = {r[0] for r in u_db.execute("SELECT article_id FROM reel_candidates WHERE created_at >= ?", [since - 86400]).rows}
+    # v2: a story scored by the old rules is scored again by the common-man rules (INSERT OR REPLACE)
+    already = {r[0] for r in u_db.execute("SELECT article_id FROM reel_candidates WHERE created_at >= ? AND model LIKE ?",
+                                          [since - 86400, "%+common" if select_v2() else "%"]).rows}
 
     # Fetch candidate articles across all categories
     rows = m_db.execute(
@@ -1750,7 +1752,7 @@ def main():
                     "INSERT OR REPLACE INTO reel_candidates "
                     "(article_id, published_at, topic, viral_score, hook_angle, wow_fact, why, model, created_at) "
                     "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                    [art["id"], art["scraped_at"], topic, score, hook, fact, why, MODEL_NAME, now]
+                    [art["id"], art["scraped_at"], topic, score, hook, fact, why, MODEL_NAME + ("+common" if select_v2() else ""), now]
                 )
             scored_count += 1
         except Exception as e:

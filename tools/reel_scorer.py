@@ -1470,7 +1470,7 @@ def luna_test(m_db, u_db, ids):
         if inp["political"]:
             sc, notes, ok = legal_pass(sc)
             legal = f" | legal ok={ok} {notes or ''}"
-        print(f"## #{aid} [{topic}] {os.environ.get('REEL_PROMPT_VARIANT') or 'live'}/{os.environ.get('REEL_EDIT_PASS') or 'edit'} {OPENAI_MODEL}{' + edit ' + EDIT_MODEL if EDIT_MODEL else ''} {inp['title'][:50]}\n({time.time() - t0:.0f}s, Rs {SPENT['inr']:.2f}){legal}"
+        block = (f"## #{aid} [{topic}] {os.environ.get('REEL_PROMPT_VARIANT') or 'live'}/{os.environ.get('REEL_EDIT_PASS') or 'edit'} {OPENAI_MODEL}{' + edit ' + EDIT_MODEL if EDIT_MODEL else ''} {inp['title'][:50]}\n({time.time() - t0:.0f}s, Rs {SPENT['inr']:.2f}){legal}"
               f"{' | PROBLEMS LEFT: ' + '; '.join(problems) if problems else ''}\n"
               f"STORY: {sc.get('plain_story_hi')}\n"
               f"PEOPLE: {'; '.join(p.get('name_hi', '') + ' = ' + p.get('role_hi', '') for p in sc.get('people') or [])}\n"
@@ -1478,7 +1478,9 @@ def luna_test(m_db, u_db, ids):
               f"HOOK: {sc.get('hook_say')}\nCORE: {sc.get('core_say')}\nTWIST: {sc.get('twist_say')}\n"
               f"CARD 3: {sc.get('twist_stat')} {sc.get('twist_label')} | {sc.get('twist_detail_hi')}\n"
               f"CARD 4: {sc.get('engagement_title_hi')} | {sc.get('question_hi')}\n"
-              f"END: {sc.get('engagement_say')}\n", flush=True)
+              f"END: {sc.get('engagement_say')}\n")
+        print(block, flush=True)
+        notice(f"Script #{aid}", block)
 
 
 def script_test(m_db, u_db, ids):
@@ -1518,13 +1520,21 @@ def script_test(m_db, u_db, ids):
         print(f"review: {json.dumps(rv, ensure_ascii=False)}\n", flush=True)
 
 
+def notice(title, text):
+    """With REEL_STREAM_NOTICES set (Actions), print the block as an annotation right away, so a run that is cut off by
+    its time limit still shows what it finished (logs can't be read from outside)."""
+    if os.environ.get("REEL_STREAM_NOTICES"):
+        enc = text[:2200].replace("%", "%25").replace("\r", "").replace("\n", "%0A")
+        print(f"::notice title={title[:60]}::{enc}", flush=True)
+
+
 def rank(rows):
     """rows: (aid, topic, score, published_at) -> the dispatch order (qualifying stories only)."""
     q = [r for r in rows if int(r[2]) >= 7 or (is_political(r[1]) and int(r[2]) >= 6)]
     return sorted(q, key=lambda r: (int(r[2]) + (1 if is_political(r[1]) else 0), r[3] or 0), reverse=True)
 
 
-def select_test(m_db, u_db, n=70, scripts=3):
+def select_test(m_db, u_db, n=45, scripts=3):
     """Read-only: re-score the last 24 h's scored stories with the common-man rubric (v2), show the old vs new picks,
     then write B5 scripts for the new top `scripts`. Nothing is saved, dispatched or posted."""
     now = int(time.time())
@@ -1556,18 +1566,16 @@ def select_test(m_db, u_db, n=70, scripts=3):
     title = lambda aid: ((arts.get(aid) or [0, "", ""])[2] or (arts.get(aid) or [0, ""])[1] or "")[:80]
     oldr, newr = [r for r in rank(old) if int(r[0]) not in posted], [r for r in rank(new) if r[0] not in posted]
     oldsc = {int(r[0]): int(r[2]) for r in old}
-    print("## SELECT: what the OLD rules would pick next (not yet reeled)")
-    for r in oldr[:8]:
-        print(f"#{r[0]} old {r[2]} [{r[1]}] {title(int(r[0]))}")
-    print("## SELECT: what the NEW common-man rules would pick next (not yet reeled)")
-    for r in newr[:8]:
-        print(f"#{r[0]} new {r[2]} (old {oldsc.get(r[0])}) [{r[1]}] {title(r[0])}\n   = {line[r[0]][0]}")
-    print("## SELECT: old picks the new rules drop")
     newsc = {r[0]: r[2] for r in new}
-    for r in oldr[:8]:
-        aid = int(r[0])
-        if aid not in [x[0] for x in newr[:8]]:
-            print(f"#{aid} old {r[2]} → new {newsc.get(aid)}: {title(aid)}\n   why: {line.get(aid, ('', ''))[1]}")
+    secs = [("SELECT old picks", "\n".join(f"#{r[0]} old {r[2]} [{r[1]}] {title(int(r[0]))}" for r in oldr[:8])),
+            ("SELECT new picks", "\n".join(f"#{r[0]} new {r[2]} (old {oldsc.get(r[0])}) [{r[1]}] {title(r[0])}\n   = {line[r[0]][0]}"
+                                           for r in newr[:8])),
+            ("SELECT dropped", "\n".join(f"#{r[0]} old {r[2]} → new {newsc.get(int(r[0]))}: {title(int(r[0]))}\n   why: "
+                                        f"{line.get(int(r[0]), ('', ''))[1]}" for r in oldr[:8]
+                                        if int(r[0]) not in [x[0] for x in newr[:8]]))]
+    for t, body in secs:
+        print(f"== {t}\n{body}", flush=True)   # not "## ": the workflow's end-of-run split is only for scripts
+        notice(t, body)
     top = [r[0] for r in newr[:scripts]]
     if top:
         os.environ["REEL_PROMPT_VARIANT"] = "b5"

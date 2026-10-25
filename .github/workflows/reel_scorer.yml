@@ -52,13 +52,16 @@ env:
   SATYA_UPSC_DB_TOKEN: ${{ secrets.NEW_UPSC_DB_TOKEN || secrets.SATYA_UPSC_DB_TOKEN }}
   KIT_MODEL_REPO: unsloth/gemma-4-12b-it-GGUF
   KIT_MODEL_FILE: gemma-4-12b-it-Q4_K_M.gguf
-  # Reel scripts (B4r, live since 24 Oct 2026): Gemma story (English → Hindi → plain Hindi) → Luna script → Gemma checks,
-  # Luna fixes; ~Rs 2-4 per reel. Repo variable REEL_PIPELINE=luna goes back to Luna alone.
+  # Reels for the common man (live since 26 Oct 2026, Yash): REEL_SELECT v2 = stories picked by the common-man test
+  # (understood in one line + touches daily life); REEL_PIPELINE b5 = Gemma plain English story → Luna Hindi script,
+  # 30-40 s, one point, max 2 names → Gemma checks, Luna fixes → common-man quality gate. ~Rs 2-3 per reel.
+  # Rollback without a code change: repo variables REEL_SELECT=v1 and REEL_PIPELINE=b4r (or luna).
   # Without a code change (repo variables): REEL_SCRIPT_EFFORT = low | medium | high; REEL_BUDGET_INR = runaway guard per reel (default 10).
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
   REEL_SCRIPT_MODEL: gpt-5.6-luna
   REEL_SCRIPT_EFFORT: ${{ vars.REEL_SCRIPT_EFFORT || 'medium' }}
-  REEL_PIPELINE: ${{ vars.REEL_PIPELINE || 'b4r' }}
+  REEL_PIPELINE: ${{ vars.REEL_PIPELINE || 'b5' }}
+  REEL_SELECT: ${{ vars.REEL_SELECT || 'v2' }}
   REEL_BUDGET_INR: ${{ vars.REEL_BUDGET_INR || '10' }}
 
 jobs:

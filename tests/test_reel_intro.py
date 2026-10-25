@@ -71,3 +71,11 @@ def test_fix_credit():
         "द हिंदू की रिपोर्ट के मुताबिक, पुलिस ने पकड़ा।"
     assert fix_credit(inp, 1, {"core_say": "पुलिस ने पकड़ा।"})["core_say"] == "द हिंदू की रिपोर्ट के मुताबिक, पुलिस ने पकड़ा।"
     assert fix_credit(dict(inp, political=False), 1, {"core_say": "x"})["core_say"] == "x"
+
+
+def test_broken_problems():
+    from tools.reel_scorer import broken_problems
+    assert broken_problems({"twist_say": "करीब एक हजार किलो सामान नष्ट हुआ। ने कहा कि कार्रवाई होगी।"})
+    assert broken_problems({"core_say": "सबसे चौंकाने वाली बात यह है कि को लीक किए गए उत्तर"})
+    assert not broken_problems({"core_say": "मुख्यमंत्री ने कहा कि लोगों को सुरक्षित जगह ले जाया जाएगा।"})
+    assert not broken_problems({"core_say": "प्रशासन लोगों, खासकर कमजोर परिवारों, को सुरक्षित जगह पहुंचा रहा है।"})

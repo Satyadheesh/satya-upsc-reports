@@ -1182,7 +1182,8 @@ This reel is for an ordinary Indian who does not follow the news, and tells ONE 
   point. The fix is to cut it (say what to cut).
 Report "story" only when the main point (what happened and why it matters to the viewer) is unclear, never because a
 detail from the article is missing.
-Allowed problem types: fact|unclear|formal|legal|story|too_much."""
+Allowed problem types: fact|unclear|formal|legal|story|too_much. Write "fix" in simple English (what to change), not
+new Hindi wording."""
 
 
 LEN_RULE = """- Keep the whole spoken script (hook_say + core_say + twist_say + engagement_say) to 110-140 Hindi words in total,
@@ -1215,7 +1216,9 @@ def gemma_b4_story(model, inp, v="b4"):
         return ""
     out = en
     if v == "b5":
-        print(f"  B5 story (English, {len(en.split())} words): {en}", flush=True)
+        # B5 keeps Gemma in English: its Hindi (translate/simplify) dropped words, mostly names, leaving "। ने कहा",
+        # "कि को लीक" (24-26 Oct 2026); Luna writes the Hindi.
+        return en
     for step, system in (("translate", GEMMA_TRANSLATE_SYSTEM),
                          ("simplify", GEMMA_B5_SIMPLIFY_SYSTEM if v == "b5" else GEMMA_SIMPLIFY_SYSTEM)):
         try:
@@ -1292,7 +1295,9 @@ def review_loop(inp, aid, script, rounds=2, extra=""):
         fixed, why = openai_script(inp["system"], inp["user_msg"] + "\n\nYOUR PREVIOUS SCRIPT:\n"
                                    + json.dumps(script, ensure_ascii=False)
                                    + "\n\nA CHECKER FOUND THESE PROBLEMS. Fix exactly these and keep everything else as it is "
-                                   "(same facts, attribution, introductions and limits):\n- "
+                                   "(same facts, attribution, introductions and limits). The checker's quotes may be slightly "
+                                   "garbled: find the line it means and write the fix in your own words; never leave a "
+                                   "sentence without its subject:\n- "
                                    + "\n- ".join(f"[{p.get('type')}] {p.get('field')}: \"{p.get('quote')}\" → {p.get('fix')}" for p in probs[:10]))
         if not fixed:
             print(f"  B3 fix #{aid} failed ({why}); keeping the last script")
@@ -1404,6 +1409,21 @@ def luna_script(inp, aid, edit=None):
 LATIN_WORD = re.compile(r"\b[A-Za-z][a-z]{2,}\b")
 
 
+BROKEN = re.compile(r"(?:^|[।?!]\s*|कि\s+)(ने|को|से|का|की|के)\s")
+
+
+def broken_problems(script):
+    """A sentence that starts with a postposition ("। ने कहा", "कि को लीक") lost its subject; U+FFFD is a broken
+    character. Both came from Gemma's Hindi steps (24-26 Oct 2026)."""
+    out = []
+    for k, v in (script or {}).items():
+        for s_ in (v if isinstance(v, list) else [v]):
+            if isinstance(s_, str) and ("\ufffd" in s_ or BROKEN.search(s_)):
+                out.append(f"{k}: a sentence is broken (missing its subject or a broken character): \"{s_[:80]}\" - rewrite it whole")
+                break
+    return out
+
+
 def latin_problems(script):
     out = []
     for k, v in (script or {}).items():
@@ -1428,23 +1448,24 @@ def b4r_script(inp, aid, v="b4r"):
     if gs:
         # Only Gemma's plain story: no English headline or "Key Fact" (the headline "…18.402 tmcft…" leaked its figure).
         head = "\n".join(l for l in inp["head"].splitlines() if not l.startswith(("Key Fact:", "Title:"))) + "\n"
-        inp = dict(inp, user_msg=head + "STORY (150-200 words, everything you need):\n" + gs)
+        inp = dict(inp, user_msg=head + ("STORY (simple English, everything you need; write the reel in everyday spoken "
+                                         "Hindi):\n" if v == "b5" else "STORY (150-200 words, everything you need):\n") + gs)
     else:
         print(f"  B4 story #{aid} failed: Luna writes from the article")
     sc, why, problems = luna_script(inp, aid, edit="off")
     if not sc:
         return None, why, problems
     sc = review_loop(inp, aid, sc, extra=GEMMA_B5_REVIEW_EXTRA if v == "b5" else "")
-    latin = latin_problems(sc)
+    latin = latin_problems(sc) + broken_problems(sc)
     if latin:
-        print(f"  English-letters check #{aid}: {'; '.join(latin)} -> one rewrite")
+        print(f"  English-letters / broken-sentence check #{aid}: {'; '.join(latin)} -> one rewrite")
         fixed, _ = openai_script(inp["system"], inp["user_msg"] + "\n\nYOUR PREVIOUS SCRIPT:\n"
                                  + json.dumps(sc, ensure_ascii=False)
                                  + "\n\nFIX ONLY THIS, keep everything else as it is:\n- " + "\n- ".join(latin))
         if fixed and len(intro_problems(fixed, inp["known"])) <= len(intro_problems(sc, inp["known"])):
             sc = fixed
     sc = fix_credit(inp, aid, sc)
-    return sc, why, intro_problems(sc, inp["known"]) + latin_problems(sc)
+    return sc, why, intro_problems(sc, inp["known"]) + latin_problems(sc) + broken_problems(sc)
 
 
 def fix_credit(inp, aid, sc):

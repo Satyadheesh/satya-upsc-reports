@@ -1173,6 +1173,29 @@ detail from the article is missing.
 Allowed problem types: fact|unclear|formal|legal|story|too_much."""
 
 
+LEN_RULE = """- Keep the whole spoken script (hook_say + core_say + twist_say + engagement_say) to 110-140 Hindi words in total,
+  roughly 45-55 seconds of speech. Never more than 140 words: count them. hook_say max 25 words, core_say max 55,
+  twist_say max 40, engagement_say max 20."""
+B5_LEN_RULE = """- SHORT REEL (Yash: 30-40 seconds is fine; a viewer who doesn't understand is not): the whole spoken script
+  (hook_say + core_say + twist_say + engagement_say) is 70-100 Hindi words, about 30-40 seconds. hook_say max 18 words,
+  core_say max 40, twist_say max 25, engagement_say max 15. Shorter and clear beats longer and complete."""
+RICH_RULE = """- Make it rich, not padded. Every script carries: (1) one line of background, (2) at least one concrete detail a viewer
+  can picture: a date, an amount in rupees, a person or a place, (3) what happens next, if the article says."""
+B5_RICH_RULE = """- One clear point, told simply. Background only if the viewer can't follow without it (one short line). At most one
+  or two concrete details a viewer can picture: an amount in rupees, a person or a place; what happens next, if the
+  article says."""
+
+
+def b5_system(system):
+    """The writer's prompt for B5: short (30-40 s) and one point, instead of 45-55 s and 'rich'."""
+    for old, new in ((LEN_RULE, B5_LEN_RULE), (RICH_RULE, B5_RICH_RULE)):
+        if old in system:
+            system = system.replace(old, new)
+        else:
+            print("  (b5_system: a rule to replace was not found; the B5 rules still apply)")
+    return system + B5_WRITER_EXTRA
+
+
 def gemma_b4_story(model, inp, v="b4"):
     """English summary → Hindi translation → plain-Hindi simplification; each step logged. '' on failure."""
     en = gemma_reel_summary(model, inp, system=GEMMA_B5_STORY_SYSTEM if v == "b5" else None)
@@ -1387,7 +1410,7 @@ def b4r_script(inp, aid, v="b4r"):
     then the English-letters check with one rewrite. -> (script or None, why, problems)"""
     tg = time.time()
     if v == "b5":
-        inp = dict(inp, system=inp["system"] + B5_WRITER_EXTRA)
+        inp = dict(inp, system=b5_system(inp["system"]))
     gs = gemma_b4_story(gemma_model(), inp, v="b5" if v == "b5" else "b4")
     print(f"  {v.upper()} story #{aid} ({len(gs.split())} words, {time.time() - tg:.0f}s): {gs}", flush=True)
     if gs:

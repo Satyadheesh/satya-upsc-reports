@@ -649,6 +649,13 @@ Return a JSON object:
 }
 """
 
+SUITABILITY_COMMON_EXTRA = """
+5. Common man (Yash, 26 Oct 2026: "not fine with something that a normal typical common man could not understand"):
+   would a shopkeeper in Kanpur or a farmer's son in Bihar, who doesn't follow the news, understand what happened and why
+   it matters on first hearing? An unexplained office, abbreviation, procedure or a number they can't picture fails it.
+   If it fails, is_suitable is false and action is "reject_story".
+"""
+
 SUITABILITY_SCHEMA = {
     "type": "object",
     "properties": {
@@ -863,7 +870,8 @@ def dispatch_daily_reel(u_db, m_db, model=None, force=False):
                         f"TWIST: {script_data.get('twist_say')}\n"
                         f"ENGAGEMENT: {script_data.get('engagement_say')}"
                     )
-                    suitability = model.json(SUITABILITY_SYSTEM + (SUITABILITY_POLITICAL_EXTRA if political else ""), eval_prompt,
+                    suitability = model.json(SUITABILITY_SYSTEM + (SUITABILITY_POLITICAL_EXTRA if political else "")
+                                             + (SUITABILITY_COMMON_EXTRA if os.environ.get("REEL_PIPELINE") == "b5" else ""), eval_prompt,
                                              SUITABILITY_SCHEMA, temperature=0.1, max_tokens=200)
                     is_ok = suitability.get("is_suitable") is True or suitability.get("action") == "approve"
                     verdict = suitability.get("verdict", "")

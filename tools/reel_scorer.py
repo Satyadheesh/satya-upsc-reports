@@ -1160,8 +1160,12 @@ THIS REEL: ONE STORY, ONE POINT (the viewer is an ordinary Indian who does not f
 - Name at most 2 people; everyone else by their role.
 - No abbreviations and no names of offices, departments, laws or systems the viewer wouldn't know: say what they do
   ("चुनाव कराने वाली संस्था", "जांच एजेंसी"). Police, CBI, ED, Supreme Court are fine.
-- At most two numbers in the whole reel, rounded, ones a viewer can picture.
+- At most two numbers in the whole reel, rounded the way people say them, ones a viewer can picture: no decimals
+  anywhere, on screen either ("1.69 करोड़" is said "करीब पौने दो करोड़").
+- Say whose loss or gain it is in everyday terms when the story shows it (whose money, whose rice, whose ticket).
 - Leave out procedure, background and side details. If a line needs explaining, it doesn't belong in the reel.
+- engagement_say: one short question an ordinary viewer can answer from their own life or opinion in a word or two,
+  never about procedure or timelines, and only one question.
 - Never add anything that isn't in the story.
 """
 GEMMA_B5_REVIEW_EXTRA = """
@@ -1431,7 +1435,23 @@ def b4r_script(inp, aid, v="b4r"):
                                  + "\n\nFIX ONLY THIS, keep everything else as it is:\n- " + "\n- ".join(latin))
         if fixed and len(intro_problems(fixed, inp["known"])) <= len(intro_problems(sc, inp["known"])):
             sc = fixed
+    sc = fix_credit(inp, aid, sc)
     return sc, why, intro_problems(sc, inp["known"]) + latin_problems(sc)
+
+
+def fix_credit(inp, aid, sc):
+    """Political reels: core_say opens with the newspaper credit (legal safety). A rewrite once replaced it with
+    "तेलंगाना सीआईडी की रिपोर्ट के मुताबिक" (26 Oct 2026); put the paper's credit back in code."""
+    if not inp.get("political") or not sc.get("core_say"):
+        return sc
+    src = next((l.split(":", 1)[1].strip() for l in inp["head"].splitlines() if l.startswith("Source:")), "द हिंदू")
+    credit, say = f"{src} की रिपोर्ट के मुताबिक", sc["core_say"].strip()
+    if say.startswith(credit):
+        return sc
+    m = re.match(r"^[^,।]{0,40}की रिपोर्ट के मुताबिक,?\s*", say)
+    new = credit + ", " + (say[m.end():] if m else say)
+    print(f"  credit #{aid}: core_say now opens with '{credit}'" + (f" (was '{m.group(0).strip()}')" if m else ""))
+    return dict(sc, core_say=new)
 
 
 def live_script(inp, aid):

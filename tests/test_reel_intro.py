@@ -62,3 +62,12 @@ def test_latin_problems():
     assert probs[0].startswith("core_say: deadline")          # ED / KPSC (short forms) are fine
     assert probs[1].startswith("core_points_hi: wetlands")
     assert latin_problems({"hook_say": "सब ठीक है।"}) == []
+
+
+def test_fix_credit():
+    from tools.reel_scorer import fix_credit
+    inp = dict(political=True, head="NEWS ARTICLE\nSource: द हिंदू\n")
+    assert fix_credit(inp, 1, {"core_say": "तेलंगाना सीआईडी की रिपोर्ट के मुताबिक, पुलिस ने पकड़ा।"})["core_say"] == \
+        "द हिंदू की रिपोर्ट के मुताबिक, पुलिस ने पकड़ा।"
+    assert fix_credit(inp, 1, {"core_say": "पुलिस ने पकड़ा।"})["core_say"] == "द हिंदू की रिपोर्ट के मुताबिक, पुलिस ने पकड़ा।"
+    assert fix_credit(dict(inp, political=False), 1, {"core_say": "x"})["core_say"] == "x"

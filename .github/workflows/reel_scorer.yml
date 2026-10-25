@@ -98,8 +98,10 @@ jobs:
           case "$V" in *noedit*) export REEL_EDIT_PASS=off;; *gedit*) export REEL_EDIT_PASS=gemma;; esac
           case "$V" in short*) export REEL_PROMPT_VARIANT=short;; no_original*) export REEL_PROMPT_VARIANT=no_original;; brief*) export REEL_PROMPT_VARIANT=brief;;
             b5*) export REEL_PROMPT_VARIANT=b5;; b3*) export REEL_PROMPT_VARIANT=b3;; b4r*) export REEL_PROMPT_VARIANT=b4r;; b4*) export REEL_PROMPT_VARIANT=b4;; gemma_hi*) export REEL_PROMPT_VARIANT=gemma_brief_hi;; gemma_only*) export REEL_PROMPT_VARIANT=gemma_only;; gemma*) export REEL_PROMPT_VARIANT=gemma_brief;; esac
-          if [ -n "$SEL" ]; then python -m tools.reel_scorer --select-test 2>&1 | tee /tmp/lt.txt
-          else python -m tools.reel_scorer --luna-test "$IDS" 2>&1 | tee /tmp/lt.txt; fi
+          if [ -n "$SEL" ]; then   # select: each block is an annotation as soon as it's ready (a long run may hit the time limit)
+            REEL_STREAM_NOTICES=1 python -m tools.reel_scorer --select-test 2>&1 | tee /tmp/lt.txt; exit 0
+          fi
+          python -m tools.reel_scorer --luna-test "$IDS" 2>&1 | tee /tmp/lt.txt
           i=0; awk '/^## /{n++} {print > "/tmp/lt_" n ".txt"}' /tmp/lt.txt
           for f in /tmp/lt_*.txt; do echo "::notice title=Luna script $(head -1 $f | cut -c4-30)::$(cut -c1-2200 $f | sed ':a;N;$!ba;s/%/%25/g;s/\n/%0A/g')"; done
 

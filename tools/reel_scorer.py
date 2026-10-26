@@ -1636,6 +1636,10 @@ def parse_g1(text):
     return sc, missing
 
 
+def parse_g1_missing(sc):
+    return [k for k, f in G1_KEYS.items() if f != "people" and not sc.get(f)]
+
+
 def g1_text_problems(sc, inp):
     words = sum(len(str(sc.get(k, "")).split()) for k in ("hook_say", "core_say", "twist_say", "engagement_say"))
     out = []
@@ -1656,20 +1660,29 @@ def g1_notes_text(notes):
                      ("allegations", notes.get("allegations")), ("next", notes.get("next"))) if v)
 
 
-def g1_script(inp, aid, model=None):
-    """Gemma-only reel script. -> (script or None, why, problems)"""
+def g1_script(inp, aid, model=None, direct=False):
+    """Gemma-only reel script. direct=True (variant g1d, experiment): no notes step, the script is written straight from
+    the article. -> (script or None, why, problems)"""
     model = model or gemma_model()
     t0 = time.time()
+    if direct:
+        ntext = (f"Title: {inp['title']}\n\nSUMMARY:\n{inp['body'][:1200]}\n\n"
+                 + (f"FULL ARTICLE:\n{inp['original'][:3000]}" if inp["original"] else ""))
     try:
+        if direct:
+            raise StopIteration
         notes = model.json(G1_NOTES_SYSTEM, f"Title: {inp['title']}\n\nSUMMARY:\n{inp['body'][:1200]}\n\n"
                            + (f"FULL ARTICLE:\n{inp['original'][:3500]}" if inp["original"] else ""),
                            G1_NOTES_SCHEMA, temperature=0.2, max_tokens=600) or {}
+    except StopIteration:
+        notes = None
     except Exception as e:
         return None, f"G1 notes failed: {type(e).__name__}", []
-    ntext = g1_notes_text(notes)
-    print(f"  G1 notes #{aid} ({time.time() - t0:.0f}s):\n{ntext}", flush=True)
+    if notes is not None:
+        ntext = g1_notes_text(notes)
+        print(f"  G1 notes #{aid} ({time.time() - t0:.0f}s):\n{ntext}", flush=True)
     src = next((l.split(":", 1)[1].strip() for l in inp["head"].splitlines() if l.startswith("Source:")), "द हिंदू")
-    user = ("NOTES (everything you need):\n" + ntext
+    user = (("THE ARTICLE:\n" if direct else "NOTES (everything you need):\n") + ntext
             + (f"\n\nThis is a political story: CORE starts with \"{src} की रिपोर्ट के मुताबिक\"." if inp["political"] else ""))
     sc, problems = None, []
     for attempt in range(2):
@@ -1690,8 +1703,8 @@ def g1_script(inp, aid, model=None):
               + "".join(f"\n    - {p}" for p in problems), flush=True)
         if not problems:
             break
-    if not sc or any(not sc.get(f) for f in ("hook_say", "core_say", "twist_say", "engagement_say", "headline_hi")):
-        return None, "G1 script incomplete", problems
+    if not sc or parse_g1_missing(sc):   # the reel needs every card's text
+        return None, f"G1 script incomplete: {parse_g1_missing(sc) if sc else 'no script'}", problems
     sc, notes_l, ok = legal_pass(sc)   # every story (not only political): "कथित" before a named wrongdoing
     for n in notes_l:
         print(f"  legal #{aid}: {n}")
@@ -1762,6 +1775,8 @@ def luna_test(m_db, u_db, ids):
         elif os.environ.get("REEL_PROMPT_VARIANT") == "g1":
             json_vs_text_check(inp, aid)
             sc, why, problems = g1_script(inp, aid)
+        elif os.environ.get("REEL_PROMPT_VARIANT") == "g1d":
+            sc, why, problems = g1_script(inp, aid, direct=True)
         elif os.environ.get("REEL_PROMPT_VARIANT") == "gemma_only":   # Gemma writes the script itself (comparison)
             try:
                 sc, why = gemma_model().json(inp["system"], inp["user_msg"], SCRIPT_SCHEMA, temperature=0.25, max_tokens=1400), "gemma"

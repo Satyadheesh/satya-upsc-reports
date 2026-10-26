@@ -88,9 +88,21 @@ Answer in JSON:
 - "why": One short sentence explaining the score
 """
 SCHEMA_COMMON = {"type": "object", "properties": {"one_line_hi": {"type": "string"},
+                 "india_link": {"type": "boolean"}, "violent_crime": {"type": "boolean"},
                  "viral_score": {"type": "integer", "minimum": 0, "maximum": 10}, "topic": {"type": "string"},
                  "hook_angle": {"type": "string"}, "wow_fact": {"type": "string"}, "why": {"type": "string"}},
-                 "required": ["one_line_hi", "viral_score", "topic", "hook_angle", "wow_fact", "why"]}
+                 "required": ["one_line_hi", "india_link", "violent_crime", "viral_score", "topic", "hook_angle", "wow_fact", "why"]}
+
+
+def enforce_caps(res):
+    """The written caps, applied in code (26 Oct 2026: Gemma gave foreign football 8 and a bomb-plot crime 8):
+    no India link -> at most 4; a violent crime (murder, bomb, assault) -> 0."""
+    score = int(res.get("viral_score") or 0)
+    if res.get("india_link") is False:
+        score = min(score, 4)
+    if res.get("violent_crime") is True:
+        score = 0
+    return score
 
 
 # v3 (Yash, 26 Oct 2026: "it is not about aam aadmi... there can be a lot of news a normal person is interested in"):
@@ -123,6 +135,8 @@ WHAT TO REJECT (Score 0):
 
 Answer in JSON:
 - "one_line_hi": the story in one plain Hindi sentence (Devanagari)
+- "india_link": true if the story is about India, Indians or directly affects India; false for a foreign story without that
+- "violent_crime": true if the story is about a murder, attempted murder, bomb plot, assault, rape or a violent death
 - "viral_score": Integer 0 to 10
 - "topic": Short category string (e.g. "politics", "politics_funding", "corruption", "crime_scam", "sports", "cinema", "science_space", "defence", "economy", "prices", "jobs_exams", "schemes", "weather", "world", "curiosity")
 - "hook_angle": A compelling opening hook or question in conversational Hindi (Devanagari)
@@ -1173,7 +1187,7 @@ GEMMA_REEL_SUMMARY_SYSTEM_HI = GEMMA_REEL_SUMMARY_SYSTEM.replace(
 
 def gemma_model():
     if "m" not in _GEMMA:
-        _GEMMA["m"] = Model(download(), n_ctx=8192)
+        _GEMMA["m"] = Model(download(), n_ctx=8192, fix_long_tokens=os.environ.get("REEL_FIX_TOKENS", "1") == "1")
     return _GEMMA["m"]
 
 
@@ -1570,7 +1584,8 @@ HOW TO WRITE
 - No abbreviations or office names a normal person doesn't know: say what they do. Police, CBI, ED, Supreme Court,
   RBI are known.
 - Numbers only if a viewer can picture them, said the way people say them ("करीब पौने दो करोड़", never "1.69 करोड़").
-- An allegation stays an allegation: "आरोप है", "पुलिस के मुताबिक", "X का कहना है". Never state a crime as a fact.
+- An allegation stays an allegation in EVERY line, the HOOK and STORY too: "आरोप है", "पुलिस के मुताबिक",
+  "X का कहना है". Never state a crime or wrongdoing as a fact.
 - Facts only from the notes. Add nothing. Every line adds something new.
 - Spoken lines (HOOK + CORE + TWIST + END) together: 70-100 Hindi words, about 30-40 seconds.
 
@@ -1587,7 +1602,8 @@ STAT_DETAIL: on screen, max 9 words
 TWIST: spoken, max 25 words: the surprise, the stakes, or what happens next
 END_TITLE: on screen, 2-4 words
 QUESTION: on screen, max 8 words
-END: spoken, one short question a viewer can answer in a word or two
+END: spoken, one short question about THIS story (name the person or thing), answerable in a word or two; never a
+  general "आपको क्या लगता है?"
 STORY: the whole story in one plain Hindi sentence
 PEOPLE: each named person as नाम = कौन हैं, separated by ; (or कोई नहीं)
 
@@ -1647,6 +1663,10 @@ def g1_text_problems(sc, inp):
         out.append(f"the spoken lines have {words} words: cut to 70-100 (HOOK + CORE + TWIST + END)")
     if words < 55:
         out.append(f"the spoken lines have only {words} words: the viewer needs a little more to follow (70-100)")
+    end = str(sc.get("engagement_say", ""))
+    if len(end.split()) < 5 or not end.rstrip().endswith("?"):
+        out.append(f"END \"{end}\" is not a real question about this story: ask one specific question (5-12 words) "
+                   "that names the person or thing")
     if re.search(r"\d+\.\d+", " ".join(str(v) for v in sc.values() if isinstance(v, str))):
         out.append("a number has a decimal: say it the way people do (करीब पौने दो करोड़)")
     return out + intro_problems(sc, inp["known"]) + latin_problems(sc) + broken_problems(sc)
@@ -1920,11 +1940,12 @@ def select_test(m_db, u_db, n=45, scripts=int(os.environ.get("SELECT_TEST_SCRIPT
             continue
         prompt = f"Title: {a[2] or a[1]}\nCategory: {a[4]}\nArticle Body:\n{decompress(a[3])[:1000]}\n"
         try:
-            res = model.json(select_system() if select_v2() else SYSTEM_INTEREST, prompt, SCHEMA_COMMON, temperature=0.1, max_tokens=400)
+            res = model.json((select_system() if select_v2() else SYSTEM_INTEREST) + (fb or ""), prompt, SCHEMA_COMMON,
+                             temperature=0.1, max_tokens=420)
         except Exception as e:
             print(f"  #{o[0]} rescore failed: {type(e).__name__}")
             continue
-        new.append((int(o[0]), str(res.get("topic") or o[1]), int(res.get("viral_score") or 0), o[3]))
+        new.append((int(o[0]), str(res.get("topic") or o[1]), enforce_caps(res), o[3]))
         line[int(o[0])] = (str(res.get("one_line_hi") or ""), str(res.get("why") or ""))
     print(f"(re-scored {len(new)} stories in {time.time() - t0:.0f}s)")
     title = lambda aid: ((arts.get(aid) or [0, "", ""])[2] or (arts.get(aid) or [0, ""])[1] or "")[:80]
@@ -2027,7 +2048,7 @@ def main():
         try:
             res = (model.json(select_system() + FEEDBACK, prompt, SCHEMA_COMMON, temperature=0.1, max_tokens=400) if select_v2()
                    else model.json(SYSTEM + FEEDBACK, prompt, SCHEMA, temperature=0.1, max_tokens=250))
-            score = int(res.get("viral_score") or 0)
+            score = enforce_caps(res) if select_v2() else int(res.get("viral_score") or 0)
             topic = str(res.get("topic") or art["category"])
             hook = str(res.get("hook_angle") or "")
             fact = str(res.get("wow_fact") or "")

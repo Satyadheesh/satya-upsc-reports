@@ -1712,6 +1712,29 @@ def g1_script(inp, aid, model=None, direct=False):
     return sc, ("G1" if ok else "G1: abusive label"), g1_text_problems(sc, inp)
 
 
+def tok_diag():
+    """26 Oct 2026: Gemma's Hindi keeps losing the same words (मुख्यमंत्री, उपमुख्यमंत्री, उम्मीदवारों) in JSON and plain
+    text alike. Check the tokenizer round trip and what generation returns for them. Prints only."""
+    m = gemma_model()
+    import llama_cpp
+    out = [f"llama_cpp {getattr(llama_cpp, '__version__', '?')}"]
+    for w in ("दिल्ली की मुख्यमंत्री रेखा गुप्ता", "कर्नाटक के उपमुख्यमंत्री", "उम्मीदवारों को", "मुख्यमंत्री", "प्रधानमंत्री मोदी"):
+        toks = m.llm.tokenize(w.encode("utf-8"), add_bos=False)
+        pieces = [m.llm.detokenize([t]).decode("utf-8", "replace") for t in toks]
+        back = m.llm.detokenize(toks).decode("utf-8", "replace")
+        out.append(f"{w!r}: {len(toks)} tokens {toks} pieces {pieces} roundtrip_ok={back == w} back={back!r}")
+    for ask in ("Write in Hindi (Devanagari): 'The Chief Minister of Delhi, Rekha Gupta, ordered checks.' Only the sentence.",
+                "Repeat exactly: दिल्ली की मुख्यमंत्री रेखा गुप्ता ने आदेश दिया।"):
+        r = m.llm.create_chat_completion(messages=[{"role": "user", "content": ask}], temperature=0, max_tokens=60)
+        out.append(f"GEN {ask[:40]!r} -> {r['choices'][0]['message']['content']!r}")
+        deltas = [c["choices"][0]["delta"].get("content", "") for c in m.llm.create_chat_completion(
+            messages=[{"role": "user", "content": ask}], temperature=0, max_tokens=60, stream=True)]
+        out.append(f"STREAM pieces {deltas}")
+    block = "\n".join(out)
+    print("== TOKDIAG\n" + block, flush=True)
+    notice("Gemma tokenizer check", block)
+
+
 def json_vs_text_check(inp, aid, model=None):
     """Step 0 (26 Oct 2026): does Gemma's Hindi drop words only through the JSON grammar? Same request both ways."""
     model = model or gemma_model()
@@ -1922,6 +1945,9 @@ def main():
     ap.add_argument("--luna-test", default=None, help="article ids (comma-separated, or empty = 3 newest candidates): "
                                                       "the live Luna script only, fast, print only")
     args = ap.parse_args()
+    if os.environ.get("REEL_PROMPT_VARIANT") == "tokdiag":
+        tok_diag()
+        return
     if args.select_test:
         select_test(main_db(), upsc_db())
         return

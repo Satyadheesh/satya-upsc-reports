@@ -98,13 +98,25 @@ def reel_caption(text, link=""):
 SINCE = "2026-10-20T12:00:00Z"  # reels before this were caught up by hand on 20 Oct
 
 
+def made_reel(run_id, h):
+    """True if this reels run uploaded its reel artifact (the video was made, even if a later step like YouTube failed)."""
+    try:
+        arts = requests.get(f"{API}/repos/{REPO}/actions/runs/{run_id}/artifacts", headers=h, timeout=60).json().get("artifacts", [])
+        return any(a.get("name", "").startswith("reel-") and not a.get("expired") for a in arts)
+    except Exception:
+        return False
+
+
 def pending_runs(upsc, token, hours=72):
     """Successful reels runs (made from a real story) of the last `hours` that aren't on Instagram yet, oldest first.
     The hourly orchestrator asks for these, so a reel whose own 'post to Instagram' signal got lost is posted anyway."""
     import datetime as dt
     h = {"Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json"}
     runs = requests.get(f"{API}/repos/{REPO}/actions/workflows/daily-reel.yml/runs", headers=h, timeout=60,
-                        params={"status": "success", "event": "repository_dispatch", "per_page": 30}).json().get("workflow_runs", [])
+                        params={"status": "completed", "event": "repository_dispatch", "per_page": 30}).json().get("workflow_runs", [])
+    # A run whose YouTube upload failed still made the reel (26 Oct 2026: Yash's Kharge reel never reached Instagram
+    # because its run counted as failed): post it when the reel itself was made, i.e. its MP4 artifact exists.
+    runs = [r for r in runs if r.get("conclusion") == "success" or (r.get("conclusion") == "failure" and made_reel(r["id"], h))]
     floor = max(dt.datetime.fromisoformat(SINCE.replace("Z", "+00:00")).timestamp(), time.time() - hours * 3600)
     out = []
     for r in runs:

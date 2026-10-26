@@ -1146,12 +1146,12 @@ SOURCES = [("thehindu", "द हिंदू"), ("indianexpress", "इंडि�
            ("livemint", "मिंट"), ("deccanherald", "डेक्कन हेराल्ड"), ("tribuneindia", "द ट्रिब्यून"),
            ("telegraphindia", "द टेलीग्राफ"), ("indiatoday", "इंडिया टुडे"), ("news18", "न्यूज़18"),
            ("thewire", "द वायर"), ("scroll.in", "स्क्रॉल"), ("thequint", "द क्विंट"), ("business-standard", "बिज़नेस स्टैंडर्ड"),
-           ("moneycontrol", "मनीकंट्रोल"), ("bbc.", "बीबीसी"), ("reuters", "रॉयटर्स"), ("pti", "पीटीआई"), ("ians", "आईएएनएस")]
+           ("moneycontrol", "मनीकंट्रोल"), ("bbc.", "बीबीसी"), ("reuters", "रॉयटर्स"), ("ptinews", "पीटीआई"), ("ianslive", "आईएएनएस")]
 
 
 def source_name(url):
-    u = str(url or "").lower()
-    return next((hi for key, hi in SOURCES if key in u), "मीडिया")   # unknown site: "मीडिया की रिपोर्ट के मुताबिक"
+    host = re.sub(r"^https?://", "", str(url or "").lower()).split("/")[0]   # match the site, not words in the path
+    return next((hi for key, hi in SOURCES if key in host), "मीडिया")   # unknown site: "मीडिया की रिपोर्ट के मुताबिक"
 
 
 def script_inputs(r, topic, fact, persona):

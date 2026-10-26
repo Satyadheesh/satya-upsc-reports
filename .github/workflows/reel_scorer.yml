@@ -55,16 +55,17 @@ env:
   SATYA_UPSC_DB_TOKEN: ${{ secrets.NEW_UPSC_DB_TOKEN || secrets.SATYA_UPSC_DB_TOKEN }}
   KIT_MODEL_REPO: unsloth/gemma-4-12b-it-GGUF
   KIT_MODEL_FILE: gemma-4-12b-it-Q4_K_M.gguf
-  # Reels for the common man (live since 26 Oct 2026, Yash): REEL_SELECT v2 = stories picked by the common-man test
-  # (understood in one line + touches daily life); REEL_PIPELINE b5 = Gemma plain English story → Luna Hindi script,
-  # 30-40 s, one point, max 2 names → Gemma checks, Luna fixes → common-man quality gate. ~Rs 2-3 per reel.
-  # Rollback without a code change: repo variables REEL_SELECT=v1 and REEL_PIPELINE=b4r (or luna).
+  # Reels (live since 26 Oct 2026, Yash): REEL_SELECT v3 = any story a normal Indian would stop for, clear in 30 s,
+  # guided by our real Instagram reach (India only, no violent crime, enforced in code); REEL_PIPELINE g1 = Gemma only
+  # (no OpenAI): English notes -> Hindi script -> code checks -> fact check against the article -> editorial gate.
+  # Best or nothing: a story that fails any check is skipped; no fallback. Rs 0 per reel.
+  # Rollback without a code change: repo variables REEL_SELECT=v2 (or v1) and REEL_PIPELINE=b5 (or b4r).
   # Without a code change (repo variables): REEL_SCRIPT_EFFORT = low | medium | high; REEL_BUDGET_INR = runaway guard per reel (default 10).
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
   REEL_SCRIPT_MODEL: gpt-5.6-luna
   REEL_SCRIPT_EFFORT: ${{ vars.REEL_SCRIPT_EFFORT || 'medium' }}
-  REEL_PIPELINE: ${{ vars.REEL_PIPELINE || 'b5' }}
-  REEL_SELECT: ${{ vars.REEL_SELECT || 'v2' }}
+  REEL_PIPELINE: ${{ vars.REEL_PIPELINE || 'g1' }}
+  REEL_SELECT: ${{ vars.REEL_SELECT || 'v3' }}
   REEL_BUDGET_INR: ${{ vars.REEL_BUDGET_INR || '10' }}
 
 jobs:

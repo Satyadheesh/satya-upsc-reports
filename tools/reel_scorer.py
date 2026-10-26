@@ -1584,6 +1584,8 @@ HOW TO WRITE
 - No abbreviations or office names a normal person doesn't know: say what they do. Police, CBI, ED, Supreme Court,
   RBI are known.
 - Numbers only if a viewer can picture them, said the way people say them ("करीब पौने दो करोड़", never "1.69 करोड़").
+  Big numbers in digits with हजार/लाख/करोड़ ("62 हजार करोड़"), never spelled out in words.
+- Say an English idiom by its meaning, not word for word ("rise above party lines" = "पार्टी से ऊपर उठकर").
 - An allegation stays an allegation in EVERY line, the HOOK and STORY too: "आरोप है", "पुलिस के मुताबिक",
   "X का कहना है". Never state a crime or wrongdoing as a fact.
 - Facts only from the notes. Add nothing. Every line adds something new.
@@ -1656,7 +1658,12 @@ def parse_g1_missing(sc):
     return [k for k, f in G1_KEYS.items() if f != "people" and not sc.get(f)]
 
 
+REPEAT = re.compile(r"(\S+\s+\S+)\s+\1")
+
+
 def g1_text_problems(sc, inp):
+    rep_ = [f"{k}: \"{m.group(1)}\" is written twice in a row" for k, v in sc.items() if isinstance(v, str)
+            for m in [REPEAT.search(v)] if m]
     words = sum(len(str(sc.get(k, "")).split()) for k in ("hook_say", "core_say", "twist_say", "engagement_say"))
     out = []
     if words > 110:
@@ -1669,7 +1676,7 @@ def g1_text_problems(sc, inp):
                    "that names the person or thing")
     if re.search(r"\d+\.\d+", " ".join(str(v) for v in sc.values() if isinstance(v, str))):
         out.append("a number has a decimal: say it the way people do (करीब पौने दो करोड़)")
-    return out + intro_problems(sc, inp["known"]) + latin_problems(sc) + broken_problems(sc)
+    return rep_ + out + intro_problems(sc, inp["known"]) + latin_problems(sc) + broken_problems(sc)
 
 
 def g1_notes_text(notes):

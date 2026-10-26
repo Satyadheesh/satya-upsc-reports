@@ -41,7 +41,7 @@ on:
         default: ''
 
 concurrency:
-  group: ${{ github.event.inputs.luna_test != '' && github.event.inputs.luna_test != null && format('reel-luna-test-{0}-{1}-{2}-{3}', github.event.inputs.luna_effort, github.event.inputs.luna_model, github.event.inputs.edit_model, github.event.inputs.variant) || 'reel-scorer' }}
+  group: ${{ github.event.inputs.luna_test != '' && github.event.inputs.luna_test != null && format('reel-luna-test-{0}-{1}-{2}-{3}-{4}', github.event.inputs.luna_effort, github.event.inputs.luna_model, github.event.inputs.edit_model, github.event.inputs.variant, github.event.inputs.luna_test) || 'reel-scorer' }}
   cancel-in-progress: false
 
 env:
@@ -100,7 +100,7 @@ jobs:
           V="${{ github.event.inputs.variant }}"
           case "$V" in *noedit*) export REEL_EDIT_PASS=off;; *gedit*) export REEL_EDIT_PASS=gemma;; esac
           case "$V" in short*) export REEL_PROMPT_VARIANT=short;; no_original*) export REEL_PROMPT_VARIANT=no_original;; brief*) export REEL_PROMPT_VARIANT=brief;;
-            g1*) export REEL_PROMPT_VARIANT=g1;; b5*) export REEL_PROMPT_VARIANT=b5;; b3*) export REEL_PROMPT_VARIANT=b3;; b4r*) export REEL_PROMPT_VARIANT=b4r;; b4*) export REEL_PROMPT_VARIANT=b4;; gemma_hi*) export REEL_PROMPT_VARIANT=gemma_brief_hi;; gemma_only*) export REEL_PROMPT_VARIANT=gemma_only;; gemma*) export REEL_PROMPT_VARIANT=gemma_brief;; esac
+            g1d*) export REEL_PROMPT_VARIANT=g1d;; g1*) export REEL_PROMPT_VARIANT=g1;; b5*) export REEL_PROMPT_VARIANT=b5;; b3*) export REEL_PROMPT_VARIANT=b3;; b4r*) export REEL_PROMPT_VARIANT=b4r;; b4*) export REEL_PROMPT_VARIANT=b4;; gemma_hi*) export REEL_PROMPT_VARIANT=gemma_brief_hi;; gemma_only*) export REEL_PROMPT_VARIANT=gemma_only;; gemma*) export REEL_PROMPT_VARIANT=gemma_brief;; esac
           if [ -n "$SEL" ]; then   # select: each block is an annotation as soon as it's ready (a long run may hit the time limit)
             REEL_STREAM_NOTICES=1 REEL_SELECT=v3 SELECT_TEST_SCRIPTS=5 python -m tools.reel_scorer --select-test 2>&1 | tee /tmp/lt.txt; exit 0
           fi

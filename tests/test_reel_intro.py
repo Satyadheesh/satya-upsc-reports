@@ -79,3 +79,11 @@ def test_broken_problems():
     assert broken_problems({"core_say": "सबसे चौंकाने वाली बात यह है कि को लीक किए गए उत्तर"})
     assert not broken_problems({"core_say": "मुख्यमंत्री ने कहा कि लोगों को सुरक्षित जगह ले जाया जाएगा।"})
     assert not broken_problems({"core_say": "प्रशासन लोगों, खासकर कमजोर परिवारों, को सुरक्षित जगह पहुंचा रहा है।"})
+
+
+def test_parse_g1():
+    from tools.reel_scorer import parse_g1
+    sc, missing = parse_g1("**HOOK:** नमस्ते\nCORE_POINTS: एक | दो\nPEOPLE: राम = मंत्री; श्याम = नेता\nSTAT: 14\nSTAT_LABEL: मिल")
+    assert sc["hook_say"] == "नमस्ते" and sc["core_points_hi"] == ["एक", "दो"] and sc["twist_stat"] == "14"
+    assert sc["twist_label"] == "मिल" and [p["name_hi"] for p in sc["people"]] == ["राम", "श्याम"]
+    assert "CORE" in missing and "HOOK" not in missing

@@ -30,6 +30,14 @@ class Model:
         )
         return json.loads(out["choices"][0]["message"]["content"])
 
+    def text(self, system, user, temperature=0.3, max_tokens=900):
+        """Plain text, no JSON grammar (Gemma's Hindi through the grammar dropped words; reels, 26 Oct 2026)."""
+        out = self.llm.create_chat_completion(
+            messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
+            temperature=temperature, max_tokens=max_tokens,
+        )
+        return out["choices"][0]["message"]["content"] or ""
+
     def chat(self, messages, schema, temperature=0.2, max_tokens=350):
         out = self.llm.create_chat_completion(
             messages=messages,

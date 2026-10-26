@@ -93,8 +93,55 @@ SCHEMA_COMMON = {"type": "object", "properties": {"one_line_hi": {"type": "strin
                  "required": ["one_line_hi", "viral_score", "topic", "hook_angle", "wow_fact", "why"]}
 
 
-def select_v2():
-    return os.environ.get("REEL_SELECT", "v1") == "v2"
+# v3 (Yash, 26 Oct 2026: "it is not about aam aadmi... there can be a lot of news a normal person is interested in"):
+# any topic a normal Indian would stop scrolling for, as long as it can be told clearly in 30 seconds.
+SYSTEM_INTEREST = """You are the executive producer of SatyaDheesh's Hindi news reels. The viewer is a normal Indian
+scrolling on their phone (Kanpur, Patna, Indore): smart, but not following the news closely. Score this story 0-10:
+would they stop scrolling and want to know about it, and can it be told so they understand it in 30 seconds?
+
+Any topic can work: politics and politicians, crime and scams, cricket and sport, films, ISRO and science, defence,
+India and the world, money and prices, government decisions, strange or surprising events, human stories.
+
+First write "one_line_hi": the whole story in one plain Hindi sentence a normal person would understand.
+
+Score (add up):
+1. Interest (0-4): would a normal Indian want to know this? Big names, big stakes, drama, surprise, anger, pride,
+   money, something new that really happened.
+2. Clear in 30 seconds (0-2): can it be told with at most one line of background, without insider knowledge?
+3. Hook (0-2): a surprising contrast, a big number people can picture, or a question.
+4. Talkability (0-2): would they talk about it or forward it?
+
+Score at most 4: nothing really happened yet (a hearing adjourned, a meeting held, a committee formed, a routine
+statement); insider or procedural stories that can't be made clear in 30 seconds; a foreign story with no India link.
+
+WHAT TO REJECT (Score 0):
+- Routine partisan name-calling, spokesperson bickering, or unverified verbal allegations without official records.
+- Mundane procedural press releases or local party committee reshuffles.
+- Violent crimes, murders, sexual offenses, tragic deaths, accidents with casualties, grief/mourning.
+- Personal celebrity scandals, divorces, custody battles.
+- Defamation hazards (claims must be grounded in official records, EC filings, CAG audits, affidavits, or established data).
+
+Answer in JSON:
+- "one_line_hi": the story in one plain Hindi sentence (Devanagari)
+- "viral_score": Integer 0 to 10
+- "topic": Short category string (e.g. "politics", "politics_funding", "corruption", "crime_scam", "sports", "cinema", "science_space", "defence", "economy", "prices", "jobs_exams", "schemes", "weather", "world", "curiosity")
+- "hook_angle": A compelling opening hook or question in conversational Hindi (Devanagari)
+- "wow_fact": The single most impressive number, record, or fact in the story
+- "why": One short sentence explaining the score
+"""
+SELECT_TAG = {"v2": "+common", "v3": "+v3"}
+
+
+def select_mode():
+    return os.environ.get("REEL_SELECT", "v1")
+
+
+def select_v2():   # any of the newer rubrics (JSON with one_line_hi)
+    return select_mode() in SELECT_TAG
+
+
+def select_system():
+    return SYSTEM_INTEREST if select_mode() == "v3" else SYSTEM_COMMON
 
 
 SCHEMA = {
@@ -574,7 +621,7 @@ def intro_problems(script, known=()):
         role = (p.get("role_hi") or "").strip()
         if not role or not (_role_words(role) & _role_words(window)):
             out.append(f"{name} is not introduced on first mention (say: '{p.get('role_hi') or 'role'} {name}')")
-    cap = 2 if "b5" in (os.environ.get("REEL_PROMPT_VARIANT", ""), os.environ.get("REEL_PIPELINE", "b4r")) else 3
+    cap = 2 if {"b5", "g1"} & {os.environ.get("REEL_PROMPT_VARIANT", ""), os.environ.get("REEL_PIPELINE", "b4r")} else 3
     if named > cap:
         out.append(f"{named} people are named: keep at most {cap}, describe the rest without a name")
     return out
@@ -759,7 +806,7 @@ def dispatch_daily_reel(u_db, m_db, model=None, force=False):
             "  AND c.article_id NOT IN (SELECT article_id FROM reel_posts) "
             "ORDER BY c.viral_score DESC, c.published_at DESC "
             "LIMIT 40",
-            [since, "%+common" if select_v2() else "%"]   # v2: only stories scored by the common-man rules
+            [since, "%" + SELECT_TAG.get(select_mode(), "")]   # v2/v3: only stories scored by those rules
         ).rows
         # political stories get the most traction (Yash, 22 Oct 2026): +1 when ranking, and they qualify from 6
         candidates = [c for c in candidates if int(c[2]) >= 7 or (is_political(c[1]) and int(c[2]) >= 6)]
@@ -1487,9 +1534,193 @@ def fix_credit(inp, aid, sc):
     return dict(sc, core_say=new)
 
 
+# G1 (Yash, 26 Oct 2026: "lets only gemma now, no luna"): Gemma only, two steps. 1) English notes (Gemma's English is
+# reliable). 2) The Hindi reel as plain labelled lines, NOT grammar-constrained JSON (Gemma's Hindi through the JSON
+# grammar dropped words, mostly names). Then code checks; one Gemma rewrite for exactly the problems found.
+G1_NOTES_SYSTEM = """Read the news article. Write notes in simple English for a 30-second Hindi reel. The viewer is a
+normal Indian who doesn't follow the news and has no background on this story.
+- background: the one line the viewer needs to follow the story (who is who, what the issue is), or "" if none needed.
+- what_happened: 2-3 short sentences.
+- people: at most 2 people worth naming, each with who they are in a few simple words (role + party or state).
+  Everyone else by role only.
+- interesting: why a normal person would find this interesting (the surprise, the stakes, the drama).
+- details: 1-2 details a viewer can picture: rounded numbers in rupees or people, places, dates.
+- allegations: who accuses whom of what, exactly as in the article ("" if none). An allegation stays an allegation.
+- next: what happens next, if the article says ("" otherwise).
+No abbreviations or office names a normal person wouldn't know: say what they do (police, CBI, ED, Supreme Court, RBI
+are known). Facts only from the article; change nothing."""
+G1_NOTES_SCHEMA = {"type": "object", "properties": {
+    "background": {"type": "string"}, "what_happened": {"type": "string"},
+    "people": {"type": "array", "items": {"type": "object", "properties": {"name": {"type": "string"}, "who": {"type": "string"}},
+                                          "required": ["name", "who"]}},
+    "interesting": {"type": "string"}, "details": {"type": "string"}, "allegations": {"type": "string"},
+    "next": {"type": "string"}},
+    "required": ["background", "what_happened", "people", "interesting", "details", "allegations", "next"]}
+
+G1_SCRIPT_SYSTEM = """You write SatyaDheesh's Hindi news reels. The viewer is a normal Indian scrolling on their phone
+(Kanpur, Patna, Indore): smart, but not following the news, with no background on this story. Your one job: they
+understand the story the first time they hear it, and find it interesting.
+
+HOW TO WRITE
+- Everyday spoken Hindi, the way people talk at home. Short sentences. English words people use every day are fine,
+  written in Devanagari (पुलिस, कोर्ट, टिकट, सरकार).
+- If the viewer needs background, give it first, in one simple line.
+- The first time a person is named, say who they are in a few simple words just before the name ("तेलंगाना के
+  मुख्यमंत्री रेवंत रेड्डी"). Name at most 2 people; everyone else by role.
+- No abbreviations or office names a normal person doesn't know: say what they do. Police, CBI, ED, Supreme Court,
+  RBI are known.
+- Numbers only if a viewer can picture them, said the way people say them ("करीब पौने दो करोड़", never "1.69 करोड़").
+- An allegation stays an allegation: "आरोप है", "पुलिस के मुताबिक", "X का कहना है". Never state a crime as a fact.
+- Facts only from the notes. Add nothing. Every line adds something new.
+- Spoken lines (HOOK + CORE + TWIST + END) together: 70-100 Hindi words, about 30-40 seconds.
+
+WRITE EXACTLY THESE LINES, each starting with its label, nothing else:
+HEADLINE: on screen, max 7 words
+SUBTITLE: on screen, max 9 words
+HOOK: spoken, max 18 words: the most interesting thing, the way you'd tell a friend
+CORE_TITLE: on screen, max 5 words
+CORE_POINTS: on screen, 2-3 short points separated by |, each max 7 words
+CORE: spoken, max 45 words: background if needed, who, what happened
+STAT: on screen, one number or very short phrase
+STAT_LABEL: on screen, max 4 words
+STAT_DETAIL: on screen, max 9 words
+TWIST: spoken, max 25 words: the surprise, the stakes, or what happens next
+END_TITLE: on screen, 2-4 words
+QUESTION: on screen, max 8 words
+END: spoken, one short question a viewer can answer in a word or two
+STORY: the whole story in one plain Hindi sentence
+PEOPLE: each named person as नाम = कौन हैं, separated by ; (or कोई नहीं)
+
+STYLE EXAMPLE (a different story, for the voice only):
+HEADLINE: कावेरी के पानी पर फिर झगड़ा
+SUBTITLE: तमिलनाडु को मांग का छोटा हिस्सा
+HOOK: कर्नाटक और तमिलनाडु एक बार फिर नदी के पानी पर आमने-सामने हैं।
+CORE_TITLE: पानी का बंटवारा
+CORE_POINTS: दोनों राज्यों के किसान कावेरी पर निर्भर | तमिलनाडु ने ज्यादा पानी मांगा | कमेटी ने थोड़ा पानी तय किया
+CORE: कावेरी नदी दोनों राज्यों से होकर बहती है, और दोनों तरफ के किसान इसी पानी से खेती करते हैं। तमिलनाडु ने ज्यादा पानी मांगा था, लेकिन पानी बांटने वाली कमेटी ने कहा, कर्नाटक पंद्रह दिन तक रोज़ थोड़ा पानी छोड़ेगा।
+STAT: पांचवां हिस्सा
+STAT_LABEL: मांग का
+STAT_DETAIL: तमिलनाडु को मांग का करीब पांचवां हिस्सा
+TWIST: यानी तमिलनाडु को जितना चाहिए था, उसका करीब पांचवां हिस्सा ही मिलेगा। अब वहां के किसान नाराज़ हैं।
+END_TITLE: पानी पर फैसला
+QUESTION: क्या ये बंटवारा सही है?
+END: आपके हिसाब से ये बंटवारा सही है?
+STORY: कावेरी के पानी पर कमेटी ने तमिलनाडु को उसकी मांग का करीब पांचवां हिस्सा ही दिया है।
+PEOPLE: कोई नहीं"""
+
+G1_KEYS = {"HEADLINE": "headline_hi", "SUBTITLE": "subtitle_hi", "HOOK": "hook_say", "CORE_TITLE": "core_title_hi",
+           "CORE_POINTS": "core_points_hi", "CORE": "core_say", "STAT": "twist_stat", "STAT_LABEL": "twist_label",
+           "STAT_DETAIL": "twist_detail_hi", "TWIST": "twist_say", "END_TITLE": "engagement_title_hi",
+           "QUESTION": "question_hi", "END": "engagement_say", "STORY": "plain_story_hi", "PEOPLE": "people"}
+G1_LINE = re.compile(r"^\s*\**\s*(HEADLINE|SUBTITLE|HOOK|CORE_TITLE|CORE_POINTS|CORE|STAT_LABEL|STAT_DETAIL|STAT|TWIST|"
+                     r"END_TITLE|QUESTION|END|STORY|PEOPLE)\s*\**\s*[:：]\s*(.*)$")
+
+
+def parse_g1(text):
+    """Gemma's labelled lines -> the script dict the reels repo uses. -> (script, missing labels)"""
+    sc = {}
+    for line in (text or "").splitlines():
+        m = G1_LINE.match(line)
+        if m and m.group(2).strip():
+            sc.setdefault(G1_KEYS[m.group(1)], m.group(2).strip().strip("*").strip())
+    pts = sc.get("core_points_hi", "")
+    sc["core_points_hi"] = [x.strip() for x in pts.split("|") if x.strip()][:3]
+    people = []
+    for part in str(sc.get("people", "")).split(";"):
+        if "=" in part:
+            n, r = part.split("=", 1)
+            if n.strip() and "कोई नहीं" not in n:
+                people.append({"name_hi": n.strip(), "role_hi": r.strip()})
+    sc["people"] = people
+    missing = [k for k, f in G1_KEYS.items() if f not in ("people",) and not sc.get(f)]
+    return sc, missing
+
+
+def g1_text_problems(sc, inp):
+    words = sum(len(str(sc.get(k, "")).split()) for k in ("hook_say", "core_say", "twist_say", "engagement_say"))
+    out = []
+    if words > 110:
+        out.append(f"the spoken lines have {words} words: cut to 70-100 (HOOK + CORE + TWIST + END)")
+    if words < 55:
+        out.append(f"the spoken lines have only {words} words: the viewer needs a little more to follow (70-100)")
+    if re.search(r"\d+\.\d+", " ".join(str(v) for v in sc.values() if isinstance(v, str))):
+        out.append("a number has a decimal: say it the way people do (करीब पौने दो करोड़)")
+    return out + intro_problems(sc, inp["known"]) + latin_problems(sc) + broken_problems(sc)
+
+
+def g1_notes_text(notes):
+    ppl = "; ".join(f"{p.get('name')} = {p.get('who')}" for p in notes.get("people") or [])
+    return "\n".join(f"{k.upper()}: {v}" for k, v in (("background", notes.get("background")),
+                     ("what happened", notes.get("what_happened")), ("people", ppl or "none"),
+                     ("why it's interesting", notes.get("interesting")), ("details", notes.get("details")),
+                     ("allegations", notes.get("allegations")), ("next", notes.get("next"))) if v)
+
+
+def g1_script(inp, aid, model=None):
+    """Gemma-only reel script. -> (script or None, why, problems)"""
+    model = model or gemma_model()
+    t0 = time.time()
+    try:
+        notes = model.json(G1_NOTES_SYSTEM, f"Title: {inp['title']}\n\nSUMMARY:\n{inp['body'][:1200]}\n\n"
+                           + (f"FULL ARTICLE:\n{inp['original'][:3500]}" if inp["original"] else ""),
+                           G1_NOTES_SCHEMA, temperature=0.2, max_tokens=600) or {}
+    except Exception as e:
+        return None, f"G1 notes failed: {type(e).__name__}", []
+    ntext = g1_notes_text(notes)
+    print(f"  G1 notes #{aid} ({time.time() - t0:.0f}s):\n{ntext}", flush=True)
+    src = next((l.split(":", 1)[1].strip() for l in inp["head"].splitlines() if l.startswith("Source:")), "द हिंदू")
+    user = ("NOTES (everything you need):\n" + ntext
+            + (f"\n\nThis is a political story: CORE starts with \"{src} की रिपोर्ट के मुताबिक\"." if inp["political"] else ""))
+    sc, problems = None, []
+    for attempt in range(2):
+        t = time.time()
+        try:
+            prompt = user if attempt == 0 else (user + "\n\nYOUR SCRIPT:\n" + raw + "\n\nFIX ONLY THESE, keep everything else; "
+                                                 "write all the lines again:\n- " + "\n- ".join(problems))
+            raw = model.text(G1_SCRIPT_SYSTEM, prompt, temperature=0.4, max_tokens=900)
+        except Exception as e:
+            return sc, f"G1 script failed: {type(e).__name__}", problems
+        new, missing = parse_g1(raw)
+        if missing and sc and attempt:
+            print(f"  G1 rewrite #{aid} lost {missing}; keeping the first script")
+            break
+        sc = new
+        problems = ([f"missing the line(s): {', '.join(missing)}"] if missing else []) + g1_text_problems(sc, inp)
+        print(f"  G1 script #{aid} try {attempt + 1} ({time.time() - t:.0f}s): {len(problems)} problem(s)"
+              + "".join(f"\n    - {p}" for p in problems), flush=True)
+        if not problems:
+            break
+    if not sc or any(not sc.get(f) for f in ("hook_say", "core_say", "twist_say", "engagement_say", "headline_hi")):
+        return None, "G1 script incomplete", problems
+    sc, notes_l, ok = legal_pass(sc)   # every story (not only political): "कथित" before a named wrongdoing
+    for n in notes_l:
+        print(f"  legal #{aid}: {n}")
+    sc = fix_credit(inp, aid, sc)
+    return sc, ("G1" if ok else "G1: abusive label"), g1_text_problems(sc, inp)
+
+
+def json_vs_text_check(inp, aid, model=None):
+    """Step 0 (26 Oct 2026): does Gemma's Hindi drop words only through the JSON grammar? Same request both ways."""
+    model = model or gemma_model()
+    src = f"Title: {inp['title']}\n\n{inp['body'][:1200]}"
+    ask = "Tell this news in 4-5 simple spoken Hindi sentences (Devanagari), naming the people in it with who they are."
+    try:
+        j = (model.json(ask, src, TEXT_SCHEMA, temperature=0.2, max_tokens=500) or {}).get("text", "")
+        t = model.text(ask + " Write only the sentences.", src, temperature=0.2, max_tokens=500)
+    except Exception as e:
+        print(f"  json/text check #{aid} failed: {type(e).__name__}")
+        return
+    bj, bt = broken_problems({"x": j}), broken_problems({"x": t})
+    block = f"JSON mode ({'BROKEN' if bj else 'ok'}): {j}\nTEXT mode ({'BROKEN' if bt else 'ok'}): {t}"
+    print(f"== json vs text #{aid}\n{block}", flush=True)
+    notice(f"Gemma json vs text #{aid}", block)
+
+
 def live_script(inp, aid):
     """The live script pipeline: B4r; REEL_PIPELINE=luna (repo variable) goes back to Luna alone without a code change."""
     pipe = os.environ.get("REEL_PIPELINE", "b4r")
+    if pipe == "g1":
+        return g1_script(inp, aid)
     if pipe == "luna":
         return luna_script(inp, aid)
     return b4r_script(inp, aid, v="b5" if pipe == "b5" else "b4r")
@@ -1528,6 +1759,9 @@ def luna_test(m_db, u_db, ids):
             sc, why, problems = live_script(inp, aid)
         elif os.environ.get("REEL_PROMPT_VARIANT") == "b5":
             sc, why, problems = b4r_script(inp, aid, v="b5")
+        elif os.environ.get("REEL_PROMPT_VARIANT") == "g1":
+            json_vs_text_check(inp, aid)
+            sc, why, problems = g1_script(inp, aid)
         elif os.environ.get("REEL_PROMPT_VARIANT") == "gemma_only":   # Gemma writes the script itself (comparison)
             try:
                 sc, why = gemma_model().json(inp["system"], inp["user_msg"], SCRIPT_SCHEMA, temperature=0.25, max_tokens=1400), "gemma"
@@ -1610,7 +1844,7 @@ def rank(rows):
     return sorted(q, key=lambda r: (int(r[2]) + (1 if is_political(r[1]) else 0), r[3] or 0), reverse=True)
 
 
-def select_test(m_db, u_db, n=45, scripts=3):
+def select_test(m_db, u_db, n=45, scripts=int(os.environ.get("SELECT_TEST_SCRIPTS") or 3)):
     """Read-only: re-score the last 24 h's scored stories with the common-man rubric (v2), show the old vs new picks,
     then write B5 scripts for the new top `scripts`. Nothing is saved, dispatched or posted."""
     now = int(time.time())
@@ -1624,6 +1858,9 @@ def select_test(m_db, u_db, n=45, scripts=3):
         for r in m_db.execute(f"SELECT id, title, rephrased_title, rephrased_article, category FROM articles WHERE id IN ({ph})", chunk).rows:
             arts[int(r[0])] = r
     model = gemma_model()
+    fb = audience_feedback(u_db, n=6)   # real Instagram reach of our recent reels
+    print(f"== REACH{fb or ' (Instagram reach not readable)'}", flush=True)
+    notice("Instagram reach of our reels", fb or "not readable")
     new, line = [], {}
     t0 = time.time()
     for o in old:
@@ -1632,7 +1869,7 @@ def select_test(m_db, u_db, n=45, scripts=3):
             continue
         prompt = f"Title: {a[2] or a[1]}\nCategory: {a[4]}\nArticle Body:\n{decompress(a[3])[:1000]}\n"
         try:
-            res = model.json(SYSTEM_COMMON, prompt, SCHEMA_COMMON, temperature=0.1, max_tokens=400)
+            res = model.json(select_system() if select_v2() else SYSTEM_INTEREST, prompt, SCHEMA_COMMON, temperature=0.1, max_tokens=400)
         except Exception as e:
             print(f"  #{o[0]} rescore failed: {type(e).__name__}")
             continue
@@ -1654,7 +1891,7 @@ def select_test(m_db, u_db, n=45, scripts=3):
         notice(t, body)
     top = [r[0] for r in newr[:scripts]]
     if top:
-        os.environ["REEL_PROMPT_VARIANT"] = "b5"
+        os.environ["REEL_PROMPT_VARIANT"] = os.environ.get("REEL_PROMPT_VARIANT") or "b5"
         luna_test(m_db, u_db, top)
 
 
@@ -1688,7 +1925,7 @@ def main():
     since = now - 24 * 3600
     # v2: a story scored by the old rules is scored again by the common-man rules (INSERT OR REPLACE)
     already = {r[0] for r in u_db.execute("SELECT article_id FROM reel_candidates WHERE created_at >= ? AND model LIKE ?",
-                                          [since - 86400, "%+common" if select_v2() else "%"]).rows}
+                                          [since - 86400, "%" + SELECT_TAG.get(select_mode(), "")]).rows}
 
     # Fetch candidate articles across all categories
     rows = m_db.execute(
@@ -1734,7 +1971,7 @@ def main():
             f"Article Body:\n{art['body'][:1000]}\n"
         )
         try:
-            res = (model.json(SYSTEM_COMMON + FEEDBACK, prompt, SCHEMA_COMMON, temperature=0.1, max_tokens=400) if select_v2()
+            res = (model.json(select_system() + FEEDBACK, prompt, SCHEMA_COMMON, temperature=0.1, max_tokens=400) if select_v2()
                    else model.json(SYSTEM + FEEDBACK, prompt, SCHEMA, temperature=0.1, max_tokens=250))
             score = int(res.get("viral_score") or 0)
             topic = str(res.get("topic") or art["category"])
@@ -1752,7 +1989,7 @@ def main():
                     "INSERT OR REPLACE INTO reel_candidates "
                     "(article_id, published_at, topic, viral_score, hook_angle, wow_fact, why, model, created_at) "
                     "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                    [art["id"], art["scraped_at"], topic, score, hook, fact, why, MODEL_NAME + ("+common" if select_v2() else ""), now]
+                    [art["id"], art["scraped_at"], topic, score, hook, fact, why, MODEL_NAME + SELECT_TAG.get(select_mode(), ""), now]
                 )
             scored_count += 1
         except Exception as e:

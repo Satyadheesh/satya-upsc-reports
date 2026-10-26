@@ -43,11 +43,11 @@ def fix_detokenize(llm):
 
 
 class Model:
-    def __init__(self, path, n_ctx=4096, fix_long_tokens=False):
+    def __init__(self, path, n_ctx=4096, fix_long_tokens=True):
         from llama_cpp import Llama
         self.llm = Llama(model_path=path, n_ctx=n_ctx, n_gpu_layers=int(os.environ.get("KIT_GPU_LAYERS", "-1")),
                          verbose=False)
-        if fix_long_tokens:   # opt-in per service (reels first, 26 Oct 2026); see fix_detokenize
+        if fix_long_tokens:   # on for every kit service (Yash, 26 Oct 2026); see fix_detokenize
             fix_detokenize(self.llm)
 
     def json(self, system, user, schema, temperature=0.2, max_tokens=900):

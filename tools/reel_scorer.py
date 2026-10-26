@@ -1139,6 +1139,21 @@ def dispatch_daily_reel(u_db, m_db, model=None, force=False, only_ids=None):
         send_telegram_alert(err_msg)
 
 
+# The credit names the site the article was taken from (26 Oct 2026: an NDTV/IANS story was credited to The Hindu,
+# because everything except Indian Express defaulted to "द हिंदू").
+SOURCES = [("thehindu", "द हिंदू"), ("indianexpress", "इंडियन एक्सप्रेस"), ("ndtv", "एनडीटीवी"),
+           ("timesofindia", "टाइम्स ऑफ़ इंडिया"), ("economictimes", "इकनॉमिक टाइम्स"), ("hindustantimes", "हिंदुस्तान टाइम्स"),
+           ("livemint", "मिंट"), ("deccanherald", "डेक्कन हेराल्ड"), ("tribuneindia", "द ट्रिब्यून"),
+           ("telegraphindia", "द टेलीग्राफ"), ("indiatoday", "इंडिया टुडे"), ("news18", "न्यूज़18"),
+           ("thewire", "द वायर"), ("scroll.in", "स्क्रॉल"), ("thequint", "द क्विंट"), ("business-standard", "बिज़नेस स्टैंडर्ड"),
+           ("moneycontrol", "मनीकंट्रोल"), ("bbc.", "बीबीसी"), ("reuters", "रॉयटर्स"), ("pti", "पीटीआई"), ("ians", "आईएएनएस")]
+
+
+def source_name(url):
+    u = str(url or "").lower()
+    return next((hi for key, hi in SOURCES if key in u), "मीडिया")   # unknown site: "मीडिया की रिपोर्ट के मुताबिक"
+
+
 def script_inputs(r, topic, fact, persona):
     """The exact prompt the live reel uses. r = (title, rephrased_title, rephrased_article, category, image_url, url,
     content) from articles. -> dict(system, head, user_msg, body, original, known, political, title)."""
@@ -1146,7 +1161,7 @@ def script_inputs(r, topic, fact, persona):
     body = decompress(r[2], limit=4000)
     original = clean_original(decompress(r[6], limit=12000))[:4000]  # ~1,000 tokens: richer context, runner time in check
     political = is_political(topic)
-    src_name = "इंडियन एक्सप्रेस" if "indianexpress" in str(r[5] or "").lower() else "द हिंदू"
+    src_name = source_name(r[5])
     variant = os.environ.get("REEL_PROMPT_VARIANT", "")   # experiments only: "short", "no_original"
     if variant == "short":
         system = SCRIPT_SYSTEM_SHORT.replace("<source>", src_name)
@@ -1686,6 +1701,8 @@ problems:
   says someone accused "the government" when the article says they complained to the election office).
 - allegation: an accusation or crime stated as a proven fact (it must be "आरोप है", "X का कहना है", "पुलिस के मुताबिक").
 - misleading: a line (especially the HOOK) that would make a viewer believe something the article doesn't say.
+The opening credit "<site> की रिपोर्ट के मुताबिक" names the website the article was taken from (it may carry agency copy):
+never report it.
 For each problem: the label (HEADLINE, HOOK, CORE, TWIST, STAT_DETAIL, END ...), what is wrong, and the fix in simple
 English. If everything is right, return an empty list. Never report style or wording preferences."""
 G1_FACT_SCHEMA = {"type": "object", "properties": {"problems": {"type": "array", "items": {"type": "object", "properties": {
@@ -1966,7 +1983,7 @@ def script_test(m_db, u_db, ids):
             continue
         r = r[0]
         title, political = r[1] or r[0], is_political(topic)
-        src_name = "इंडियन एक्सप्रेस" if "indianexpress" in str(r[3] or "").lower() else "द हिंदू"
+        src_name = source_name(r[3])
         body, original = decompress(r[2], limit=4000), clean_original(decompress(r[4], limit=12000))[:4000]
         system = SCRIPT_SYSTEM_CHARLIE + SCRIPT_SOURCE_RULES + (SCRIPT_POLITICAL_EXTRA.replace("{source}", src_name) if political else "")
         head = f"NEWS ARTICLE\nTitle: {title}\nTopic: {topic}\nSource: {src_name}\nKey Fact: {fact}\nVoice Persona: charlie\n"

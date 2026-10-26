@@ -1714,25 +1714,38 @@ def g1_script(inp, aid, model=None, direct=False):
 
 def tok_diag():
     """26 Oct 2026: Gemma's Hindi keeps losing the same words (मुख्यमंत्री, उपमुख्यमंत्री, उम्मीदवारों) in JSON and plain
-    text alike. Check the tokenizer round trip and what generation returns for them. Prints only."""
-    m = gemma_model()
-    import llama_cpp
-    out = [f"llama_cpp {getattr(llama_cpp, '__version__', '?')}"]
-    for w in ("दिल्ली की मुख्यमंत्री रेखा गुप्ता", "कर्नाटक के उपमुख्यमंत्री", "उम्मीदवारों को", "मुख्यमंत्री", "प्रधानमंत्री मोदी"):
-        toks = m.llm.tokenize(w.encode("utf-8"), add_bos=False)
-        pieces = [m.llm.detokenize([t]).decode("utf-8", "replace") for t in toks]
-        back = m.llm.detokenize(toks).decode("utf-8", "replace")
-        out.append(f"{w!r}: {len(toks)} tokens {toks} pieces {pieces} roundtrip_ok={back == w} back={back!r}")
-    for ask in ("Write in Hindi (Devanagari): 'The Chief Minister of Delhi, Rekha Gupta, ordered checks.' Only the sentence.",
-                "Repeat exactly: दिल्ली की मुख्यमंत्री रेखा गुप्ता ने आदेश दिया।"):
-        r = m.llm.create_chat_completion(messages=[{"role": "user", "content": ask}], temperature=0, max_tokens=60)
-        out.append(f"GEN {ask[:40]!r} -> {r['choices'][0]['message']['content']!r}")
-        deltas = [c["choices"][0]["delta"].get("content", "") for c in m.llm.create_chat_completion(
-            messages=[{"role": "user", "content": ask}], temperature=0, max_tokens=60, stream=True)]
-        out.append(f"STREAM pieces {deltas}")
-    block = "\n".join(out)
-    print("== TOKDIAG\n" + block, flush=True)
-    notice("Gemma tokenizer check", block)
+    text alike. Check the tokenizer round trip and what generation returns for them. Prints only (each part its own
+    annotation, so a crash in one part doesn't hide the rest)."""
+    try:
+        import llama_cpp
+        notice("tok 0 version", f"llama_cpp {getattr(llama_cpp, '__version__', '?')}")
+        m = gemma_model()
+    except Exception as e:
+        notice("tok 0 load failed", f"{type(e).__name__}: {e}")
+        return
+    for k, w in enumerate(("दिल्ली की मुख्यमंत्री रेखा गुप्ता", "कर्नाटक के उपमुख्यमंत्री", "उम्मीदवारों को", "प्रधानमंत्री मोदी")):
+        try:
+            toks = m.llm.tokenize(w.encode("utf-8"), add_bos=False)
+            pieces = [m.llm.detokenize([t]).decode("utf-8", "replace") for t in toks]
+            back = m.llm.detokenize(toks).decode("utf-8", "replace")
+            notice(f"tok {k + 1} roundtrip", f"{w!r}: {len(toks)} tokens {toks}\npieces {pieces}\nroundtrip_ok={back == w} back={back!r}")
+        except Exception as e:
+            notice(f"tok {k + 1} failed", f"{type(e).__name__}: {e}")
+    for k, ask in enumerate(("Write in Hindi (Devanagari): 'The Chief Minister of Delhi, Rekha Gupta, ordered checks.' Only the sentence.",
+                             "Repeat exactly: दिल्ली की मुख्यमंत्री रेखा गुप्ता ने आदेश दिया।")):
+        try:
+            r = m.llm.create_chat_completion(messages=[{"role": "user", "content": ask}], temperature=0, max_tokens=60)
+            txt = r["choices"][0]["message"]["content"]
+            toks = m.llm.tokenize(txt.encode("utf-8"), add_bos=False)
+            notice(f"tok gen {k + 1}", f"ask {ask!r}\n-> {txt!r}\nre-tokenized: {[m.llm.detokenize([t]).decode('utf-8', 'replace') for t in toks]}")
+        except Exception as e:
+            notice(f"tok gen {k + 1} failed", f"{type(e).__name__}: {e}")
+        try:
+            deltas = [c["choices"][0]["delta"].get("content", "") for c in m.llm.create_chat_completion(
+                messages=[{"role": "user", "content": ask}], temperature=0, max_tokens=60, stream=True)]
+            notice(f"tok stream {k + 1}", f"{deltas}")
+        except Exception as e:
+            notice(f"tok stream {k + 1} failed", f"{type(e).__name__}: {e}")
 
 
 def json_vs_text_check(inp, aid, model=None):

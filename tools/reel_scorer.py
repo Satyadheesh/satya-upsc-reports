@@ -602,8 +602,15 @@ SAY_FIELDS = ("hook_say", "core_say", "twist_say", "engagement_say")
 _ROLE_STOP = {"के", "की", "का", "और", "में", "से", "पर", "एक", "तथा", "ने"}
 
 
+ROLE_ALIASES = [{"पीएम", "प्रधानमंत्री", "PM"}, {"सीएम", "मुख्यमंत्री", "CM"}, {"डिप्टी", "उपमुख्यमंत्री", "उप"}]
+
+
 def _role_words(role):
-    return {w for w in re.findall(r"[ऀ-ॿ]+|[A-Za-z]+", role or "") if w not in _ROLE_STOP and len(w) >= 2}
+    w = {x for x in re.findall(r"[ऀ-ॿ]+|[A-Za-z]+", role or "") if x not in _ROLE_STOP and len(x) >= 2}
+    for group in ROLE_ALIASES:   # "पीएम मोदी" introduces "नरेंद्र मोदी = प्रधानमंत्री" (26 Oct 2026)
+        if w & group:
+            w |= group
+    return w
 
 
 def intro_problems(script, known=()):
@@ -767,8 +774,13 @@ def send_telegram_alert(text):
         return False
 
 
-def dispatch_daily_reel(u_db, m_db, model=None, force=False):
+def dispatch_daily_reel(u_db, m_db, model=None, force=False, only_ids=None):
+    """only_ids (Yash, 26 Oct 2026: "can we make a reel of something specific, on special request?"): make the reel for
+    exactly these article ids, skipping the 6 h gap, the ranking and the 48 h name rule. Every check still applies:
+    best or nothing."""
     SPENT["inr"] = 0.0
+    request = bool(only_ids)
+    force = force or request
     """Dispatches the top viral story of the day to Satyadheesh/reels via repository_dispatch."""
     token = os.environ.get("CORE_TOKEN") or os.environ.get("GITHUB_PAT") or os.environ.get("GITHUB_PAT_CLASSIC")
     if not token:
@@ -812,7 +824,17 @@ def dispatch_daily_reel(u_db, m_db, model=None, force=False):
 
     # Find the top viral score candidates (>= 7) from the last 24h not yet reeled
     since = now - 24 * 3600
+    if request:
+        candidates = []
+        for aid in only_ids:
+            c = u_db.execute("SELECT topic, viral_score, hook_angle, wow_fact, why FROM reel_candidates WHERE article_id = ?",
+                             [aid]).rows
+            c = c[0] if c else ("politics", 8, "", "", "requested by Yash")
+            candidates.append((int(aid), str(c[0]), int(c[1] or 8), str(c[2] or ""), str(c[3] or ""), str(c[4] or "")))
+        print(f"  Requested reel for {only_ids}")
     try:
+        if request:
+            raise StopIteration
         candidates = u_db.execute(
             "SELECT c.article_id, c.topic, c.viral_score, c.hook_angle, c.wow_fact, c.why, c.published_at "
             "FROM reel_candidates c "
@@ -841,6 +863,8 @@ def dispatch_daily_reel(u_db, m_db, model=None, force=False):
                 continue
             fresh.append(c)
         candidates = [c[:6] for c in fresh[:5]]
+    except StopIteration:
+        pass
     except Exception as e:
         print(f"  Error querying reel_candidates for dispatch: {e}")
         return
@@ -892,7 +916,9 @@ def dispatch_daily_reel(u_db, m_db, model=None, force=False):
                     last_openai = script_data
                 else:
                     print(f"  OpenAI script not used ({why}); Gemma writes it")
-            if not script_data and model:
+            if not script_data and model and os.environ.get("REEL_PIPELINE") == "g1":
+                print(f"  #{aid}: no complete G1 script ({why}); trying the next story")
+            elif not script_data and model:
                 try:
                     sprompt = fit_prompt(model, system, head, body[:1500], original, max_tokens=800)
                     script_data = model.json(system, sprompt, SCRIPT_SCHEMA, temperature=0.25, max_tokens=800)
@@ -956,7 +982,7 @@ def dispatch_daily_reel(u_db, m_db, model=None, force=False):
                         break
                 except Exception as e:
                     print(f"  Suitability check note: {e}")
-                    if political:  # a political script is never made without its legal check
+                    if political or os.environ.get("REEL_PIPELINE") == "g1":   # best or nothing: never unchecked
                         print(f"  Story #{aid}: political and unchecked, trying next candidate...")
                         break
                     approved_candidate = cand
@@ -1654,6 +1680,52 @@ def parse_g1(text):
     return sc, missing
 
 
+G1_FACT_SYSTEM = """You check a Hindi news reel script against the news article it was written from. Report only real
+problems:
+- fact: a number, name, place, date or who-did-what that differs from the article, or is not in it (e.g. the script
+  says someone accused "the government" when the article says they complained to the election office).
+- allegation: an accusation or crime stated as a proven fact (it must be "आरोप है", "X का कहना है", "पुलिस के मुताबिक").
+- misleading: a line (especially the HOOK) that would make a viewer believe something the article doesn't say.
+For each problem: the label (HEADLINE, HOOK, CORE, TWIST, STAT_DETAIL, END ...), what is wrong, and the fix in simple
+English. If everything is right, return an empty list. Never report style or wording preferences."""
+G1_FACT_SCHEMA = {"type": "object", "properties": {"problems": {"type": "array", "items": {"type": "object", "properties": {
+    "label": {"type": "string"}, "wrong": {"type": "string"}, "fix": {"type": "string"}},
+    "required": ["label", "wrong", "fix"]}}}, "required": ["problems"]}
+
+
+def g1_fact_check(model, inp, aid, ntext, user, sc, raw, _recheck=False):
+    """Gemma checks the script against the article (facts, allegations, misleading hook); one rewrite for exactly
+    those problems, kept only if it is complete and passes the code checks no worse. -> (script, raw text)"""
+    try:
+        t = time.time()
+        res = model.json(G1_FACT_SYSTEM, f"ARTICLE:\nTitle: {inp['title']}\n{(inp['original'] or inp['body'])[:3200]}\n\n"
+                         f"SCRIPT:\n{raw}", G1_FACT_SCHEMA, temperature=0.1, max_tokens=500) or {}
+        probs = [p for p in res.get("problems") or [] if isinstance(p, dict) and p.get("fix")]
+    except Exception as e:
+        print(f"  G1 fact check #{aid} failed: {type(e).__name__}")
+        return None, raw   # best or nothing (Yash, 26 Oct 2026): an unchecked script is not used
+    print(f"  G1 fact check #{aid} ({time.time() - t:.0f}s): {len(probs)} problem(s)"
+          + "".join(f"\n    - {p.get('label')}: {p.get('wrong')} -> {p.get('fix')}" for p in probs[:6]), flush=True)
+    if not probs:
+        return sc, raw
+    if _recheck:   # the fixed script still has fact problems
+        return None, raw
+    try:
+        raw2 = model.text(G1_SCRIPT_SYSTEM, user + "\n\nYOUR SCRIPT:\n" + raw + "\n\nA FACT CHECK AGAINST THE ARTICLE FOUND "
+                          "THESE. Fix exactly these, keep everything else, write all the lines again:\n- "
+                          + "\n- ".join(f"{p.get('label')}: {p.get('wrong')} -> {p.get('fix')}" for p in probs[:6]),
+                          temperature=0.3, max_tokens=900)
+    except Exception as e:
+        print(f"  G1 fact fix #{aid} failed: {type(e).__name__}")
+        return None, raw
+    sc2, missing = parse_g1(raw2)
+    if missing or g1_text_problems(sc2, inp):
+        print(f"  G1 fact fix #{aid} not clean (missing {missing}, problems {g1_text_problems(sc2, inp)})")
+        return None, raw
+    print(f"  G1 fact fix #{aid}: applied; checking again")
+    return g1_fact_check(model, inp, aid, ntext, user, sc2, raw2, _recheck=True)
+
+
 def parse_g1_missing(sc):
     return [k for k, f in G1_KEYS.items() if f != "people" and not sc.get(f)]
 
@@ -1711,7 +1783,7 @@ def g1_script(inp, aid, model=None, direct=False):
     src = next((l.split(":", 1)[1].strip() for l in inp["head"].splitlines() if l.startswith("Source:")), "द हिंदू")
     user = (("THE ARTICLE:\n" if direct else "NOTES (everything you need):\n") + ntext
             + (f"\n\nThis is a political story: CORE starts with \"{src} की रिपोर्ट के मुताबिक\"." if inp["political"] else ""))
-    sc, problems = None, []
+    sc, problems, best_raw = None, [], ""
     for attempt in range(2):
         t = time.time()
         try:
@@ -1721,22 +1793,31 @@ def g1_script(inp, aid, model=None, direct=False):
         except Exception as e:
             return sc, f"G1 script failed: {type(e).__name__}", problems
         new, missing = parse_g1(raw)
-        if missing and sc and attempt:
-            print(f"  G1 rewrite #{aid} lost {missing}; keeping the first script")
+        new_problems = ([f"missing the line(s): {', '.join(missing)}"] if missing else []) + g1_text_problems(new, inp)
+        print(f"  G1 script #{aid} try {attempt + 1} ({time.time() - t:.0f}s): {len(new_problems)} problem(s)"
+              + "".join(f"\n    - {p}" for p in new_problems), flush=True)
+        if sc is not None and len(new_problems) >= len(problems):   # the rewrite is no better: keep the first
+            print(f"  G1 rewrite #{aid} not better; keeping the first script")
+            raw = best_raw
             break
-        sc = new
-        problems = ([f"missing the line(s): {', '.join(missing)}"] if missing else []) + g1_text_problems(sc, inp)
-        print(f"  G1 script #{aid} try {attempt + 1} ({time.time() - t:.0f}s): {len(problems)} problem(s)"
-              + "".join(f"\n    - {p}" for p in problems), flush=True)
+        sc, problems, best_raw = new, new_problems, raw
         if not problems:
             break
     if not sc or parse_g1_missing(sc):   # the reel needs every card's text
         return None, f"G1 script incomplete: {parse_g1_missing(sc) if sc else 'no script'}", problems
+    if problems:   # best or nothing: a script with problems left after the rewrite is not used
+        return None, f"G1 not good enough: {'; '.join(problems)[:300]}", problems
+    sc, raw = g1_fact_check(model, inp, aid, ntext, user, sc, raw)
+    if sc is None:
+        return None, "G1 fact check not passed", problems
     sc, notes_l, ok = legal_pass(sc)   # every story (not only political): "कथित" before a named wrongdoing
     for n in notes_l:
         print(f"  legal #{aid}: {n}")
     sc = fix_credit(inp, aid, sc)
-    return sc, ("G1" if ok else "G1: abusive label"), g1_text_problems(sc, inp)
+    if not ok:
+        return None, "G1: abusive label", problems
+    final = g1_text_problems(sc, inp)
+    return (sc, "G1", final) if not final else (None, f"G1 not clean after the legal pass: {'; '.join(final)[:300]}", final)
 
 
 def tok_diag():
@@ -1836,7 +1917,8 @@ def luna_test(m_db, u_db, ids):
         elif os.environ.get("REEL_PROMPT_VARIANT") == "b5":
             sc, why, problems = b4r_script(inp, aid, v="b5")
         elif os.environ.get("REEL_PROMPT_VARIANT") == "g1":
-            json_vs_text_check(inp, aid)
+            if os.environ.get("REEL_JSON_TEXT_CHECK"):
+                json_vs_text_check(inp, aid)
             sc, why, problems = g1_script(inp, aid)
         elif os.environ.get("REEL_PROMPT_VARIANT") == "g1d":
             sc, why, problems = g1_script(inp, aid, direct=True)
@@ -1980,12 +2062,20 @@ def main():
     ap.add_argument("--dry-run", action="store_true", help="Print scores without writing to DB")
     ap.add_argument("--dispatch", action="store_true", help="Force dispatch of top candidate")
     ap.add_argument("--no-dispatch", action="store_true", help="Do not trigger reels repo")
+    ap.add_argument("--reel-for", default="", help="article id: make and post the reel for exactly this story "
+                    "(Yash's special request); every quality check still applies")
     ap.add_argument("--select-test", action="store_true", help="re-score the last 24 h with the common-man rules, "
                     "show old vs new picks and B5 scripts for the new top 3; print only")
     ap.add_argument("--script-test", default="", help="comma-separated article ids: write and review their scripts, print only")
     ap.add_argument("--luna-test", default=None, help="article ids (comma-separated, or empty = 3 newest candidates): "
                                                       "the live Luna script only, fast, print only")
     args = ap.parse_args()
+    if args.reel_for:
+        ids = [int(x) for x in args.reel_for.split(",") if x.strip().isdigit()]
+        if not ids:
+            raise SystemExit("--reel-for needs an article id")
+        dispatch_daily_reel(upsc_db(), main_db(), model=gemma_model(), only_ids=ids)
+        return
     if os.environ.get("REEL_PROMPT_VARIANT") == "tokdiag":
         tok_diag()
         return

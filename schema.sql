@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS upsc_kit (
   translated_hi   INTEGER DEFAULT 0 -- for the Hindi service, later
 );
 CREATE INDEX IF NOT EXISTS idx_kit_status ON upsc_kit(status, attempts);
+CREATE INDEX IF NOT EXISTS idx_kit_trans_status ON upsc_kit(translated_hi, status, prompt_version);
 
 CREATE TABLE IF NOT EXISTS kit_meta (
   key   TEXT PRIMARY KEY,

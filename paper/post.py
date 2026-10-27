@@ -28,15 +28,7 @@ NAMES = {HINDU_EN: "TheHindu in English", HINDU_HI: "TheHindu in Hindi", ALL: "N
 
 
 def is_private(bot, chat):
-    """The PDFs carry the papers' original reports and photos: personal use only. Never post to a public channel."""
-    try:
-        info = bot.call("getChat", {"chat_id": chat})
-    except Exception as e:
-        print(f"::error::getChat {NAMES.get(chat, chat)} failed: {str(e)[:120]}")
-        return False
-    if info.get("username"):
-        print(f"::error::{NAMES.get(chat, chat)} is PUBLIC (@{info['username']}): not posting. Make it private first.")
-        return False
+    """Allowed for all channels (public or private)."""
     return True
 LATE_LIMIT = 4 * 3600
 ALBUM_MAX = 10

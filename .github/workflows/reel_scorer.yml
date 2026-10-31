@@ -67,6 +67,8 @@ env:
   REEL_PIPELINE: ${{ vars.REEL_PIPELINE || 'g1' }}
   REEL_SELECT: ${{ vars.REEL_SELECT || 'v3' }}
   REEL_BUDGET_INR: ${{ vars.REEL_BUDGET_INR || '10' }}
+  # reels are made only in these Indian hours (06:30-22:30); a story found at night waits for the morning (31 Oct 2026)
+  REEL_HOURS_IST: ${{ vars.REEL_HOURS_IST || '6.5-22.5' }}
 
 jobs:
   luna_test:
@@ -115,10 +117,10 @@ jobs:
   score:
     if: github.event.inputs.luna_test == '' || github.event.inputs.luna_test == null
     runs-on: ubuntu-latest
-    timeout-minutes: 120   # scoring ~25 min + B4r scripts (~10-13 min per candidate: 3 Gemma story steps, Luna, 2 Gemma checks); was 75
+    timeout-minutes: 120   # scoring ~25 min + G1 scripts (~10-15 min per story); the script stops starting stories at 95 min
     permissions:
       contents: read
-      actions: read
+      actions: write       # "Keep looking" starts the next run
     steps:
       - name: Check if already running
         env:
@@ -179,3 +181,14 @@ jobs:
           else
             python -m tools.reel_scorer --batch "$BATCH" $DRY $DISPATCH
           fi
+      # A reel is due and none passed yet (or time ran out): start the next run right away instead of waiting for
+      # GitHub's schedule, which starts this workflow only every few hours (31 Oct 2026). It stops by itself once a
+      # reel is made, when no untried stories are left, or at night (reel hours, REEL_HOURS_IST).
+      - name: Keep looking
+        if: always() && (github.event_name == 'schedule' || (github.event.inputs.dry_run != 'true' && github.event.inputs.reel_for == '' && github.event.inputs.script_test == ''))
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          [ -f /tmp/reel_again ] || exit 0
+          echo "::notice title=Keep looking::$(cat /tmp/reel_again)"
+          gh workflow run reel_scorer.yml --repo "${{ github.repository }}" -f batch=30 || true

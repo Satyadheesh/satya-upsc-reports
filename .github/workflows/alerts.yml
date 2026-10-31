@@ -1,8 +1,9 @@
-name: Top-news alerts (shadow)
+name: Top-news alerts
 run-name: "Alerts ${{ inputs.mode || 'hourly' }}"
 
-# Finds the news an ordinary reader would want a notification about. SHADOW MODE: what it would notify goes to the
-# admin Telegram chat only (TELEGRAM_TEST_CHAT_ID); nothing is sent to users. Started every hour by the orchestrator.
+# Finds the news an ordinary reader would want a notification about. LIVE since 31 Oct 2026: each pick is sent as a
+# push notification to the site's subscribers and reported in the admin Telegram chat (TELEGRAM_TEST_CHAT_ID).
+# Repo variable ALERTS_LIVE=0 goes back to shadow mode (admin chat only). Started every hour by the orchestrator.
 on:
   workflow_dispatch:
     inputs:
@@ -26,6 +27,8 @@ env:
   SATYA_TRANSLATION_DB_TOKEN: ${{ secrets.NEW_TRANSLATION_DB_TOKEN }}
   TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
   TELEGRAM_TEST_CHAT_ID: ${{ secrets.TELEGRAM_TEST_CHAT_ID }}
+  REVALIDATE_SECRET: ${{ secrets.REVALIDATE_SECRET }}   # auth for the site's alert-run (push to subscribers)
+  ALERTS_LIVE: ${{ vars.ALERTS_LIVE || '1' }}
   KIT_MODEL_REPO: unsloth/gemma-4-12b-it-GGUF
   KIT_MODEL_FILE: gemma-4-12b-it-Q4_K_M.gguf
   MODE: ${{ github.event.inputs.mode || 'hourly' }}

@@ -13,13 +13,32 @@ from marketing.discovery import DiscussionPost
 QUEUE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "queue"))
 PENDING_DIR = os.path.join(QUEUE_DIR, "pending")
 POSTED_DIR = os.path.join(QUEUE_DIR, "posted")
+PAUSED_DIR = os.path.join(QUEUE_DIR, "paused")
 REPORTS_DIR = os.path.join(QUEUE_DIR, "reports")
 HISTORY_FILE = os.path.join(QUEUE_DIR, "history.json")
+
+# Configurable pause timestamp for Reddit warming
+PAUSE_REDDIT_UNTIL = "2026-11-06T00:00:00+05:30"
+
+
+def is_reddit_paused() -> bool:
+    """Checks if Reddit discovery and posting is currently paused."""
+    try:
+        from datetime import datetime, timezone
+        pause_str = os.environ.get("PAUSE_REDDIT_UNTIL", PAUSE_REDDIT_UNTIL)
+        if not pause_str:
+            return False
+        pause_dt = datetime.fromisoformat(pause_str)
+        now_dt = datetime.now(pause_dt.tzinfo or timezone.utc)
+        return now_dt < pause_dt
+    except Exception:
+        return True
 
 
 def _init_dirs():
     os.makedirs(PENDING_DIR, exist_ok=True)
     os.makedirs(POSTED_DIR, exist_ok=True)
+    os.makedirs(PAUSED_DIR, exist_ok=True)
     os.makedirs(REPORTS_DIR, exist_ok=True)
 
 
@@ -105,15 +124,18 @@ def enqueue_draft(post: DiscussionPost, eval_result: Dict[str, Any]) -> str:
     return task_file
 
 
-def get_pending_tasks() -> List[Dict[str, Any]]:
-    """Returns all currently pending tasks."""
+def get_pending_tasks(include_paused: bool = False) -> List[Dict[str, Any]]:
+    """Returns all currently pending tasks, filtering out paused platforms (e.g. Reddit)."""
     _init_dirs()
     tasks = []
+    reddit_paused = is_reddit_paused()
     for filepath in sorted(glob.glob(os.path.join(PENDING_DIR, "*.json"))):
         try:
             with open(filepath, "r", encoding="utf-8") as f:
                 task = json.load(f)
                 task["_file"] = filepath
+                if not include_paused and reddit_paused and task.get("platform", "").lower() == "reddit":
+                    continue
                 tasks.append(task)
         except Exception as e:
             print(f"[Queue] Failed reading {filepath}: {e}")

@@ -40,6 +40,23 @@ DEFAULT_INTENT_SEARCHES = [
     ("AskIndia", "upsc preparation OR civil services"),
 ]
 
+PAUSE_REDDIT_UNTIL = "2026-11-06T00:00:00+05:30"
+
+
+def is_reddit_paused() -> bool:
+    """Checks if Reddit discovery and posting is currently paused."""
+    try:
+        from datetime import datetime, timezone
+        import os
+        pause_str = os.environ.get("PAUSE_REDDIT_UNTIL", PAUSE_REDDIT_UNTIL)
+        if not pause_str:
+            return False
+        pause_dt = datetime.fromisoformat(pause_str)
+        now_dt = datetime.now(pause_dt.tzinfo or timezone.utc)
+        return now_dt < pause_dt
+    except Exception:
+        return True
+
 YOUTUBE_CHANNELS = {
     "VisionIAS": "UCDa407FysJQ2Vtbf-ProNxQ",
     "StudyIQ": "UCrC8mOqJQpoB7NuIMKIS6rQ",
@@ -388,21 +405,24 @@ def discover_all(
     seen_ids = set()
 
     # 1. Reddit Subreddits
-    print(f"[Discovery] Scanning {len(targets)} Reddit subreddits...")
-    for idx, sub in enumerate(targets):
-        posts = fetch_reddit_subreddit(sub, max_posts=max_per_source)
-        added = 0
-        for p in posts:
-            if p.post_id not in seen_ids:
-                seen_ids.add(p.post_id)
-                all_posts.append(p)
-                added += 1
-        print(f"[Discovery] r/{sub}: {len(posts)} found ({added} new)")
-        if delay_between > 0:
-            time.sleep(delay_between)
+    if is_reddit_paused():
+        print(f"[Discovery] Reddit is currently PAUSED until {PAUSE_REDDIT_UNTIL}. Skipping Reddit subreddits.")
+    else:
+        print(f"[Discovery] Scanning {len(targets)} Reddit subreddits...")
+        for idx, sub in enumerate(targets):
+            posts = fetch_reddit_subreddit(sub, max_posts=max_per_source)
+            added = 0
+            for p in posts:
+                if p.post_id not in seen_ids:
+                    seen_ids.add(p.post_id)
+                    all_posts.append(p)
+                    added += 1
+            print(f"[Discovery] r/{sub}: {len(posts)} found ({added} new)")
+            if delay_between > 0:
+                time.sleep(delay_between)
 
     # 2. Reddit Intent Searches
-    if include_search:
+    if include_search and not is_reddit_paused():
         print(f"[Discovery] Running {len(DEFAULT_INTENT_SEARCHES)} high-intent Reddit searches...")
         for sub, query in DEFAULT_INTENT_SEARCHES:
             search_posts = fetch_reddit_search(sub, query, max_posts=6)

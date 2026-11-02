@@ -1,0 +1,18 @@
+{
+  "task_id": "quora_quora_e617c755b655",
+  "platform": "quora",
+  "post_id": "quora_e617c755b655",
+  "target_url": "https://www.quora.com/What-is-an-effective-way-to-improve-the-answer-writing-skills-for-the-UPSC-GS-Mains-in-3-months",
+  "title": "What is an effective way to improve the answer writing skills for the UPSC GS Mains in 3 months?",
+  "subreddit": "Quora:UPSC",
+  "author": null,
+  "score": 10,
+  "reason": "The user is asking for a specific 3-month strategy for Mains answer writing, which directly aligns with the 'UPSC CSE Mains Answer Writing Framework' and the 'Daily Current Affairs' strategies provided in the notes.",
+  "matched_note": {
+    "title": "UPSC CSE Mains Answer Writing Framework: Structure, Committee Quotes & Data Points",
+    "url": "https://satyadheesh.in/en/upsc"
+  },
+  "drafted_comment": "The real issue is trying to write 'perfect' answers without a consistent structure. In 3 months, you don't have time to reinvent the wheel; you need a repeatable framework.\n\nHere is how to fix it:\n\n1. Use the 4-Anchor Formula: Every answer must have a Constitutional basis (Article/Statute), Macro Data, a specific Committee Quote (like 2nd ARC or NITI Aayog), and a clear Way Forward. This moves you from 'general' to 'expert' writing.\n2. Stop Information Hoarding: Don't try to memorize everything. Focus on mapping current affairs to GS syllabus keywords. Extract only three things from every news item: a fact, a law, and a committee recommendation.\n3. Practice with Feedback: Write 2 answers daily using these anchors rather than 10 random ones without a structure.\\n\nTracked the 3 pillars and related Supreme Court precedents for this topic — check on satyadheesh portal.",
+  "status": "pending",
+  "created_at": "2026-11-02 21:06:35 UTC"
+}

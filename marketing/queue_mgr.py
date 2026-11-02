@@ -124,8 +124,32 @@ def enqueue_draft(post: DiscussionPost, eval_result: Dict[str, Any]) -> str:
     return task_file
 
 
+def sequence_tasks(tasks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Sequences tasks round-robin across channels and communities
+
+    to guarantee diverse, fair rotation so consecutive posts are never clustered.
+    """
+    if len(tasks) <= 1:
+        return tasks
+
+    from collections import defaultdict
+    buckets = defaultdict(list)
+    for t in tasks:
+        key = t.get("subreddit") or t.get("platform", "default")
+        buckets[key].append(t)
+
+    sequenced = []
+    max_depth = max((len(b) for b in buckets.values()), default=0)
+    keys = list(buckets.keys())
+    for depth in range(max_depth):
+        for k in keys:
+            if depth < len(buckets[k]):
+                sequenced.append(buckets[k][depth])
+    return sequenced
+
+
 def get_pending_tasks(include_paused: bool = False) -> List[Dict[str, Any]]:
-    """Returns all currently pending tasks, filtering out paused platforms (e.g. Reddit)."""
+    """Returns all currently pending tasks, sequenced round-robin and filtering out paused platforms."""
     _init_dirs()
     tasks = []
     reddit_paused = is_reddit_paused()
@@ -139,7 +163,7 @@ def get_pending_tasks(include_paused: bool = False) -> List[Dict[str, Any]]:
                 tasks.append(task)
         except Exception as e:
             print(f"[Queue] Failed reading {filepath}: {e}")
-    return tasks
+    return sequence_tasks(tasks)
 
 
 def mark_as_posted(task: Dict[str, Any], posted_url: Optional[str] = None) -> None:

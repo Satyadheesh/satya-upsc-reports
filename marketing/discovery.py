@@ -58,14 +58,56 @@ def is_reddit_paused() -> bool:
         return True
 
 YOUTUBE_CHANNELS = {
-    "VisionIAS": "UCDa407FysJQ2Vtbf-ProNxQ",
+    # 1. Khan Sir (Khan GS Research Centre - 24M subscribers)
+    "KhanSirGS": "UCatL-c6pmnjzEOHSyjn-sHA",
+    # 2. Utkarsh Classes Jodhpur (Daily Current Affairs - 13M subscribers)
+    "UtkarshClasses": "UC_yuiK5r5fo4i2orrgvub5A",
+    # 3. Ankit Awasthi (Ankit Inspires India - 3.7M subscribers)
+    "AnkitInspiresIndia": "UC0Jljzy_LwZ9IKG1Pj--gQQ",
+    # 4. Ankit Awasthi (Apni Pathshala - 3M subscribers)
+    "ApniPathshala": "UCsh-D-epmIokp0QIxPIi2xg",
+    # 5. StudyIQ IAS (16M subscribers)
     "StudyIQ": "UCrC8mOqJQpoB7NuIMKIS6rQ",
+    # 6. Drishti IAS (English)
+    "DrishtiIASEnglish": "UCafpueX9hFLls24ed6UddEQ",
+    # 7. Drishti IAS (Hindi)
+    "DrishtiIASHindi": "UCkrtAaoos4rxt2cw2CIBjuA",
+    # 8. Vision IAS
+    "VisionIAS": "UCDa407FysJQ2Vtbf-ProNxQ",
+    # 9. World Affairs (Prashant Dhawan - 3.5M subscribers)
+    "WorldAffairs": "UCCJsQKOKArvDksacfT2ryQw",
+    # 10. Next IAS
+    "NextIAS": "UCSrLdrCGaVWDSUyrTgqgmOw",
+    # 11. Vajiram & Ravi
+    "VajiramAndRavi": "UCzelA5kqD9v6k6drK44l4_g",
+    # 12. Sansad TV (Parliamentary & Public Policy Discussions)
+    "SansadTV": "UCISgnSNwqQ2i8lhCun3KtQg",
+    # 13. ForumIAS Official
     "ForumIAS": "UCDK7ncRqZjWNi9oVt--23uA",
+    # 14. Rau's IAS Study Circle
     "RausIAS": "UCm6ZUU09dU9_8yOaeCkqDNw",
-    "InsightsIAS": "UCAQsSHHz0dorMP4MMj7YNjA",
-    "PWOnlyIAS": "UCvuI_-ECldjoEyGd8RNbTww",
+    # 15. Sleepy Classes IAS
     "SleepyClasses": "UClGOsY-RB7oCtpddfsJR2jA",
-    "DrishtiIASEnglish": "UCkrtAaoos4rxt2cw2CIBjuA",
+    # 16. Insights IAS
+    "InsightsIAS": "UCAQsSHHz0dorMP4MMj7YNjA",
+    # 17. PW OnlyIAS
+    "PWOnlyIAS": "UCvuI_-ECldjoEyGd8RNbTww",
+    # 18. Utkarsh UPSC
+    "UtkarshUPSC": "UCk6r9CrPTbqMD8bB7I-TQqg",
+    # 19. Parcham Classes (Richa Ma'am)
+    "ParchamClasses": "UCwZZY0Pt-4ElMXPzufcGX4A",
+    # 20. Crazy Gk Trick
+    "CrazyGkTrick": "UCIl28Ab-H-3LYIPw4hhQexA",
+    # 21. Ravi Study GK
+    "RaviStudyGK": "UCbZ4R4Ae5oQACsJF8o0dNLQ",
+    # 22. Unacademy UPSC 101
+    "UnacademyUPSC101": "UCV1lbzgZNcYFAT3VHKOb7Cg",
+    # 23. Understand UPSC (Satyam Jain)
+    "UnderstandUPSC": "UCxfC59qQmlc3BWYGV5O1uxA",
+    # 24. Tathastu ICS (Dr. Tanu Jain)
+    "TathastuICS": "UC3xNlZYxWt6fys0G6uubprQ",
+    # 25. IAS PCS Pathshala
+    "IASPCSPathshala": "UCJM9g9ixgqCjVY13wggvzJA",
 }
 
 QUORA_SEARCH_QUERIES = [
@@ -312,9 +354,12 @@ def fetch_quora_questions(queries: Optional[List[str]] = None, max_per_query: in
 # ==========================================
 
 def fetch_youtube_editorial_discussions(channels: Optional[Dict[str, str]] = None, max_per_channel: int = 3) -> List[DiscussionPost]:
-    """Discovers fresh daily editorial & current affairs video discussions on YouTube."""
+    """Discovers fresh daily editorial & current affairs video discussions on YouTube,
+
+    interleaving them across channels in a fair, sequential round-robin order.
+    """
     targets = channels or YOUTUBE_CHANNELS
-    posts = []
+    channel_buckets = {ch: [] for ch in targets}
     ns = {"atom": "http://www.w3.org/2005/Atom"}
 
     for ch_name, cid in targets.items():
@@ -334,7 +379,7 @@ def fetch_youtube_editorial_discussions(channels: Optional[Dict[str, str]] = Non
                     if len(title.strip()) < 15:
                         continue
 
-                    posts.append(DiscussionPost(
+                    channel_buckets[ch_name].append(DiscussionPost(
                         platform="youtube",
                         post_id=f"yt_{vid_id}",
                         title=title.strip(),
@@ -346,7 +391,16 @@ def fetch_youtube_editorial_discussions(channels: Optional[Dict[str, str]] = Non
         except Exception as e:
             print(f"[Discovery] YouTube channel '{ch_name}' error: {e}")
 
-    return posts
+    # Interleave posts in round-robin sequence across channels
+    sequenced_posts = []
+    max_len = max((len(b) for b in channel_buckets.values()), default=0)
+    for depth in range(max_len):
+        for ch_name in targets:
+            bucket = channel_buckets[ch_name]
+            if depth < len(bucket):
+                sequenced_posts.append(bucket[depth])
+
+    return sequenced_posts
 
 
 # ==========================================

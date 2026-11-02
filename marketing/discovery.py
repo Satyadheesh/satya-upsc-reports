@@ -41,8 +41,14 @@ DEFAULT_INTENT_SEARCHES = [
 ]
 
 YOUTUBE_CHANNELS = {
-    "SleepyClasses": "UCgRf62bnK3uX4N-YEhG4Jog",
-    "DrishtiIAS": "UCafpueX9hFLls24ed6UddEQ",
+    "VisionIAS": "UCDa407FysJQ2Vtbf-ProNxQ",
+    "StudyIQ": "UCrC8mOqJQpoB7NuIMKIS6rQ",
+    "ForumIAS": "UCDK7ncRqZjWNi9oVt--23uA",
+    "RausIAS": "UCm6ZUU09dU9_8yOaeCkqDNw",
+    "InsightsIAS": "UCAQsSHHz0dorMP4MMj7YNjA",
+    "PWOnlyIAS": "UCvuI_-ECldjoEyGd8RNbTww",
+    "SleepyClasses": "UClGOsY-RB7oCtpddfsJR2jA",
+    "DrishtiIASEnglish": "UCkrtAaoos4rxt2cw2CIBjuA",
 }
 
 QUORA_SEARCH_QUERIES = [

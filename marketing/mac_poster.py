@@ -301,20 +301,20 @@ def post_to_quora(page, task: Dict[str, Any]) -> bool:
 def post_to_youtube(page, task: Dict[str, Any]) -> bool:
     """Posts a comment under a YouTube editorial video."""
     url = task["target_url"]
-    comment = task["drafted_comment"]
+    comment = sanitize_comment_for_reddit(task["drafted_comment"])
 
     print(f"\n[Poster] Navigating to YouTube video: {url}")
     page.goto(url, wait_until="domcontentloaded", timeout=45000)
     time.sleep(random.uniform(3.0, 5.0))
 
-    # Scroll down to reveal comments
-    page.evaluate("window.scrollBy(0, 600)")
-    time.sleep(2.0)
+    # Scroll down to reveal lazy-loaded comment section
+    page.evaluate("window.scrollBy(0, 650)")
+    time.sleep(2.5)
 
     # YouTube comment box selectors
-    placeholder = page.locator("#placeholder-area, #simplebox-placeholder").first
+    placeholder = page.locator("#placeholder-area, #simplebox-placeholder, ytd-comment-simplebox-renderer").first
     try:
-        if placeholder.is_visible(timeout=4000):
+        if placeholder.is_visible(timeout=5000):
             placeholder.click()
             time.sleep(1.5)
     except Exception:
@@ -334,7 +334,7 @@ def post_to_youtube(page, task: Dict[str, Any]) -> bool:
     human_type(editor, comment)
     time.sleep(random.uniform(2.0, 4.0))
 
-    submit_btn = page.locator("#submit-button button, button:has-text('Comment')").first
+    submit_btn = page.locator("#submit-button button, ytd-button-renderer#submit-button button, button:has-text('Comment')").first
     try:
         if submit_btn.is_visible(timeout=3000) and submit_btn.is_enabled():
             submit_btn.click()

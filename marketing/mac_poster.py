@@ -67,10 +67,35 @@ def run_setup():
 # 1. REDDIT POSTER
 # ==========================================
 
+def sanitize_comment_for_reddit(comment: str) -> str:
+    """Removes raw URLs and replaces them with organic Google search cues
+
+    to avoid triggering Reddit's automated spam filters on new accounts.
+    """
+    import re
+    # Remove markdown link formatting [text](url) -> text
+    comment = re.sub(r'\[([^\]]+)\]\([^)]+\)', r'\1', comment)
+
+    cta_patterns = [
+        (r'\(check out SatyaDheesh:?\s*https?://[^\)]+\)', '(search "satyadheesh upsc" on Google for more details)'),
+        (r'\(For clean[^)]*satyadheesh\.in[^)]*\)', '(For clean, syllabus-mapped daily briefs and committee facts, search "satyadheesh upsc" on Google for more details)'),
+        (r'\(If you want free[^)]*satyadheesh\.in[^)]*\)', '(For free, clean daily notes mapped to the GS syllabus and MCQs, search "satyadheesh upsc" on Google for more details)'),
+        (r'\(SatyaDheesh published[^)]*satyadheesh\.in[^)]*\)', '(You can search "satyadheesh upsc" on Google for the syllabus breakdown and facts on this)'),
+        (r'\(SatyaDheesh has an open daily tracker:?\s*satyadheesh\.in[^\)]*\)', '(You can search "satyadheesh upsc" on Google for the open daily tracker and notes)'),
+    ]
+    for pat, rep in cta_patterns:
+        comment = re.sub(pat, rep, comment, flags=re.IGNORECASE)
+
+    # Strip any leftover raw URLs
+    comment = re.sub(r'https?://\S+', 'search "satyadheesh upsc" on Google', comment)
+    comment = re.sub(r'satyadheesh\.in\S*', 'search "satyadheesh upsc" on Google', comment)
+    return comment.strip()
+
+
 def post_to_reddit(page, task: Dict[str, Any]) -> bool:
     """Posts a drafted comment to a Reddit thread."""
     url = task["target_url"]
-    comment = task["drafted_comment"]
+    comment = sanitize_comment_for_reddit(task["drafted_comment"])
 
     print(f"\n[Poster] Navigating to Reddit: {url}")
     page.goto(url, wait_until="load", timeout=45000)

@@ -24,6 +24,7 @@ env:
   CORE_TOKEN: ${{ secrets.CORE_TOKEN }}
   KIT_MODEL_REPO: unsloth/gemma-4-12b-it-GGUF
   KIT_MODEL_FILE: gemma-4-12b-it-Q4_K_M.gguf
+  PYTHONUNBUFFERED: "1"
 
 jobs:
   scout:
@@ -65,10 +66,10 @@ jobs:
         run: |
           MAX="${{ github.event.inputs.max_drafts || '5' }}"
           DRY="${{ github.event.inputs.dry_run == 'true' && '--dry-run' || '' }}"
-          python -m marketing.agent --max-drafts "$MAX" $DRY
+          python -u -m marketing.agent --max-drafts "$MAX" $DRY
 
-      - name: Commit and push queued drafts
-        if: ${{ github.event.inputs.dry_run != 'true' }}
+      - name: Commit and push queued drafts and audit logs
+        if: ${{ always() && github.event.inputs.dry_run != 'true' }}
         env:
           CORE_TOKEN: ${{ secrets.CORE_TOKEN }}
         run: |
@@ -76,8 +77,16 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add queue/
           if git status --porcelain | grep -q "queue/"; then
-            git commit -m "marketing(queue): add drafted comments [skip ci]"
+            git commit -m "marketing(queue): add drafted comments and audit log [skip ci]"
             git push origin HEAD:marketing-agent
           else
-            echo "No new drafts to commit."
+            echo "No queue changes to commit."
           fi
+
+      - name: Upload audit logs artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: marketing-audit-logs
+          path: queue/
+          if-no-files-found: ignore

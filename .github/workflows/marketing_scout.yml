@@ -1,0 +1,83 @@
+name: Marketing Scout (Gemma 4 12B)
+run-name: "Marketing Scout (${{ inputs.max_drafts || '5' }} drafts)"
+
+# Discovers relevant discussions across the internet, evaluates fit against
+# SatyaDheesh's curated knowledge base, and drafts organic, high-yield comments
+# using local Gemma 4 12B (CPU inference via llama.cpp) with ZERO API fees.
+
+on:
+  workflow_dispatch:
+    inputs:
+      max_drafts:
+        description: 'Max drafts to create'
+        default: '5'
+      dry_run:
+        description: 'Dry run (do not enqueue)'
+        type: boolean
+        default: false
+
+concurrency:
+  group: marketing-scout
+  cancel-in-progress: false
+
+env:
+  CORE_TOKEN: ${{ secrets.CORE_TOKEN }}
+  KIT_MODEL_REPO: unsloth/gemma-4-12b-it-GGUF
+  KIT_MODEL_FILE: gemma-4-12b-it-Q4_K_M.gguf
+
+jobs:
+  scout:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository }}-core
+          token: ${{ secrets.CORE_TOKEN }}
+          ref: marketing-agent
+
+      - name: Free disk for model weights
+        run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-marketing-${{ hashFiles('requirements.txt') }}
+
+      - name: Cache model weights
+        uses: actions/cache@v4
+        with:
+          path: models
+          key: gguf-${{ env.KIT_MODEL_FILE }}
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu
+
+      - name: Run Marketing Scout
+        run: |
+          MAX="${{ github.event.inputs.max_drafts || '5' }}"
+          DRY="${{ github.event.inputs.dry_run == 'true' && '--dry-run' || '' }}"
+          python -m marketing.agent --max-drafts "$MAX" $DRY
+
+      - name: Commit and push queued drafts
+        if: ${{ github.event.inputs.dry_run != 'true' }}
+        env:
+          CORE_TOKEN: ${{ secrets.CORE_TOKEN }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add queue/
+          if git status --porcelain | grep -q "queue/"; then
+            git commit -m "marketing(queue): add drafted comments [skip ci]"
+            git push origin HEAD:marketing-agent
+          else
+            echo "No new drafts to commit."
+          fi

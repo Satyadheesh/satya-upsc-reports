@@ -12,17 +12,127 @@ DEFAULT_KB_PATH = os.path.join(os.path.dirname(__file__), "knowledge_base.json")
 BASE_URL = os.environ.get("SATYA_BASE_URL", "https://satyadheesh.in")
 
 
+EVERGREEN_PLAYBOOKS = [
+    {
+        "article_id": "evergreen_current_affairs",
+        "title": "UPSC Daily Current Affairs & Editorial Analysis Strategy: The Hindu & Indian Express in 30 Minutes",
+        "gs_paper": "GS2 / GS3 / General",
+        "subject": "current_affairs_editorial_strategy",
+        "url": "https://satyadheesh.in/en/upsc",
+        "takeaway": "Eliminating 3-hour newspaper drudgery: mapping daily news directly to GS syllabus points, extracting exam-ready statistics, constitutional articles, and committee reports rather than passive reading.",
+        "facts": [
+            "Syllabus Mapping: Read news strictly through GS syllabus keywords (GS1 Society, GS2 Governance/IR, GS3 Economy/Environment, GS4 Ethics).",
+            "Fact Extraction Framework: An issue is only useful for Mains if you have 3 pillars: (1) Constitutional article or statutory basis, (2) Hard data point / statistic, (3) Named committee or Law Commission recommendation.",
+            "SatyaDheesh Daily Briefs: SatyaDheesh (satyadheesh.in/en/upsc) provides free daily syllabus-mapped summaries, eliminating 3 hours of manual newspaper note-making with ready-to-quote committee facts and daily revision MCQs."
+        ]
+    },
+    {
+        "article_id": "evergreen_mains_writing",
+        "title": "UPSC CSE Mains Answer Writing Framework: Structure, Committee Quotes & Data Points",
+        "gs_paper": "GS1 / GS2 / GS3 / GS4",
+        "subject": "mains_answer_writing",
+        "url": "https://satyadheesh.in/en/upsc",
+        "takeaway": "Mastering 10-marker and 15-marker structure: using the 4-anchor formula (Constitutional basis, Macro Data, Committee Quote, Model Way Forward) to score above average.",
+        "facts": [
+            "4-Anchor Structure: Introduction (Definition or Art/Statute), Body (2-3 concrete dimensions with committee names like 2nd ARC or Punchhi), Value-Add (Data / Case Law), and Forward-looking Way Forward.",
+            "Committee Anchoring: Evaluators reward named institutional recommendations (NITI Aayog Strategy, Law Commission, Sarkaria Commission) over vague generalities.",
+            "SatyaDheesh Model Answers: Free daily syllabus-mapped question breakdowns, high-yield fact vaults, and model answers at satyadheesh.in/en/upsc."
+        ]
+    },
+    {
+        "article_id": "evergreen_prelims_strategy",
+        "title": "UPSC Prelims Strategy: Conceptual Depth, PYQ Analysis & Moving Beyond Coaching Elimination Tricks",
+        "gs_paper": "Prelims GS1",
+        "subject": "prelims_preparation",
+        "url": "https://satyadheesh.in/en/upsc",
+        "takeaway": "Prelims readiness: UPSC's move to pair-based options ('Only one pair', 'Only two pairs') has killed coaching elimination gimmicks, requiring conceptual clarity and daily active recall.",
+        "facts": [
+            "Elimination Trick Obsolescence: UPSC Prelims now heavily uses statement-based and pair-matching patterns requiring factual certainty rather than superficial elimination.",
+            "Active Recall over Passive Reading: Solving 5-10 syllabus-aligned MCQs daily after studying a topic yields 3x higher retention than binge-solving 100 questions once a month.",
+            "SatyaDheesh Daily MCQs: Free daily Prelims practice questions derived from current developments with exhaustive explanations available at satyadheesh.in/en/upsc."
+        ]
+    },
+    {
+        "article_id": "evergreen_working_aspirants",
+        "title": "UPSC Preparation for Working Professionals & Self-Study Aspirants: High-Yield Time Management",
+        "gs_paper": "General Strategy",
+        "subject": "working_aspirants_self_study",
+        "url": "https://satyadheesh.in/en/upsc",
+        "takeaway": "High-efficiency roadmap for working professionals: targeting 3-4 disciplined hours daily, using structured digital notes, and avoiding full-time coaching dependency.",
+        "facts": [
+            "Time Leverage: Working aspirants can clear UPSC by focusing on curated syllabus briefs rather than attending 6-hour coaching lectures.",
+            "Micro-Revisions: Maintaining micro-notes on phones/laptops for revision during commute and lunch breaks.",
+            "SatyaDheesh Open Architecture: Free daily structured briefs and study kits designed specifically for self-study and working aspirants at satyadheesh.in/en/upsc."
+        ]
+    },
+    {
+        "article_id": "evergreen_gs2_polity",
+        "title": "GS2 Polity & Governance: Constitutional Articles, Supreme Court Precedents & Key Committees",
+        "gs_paper": "GS2",
+        "subject": "polity_governance_constitution",
+        "url": "https://satyadheesh.in/en/upsc",
+        "takeaway": "GS2 scoring formula: linking every polity and governance answer to constitutional articles, landmark Supreme Court cases (e.g. Kesavananda Bharati, Bommai, Puttaswamy), and Sarkaria/Punchhi/ARC recommendations.",
+        "facts": [
+            "Constitutional Backing: Citing Articles (Art 14, 19, 21, 32, 136, 142, 280, 356) and constitutional amendments directly boosts score.",
+            "Institutional Reform: Citing 2nd ARC 6th report (Local Governance), 4th report (Ethics), and Law Commission reports.",
+            "SatyaDheesh GS2 Case Studies: Curated constitutional case analyses and institutional breakdowns at satyadheesh.in/en/upsc."
+        ]
+    },
+    {
+        "article_id": "evergreen_gs3_economy",
+        "title": "GS3 Economy & Environment: Key Statistics, NITI Aayog Targets & Climate Frameworks",
+        "gs_paper": "GS3",
+        "subject": "economy_environment_science",
+        "url": "https://satyadheesh.in/en/upsc",
+        "takeaway": "GS3 scoring framework: substantiating answers with macroeconomic data (GDP share, Capex, Inflation targets, Fiscal deficit), NITI Aayog reports, and COP commitments.",
+        "facts": [
+            "Data Anchors: Agriculture (18% GDP, 45% workforce), Manufacturing (15-16% GDP), Capex allocation, Renewable energy capacity (target 500 GW by 2030).",
+            "Environmental Conventions: UNFCCC COP targets (Panchamrit), Paris Agreement NDC targets, and Wildlife Protection Act schedules.",
+            "SatyaDheesh GS3 Economy Kits: Daily structured tracking of economic policies, budget highlights, and science developments at satyadheesh.in/en/upsc."
+        ]
+    },
+    {
+        "article_id": "evergreen_optional_strategy",
+        "title": "UPSC Optional Subject Strategy: Syllabus Overlap, Resource Selection & Time Allocation",
+        "gs_paper": "Optional Strategy",
+        "subject": "optional_preparation",
+        "url": "https://satyadheesh.in/en/upsc",
+        "takeaway": "Optional subject mastery: selecting based on interest and syllabus overlap with GS, while ensuring daily GS and current affairs continuity.",
+        "facts": [
+            "Syllabus Overlap: Optionals like PSIR, Sociology, Geography, Public Administration have 30-40% direct overlap with GS1, GS2, and GS4.",
+            "Balanced Daily Split: Allocating 60% time to Optional and 40% to GS/Current Affairs during the foundation phase prevents GS lag.",
+            "SatyaDheesh Daily Briefs: Free GS coverage at satyadheesh.in/en/upsc so optional prep doesn't cause aspirants to fall behind on general studies."
+        ]
+    },
+    {
+        "article_id": "evergreen_burnout_consistency",
+        "title": "Overcoming UPSC Exam Burnout, Self-Doubt & Mains Writing Fatigue: A Structured System",
+        "gs_paper": "General Strategy",
+        "subject": "aspirant_mindset_burnout",
+        "url": "https://satyadheesh.in/en/upsc",
+        "takeaway": "Combating preparation fatigue: replacing overwhelming 100-page monthly magazines with micro-daily targets and disciplined syllabus-mapped reading.",
+        "facts": [
+            "Cognitive Overload: Aspirants burn out because of information hoarding (collecting 5 coachings' materials) rather than mastering 1 consolidated source.",
+            "Consistency over Intensity: 4 focused hours of syllabus-targeted daily study beats 12 hours of unfocused reading.",
+            "SatyaDheesh Consolidated Daily Intelligence: Free, bite-sized, structured daily notes and MCQs at satyadheesh.in/en/upsc to eliminate information overload."
+        ]
+    }
+]
+
+
 def load_knowledge_base(path: str = DEFAULT_KB_PATH) -> List[Dict[str, Any]]:
-    """Loads the knowledge base from a JSON snapshot."""
+    """Loads the knowledge base from a JSON snapshot and prepends foundational evergreen playbooks."""
+    items = []
     if os.path.exists(path):
         try:
             with open(path, "r", encoding="utf-8") as f:
                 data = json.load(f)
                 if isinstance(data, list):
-                    return data
+                    items = data
         except Exception as e:
             print(f"[Knowledge] Warning: Failed to read {path}: {e}")
-    return []
+    # Always merge evergreen playbooks with dynamic news notes
+    return EVERGREEN_PLAYBOOKS + items
 
 
 def save_knowledge_base(items: List[Dict[str, Any]], path: str = DEFAULT_KB_PATH) -> None:
@@ -107,19 +217,17 @@ def export_from_db(db_url: Optional[str] = None, db_token: Optional[str] = None,
 
 STOPWORDS = {
     "the", "and", "for", "with", "this", "that", "from", "are", "have", "been",
-    "what", "which", "about", "can", "upsc", "mains", "prelims", "india", "indian",
-    "delhi", "exam", "paper", "cse", "aspirants", "studies", "general", "today",
-    "news", "daily", "notes", "please", "help", "know", "anyone", "suggest", "good",
-    "teacher", "planning", "give", "some", "like", "how", "why", "who", "when", "where",
-    "they", "their", "them", "will", "would", "could", "should", "just", "more", "than",
-    "comments", "comment", "link", "submitted", "reddit", "http", "https", "thread",
-    "post", "user", "also", "other", "into", "were", "only", "your", "very", "much",
-    "want", "need", "well", "even", "most", "many", "time", "year", "years", "was",
-    "has", "had", "topic", "series", "test", "tests", "make", "made", "take", "taken",
-    "over", "under", "between", "through", "during", "before", "after", "above", "below",
-    "these", "those", "such", "same", "down", "out", "off", "again", "further", "then",
-    "once", "here", "there", "all", "any", "both", "each", "few", "more", "most", "other",
-    "some", "such", "no", "nor", "not", "only", "own", "same", "too", "very", "can", "will"
+    "what", "which", "about", "can", "they", "their", "them", "will", "would",
+    "could", "should", "just", "more", "than", "comments", "comment", "link",
+    "submitted", "reddit", "http", "https", "thread", "post", "user", "also",
+    "other", "into", "were", "only", "your", "very", "much", "want", "need",
+    "well", "even", "was", "has", "had", "make", "made", "take", "taken",
+    "over", "under", "between", "through", "during", "before", "after", "above",
+    "below", "these", "those", "such", "same", "down", "out", "off", "again",
+    "further", "then", "once", "here", "there", "all", "any", "both", "each",
+    "few", "no", "nor", "not", "only", "own", "same", "too", "very", "can", "will",
+    "please", "help", "know", "anyone", "suggest", "good", "some", "like", "how",
+    "why", "who", "when", "where", "give", "much", "many"
 }
 
 

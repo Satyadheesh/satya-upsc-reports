@@ -185,8 +185,8 @@ def run_scout(limit_per_source: int = 15, max_drafts: int = 5, dry_run: bool = F
     # Sort screened candidates descending by top overlap count
     screened_candidates.sort(key=lambda item: item[1][0][0], reverse=True)
 
-    # Cap evaluation queue at 8 to guarantee fast CPU execution (< 4 minutes total)
-    eval_queue = screened_candidates[:8]
+    # Cap evaluation queue at 3 candidates per run to keep CPU execution fast (< 5 minutes total)
+    eval_queue = screened_candidates[:3]
     audit.info(f"Selected top {len(eval_queue)} candidate discussions for Gemma 4 12B reasoning:")
     for idx, (p, m) in enumerate(eval_queue, 1):
         top_m = m[0]
@@ -257,8 +257,10 @@ def run_scout(limit_per_source: int = 15, max_drafts: int = 5, dry_run: bool = F
         audit.record_eval(post, matches, result, eval_sec, drafted=drafted)
         record_seen(post.post_id)
 
-    # Mark remaining un-evaluated new posts as seen to prevent duplicate scanning
-    record_seen_batch([p.post_id for p in new_posts])
+    # Mark posts with zero candidate matches as seen so we don't re-screen them
+    zero_match_ids = [p.post_id for p in new_posts if p.post_id not in [item[0].post_id for item in screened_candidates]]
+    if zero_match_ids:
+        record_seen_batch(zero_match_ids)
 
     audit.info(f"\n=== [SatyaDheesh Marketing Scout] Complete. Generated {drafts_created} drafts ===")
     audit.record_event("scout_completed", {

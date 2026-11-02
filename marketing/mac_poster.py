@@ -73,24 +73,35 @@ def post_to_reddit(page, task: Dict[str, Any]) -> bool:
     comment = task["drafted_comment"]
 
     print(f"\n[Poster] Navigating to Reddit: {url}")
-    page.goto(url, wait_until="domcontentloaded", timeout=45000)
-    time.sleep(random.uniform(3.0, 5.0))
+    page.goto(url, wait_until="load", timeout=45000)
+    time.sleep(random.uniform(2.5, 4.0))
+
+    # Activate modern Reddit composer if present
+    try:
+        composer_host = page.locator("comment-composer-host, shreddit-comment-composer").first
+        if composer_host.is_visible(timeout=3000):
+            composer_host.click()
+            time.sleep(1.0)
+    except Exception:
+        pass
 
     # Reddit comment box selectors across modern / shreddit UI
     selectors = [
-        "faceplate-textarea-input[name='body'] textarea",
-        "div[data-testid='comment-submission-form-richtext']",
-        "div[slot='rte']",
-        "textarea[placeholder*='comment' i]",
-        "div[role='textbox']",
-        "p[data-placeholder*='comment' i]"
+        "comment-composer-host div[contenteditable='true']",
+        "comment-composer-host div[role='textbox']",
+        "comment-composer-host faceplate-textarea-input textarea",
+        "faceplate-textarea-input:visible textarea",
+        "div[slot='rte']:visible",
+        "div[contenteditable='true']:visible",
+        "div[role='textbox']:visible",
+        "textarea:visible",
     ]
 
     target_box = None
     for sel in selectors:
         try:
             elem = page.locator(sel).first
-            if elem.is_visible(timeout=2000):
+            if elem.is_visible(timeout=1500):
                 target_box = elem
                 break
         except Exception:
@@ -100,10 +111,10 @@ def post_to_reddit(page, task: Dict[str, Any]) -> bool:
         # Try clicking placeholder / "Add a comment" button to activate editor
         try:
             placeholder = page.locator("button:has-text('Add a comment'), [placeholder*='Add a comment' i]").first
-            if placeholder.is_visible(timeout=3000):
+            if placeholder.is_visible(timeout=2000):
                 placeholder.click()
                 time.sleep(1.5)
-                target_box = page.locator("div[role='textbox'], faceplate-textarea-input textarea, textarea").first
+                target_box = page.locator("div[role='textbox']:visible, div[contenteditable='true']:visible, textarea:visible").first
         except Exception as e:
             print(f"[Poster] Could not activate Reddit editor: {e}")
 
@@ -119,10 +130,12 @@ def post_to_reddit(page, task: Dict[str, Any]) -> bool:
     time.sleep(random.uniform(2.0, 4.0))
 
     submit_buttons = [
-        "button[type='submit']:has-text('Comment')",
-        "button:has-text('Comment')",
-        "button[slot='submit-button']",
-        "button:has-text('Reply')"
+        "comment-composer-host button[type='submit']",
+        "comment-composer-host button:has-text('Comment')",
+        "button[type='submit']:has-text('Comment'):visible",
+        "button:has-text('Comment'):visible",
+        "button[slot='submit-button']:visible",
+        "button:has-text('Reply'):visible",
     ]
 
     clicked = False
@@ -387,6 +400,7 @@ def run_poster(max_posts: int = 5, headless: bool = False):
         context = p.chromium.launch_persistent_context(
             user_data_dir=PROFILE_DIR,
             headless=headless,
+            user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
             viewport={"width": 1280, "height": 800},
             args=["--disable-blink-features=AutomationControlled"]
         )

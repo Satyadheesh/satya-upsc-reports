@@ -11,7 +11,7 @@ set -e
 # 4. Commits and syncs status back to GitHub.
 # ==============================================================================
 
-REPO_DIR="/Users/mac/Downloads/Code/Satya/satya-upsc-reports"
+REPO_DIR="$HOME/.satya-marketing/repo"
 VENV_PYTHON="$HOME/.satya-marketing/venv/bin/python3"
 LOG_DIR="$HOME/.satya-marketing"
 

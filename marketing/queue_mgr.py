@@ -147,10 +147,76 @@ def mark_as_posted(task: Dict[str, Any], posted_url: Optional[str] = None) -> No
     except Exception as e:
         print(f"[Queue] Failed appending to daily report: {e}")
 
+    # Real-time Telegram notification
+    try:
+        notify_telegram(task)
+    except Exception as e:
+        print(f"[Queue] Failed sending Telegram notification: {e}")
+
     # Subtle macOS desktop notification
     comm = task.get("subreddit") or task.get("platform", "Community")
     title_short = task.get("title", "")[:35]
     notify_mac("SatyaDheesh Marketing", f"Posted to {comm}: {title_short}...")
+
+
+def notify_telegram(task: Dict[str, Any]) -> bool:
+    """Dispatches a real-time notification to the admin Telegram chat when a comment is posted."""
+    import html
+    import urllib.parse
+    import urllib.request
+
+    token = os.environ.get("TELEGRAM_BOT_TOKEN") or "8553388061:AAGzoTrdaUABEj8QbPidn6wT1R9Q8oREqNI"
+    chat_id = (
+        os.environ.get("TELEGRAM_ADMIN_CHAT_ID")
+        or os.environ.get("TELEGRAM_TEST_CHAT_ID")
+        or os.environ.get("TELEGRAM_CHAT_ID")
+        or "6634664206"
+    )
+
+    platform = task.get("platform", "unknown").upper()
+    comm = task.get("subreddit") or task.get("platform", "community")
+    title = html.escape(task.get("title", "Untitled"))
+    target_url = task.get("target_url", "")
+    posted_at = task.get("posted_at", time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime()))
+    score = task.get("score", "N/A")
+    matched_title = html.escape(task.get("matched_note", {}).get("title", "SatyaDheesh Resource"))
+    matched_url = task.get("matched_note", {}).get("url", "https://satyadheesh.in/en/upsc")
+
+    raw_comment = task.get("drafted_comment", "")
+    comment_snippet = html.escape(raw_comment[:320])
+    if len(raw_comment) > 320:
+        comment_snippet += "..."
+
+    msg = (
+        f"🎯 <b>SatyaDheesh Autonomous Post Published</b>\n\n"
+        f"• <b>Platform:</b> {html.escape(platform)} (<code>{html.escape(str(comm))}</code>)\n"
+        f"• <b>Relevance Score:</b> {score}/10\n"
+        f"• <b>Thread:</b> <a href=\"{target_url}\">{title}</a>\n"
+        f"• <b>Matched Resource:</b> <a href=\"{matched_url}\">{matched_title}</a>\n"
+        f"• <b>Time:</b> <code>{posted_at}</code>\n\n"
+        f"💬 <b>Comment:</b>\n"
+        f"<i>\"{comment_snippet}\"</i>\n\n"
+        f"🔗 <a href=\"{target_url}\">Open Thread</a>"
+    )
+
+    try:
+        data = urllib.parse.urlencode({
+            "chat_id": chat_id,
+            "text": msg,
+            "parse_mode": "HTML",
+            "disable_web_page_preview": "true",
+        }).encode("utf-8")
+        req = urllib.request.Request(f"https://api.telegram.org/bot{token}/sendMessage", data=data)
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            body = json.loads(resp.read().decode())
+            if body.get("ok"):
+                print(f"[Queue] Telegram notification sent successfully to {chat_id}.")
+                return True
+            print(f"[Queue] Telegram returned non-ok: {body}")
+            return False
+    except Exception as e:
+        print(f"[Queue] Telegram notification failed: {e}")
+        return False
 
 
 def append_to_daily_report(task: Dict[str, Any]) -> str:

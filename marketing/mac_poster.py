@@ -1,7 +1,8 @@
 """Mac Posting Agent ("The Hands").
 
 Runs locally on your Mac using your residential IP and persistent browser session.
-Reads pending drafts from the queue, types them with human-like delays, and posts.
+Reads pending drafts from the queue, types them with human-like delays, and posts
+across supported portals (Reddit, ForumIAS, Quora, YouTube, Medium).
 """
 import argparse
 import os
@@ -24,14 +25,20 @@ def human_type(locator, text: str):
 
 
 def run_setup():
-    """Opens a visible browser with the persistent profile so you can log into Reddit/forums once."""
+    """Opens a visible browser with the persistent profile so you can log into community accounts once."""
     from playwright.sync_api import sync_playwright
 
     os.makedirs(PROFILE_DIR, exist_ok=True)
-    print("=== [SatyaDheesh Poster] Account Setup Mode ===")
+    print("=== [SatyaDheesh Poster] Multi-Portal Account Setup Mode ===")
     print(f"Profile directory: {PROFILE_DIR}")
-    print("Opening browser. Please log into your dedicated Reddit / community accounts.")
-    print("Once logged in, simply close the browser window or press Enter here to save.")
+    print("\nOpening browser tabs for supported communities:")
+    print(" 1. Reddit:    https://www.reddit.com/login")
+    print(" 2. ForumIAS:  https://one.forumias.com/login.php")
+    print(" 3. Quora:     https://www.quora.com")
+    print(" 4. YouTube:   https://www.youtube.com")
+    print(" 5. Medium:    https://medium.com/m/signin")
+    print("\nPlease log into your dedicated accounts for whichever platforms you want to post on.")
+    print("Once logged in, simply close the browser window or press Enter here to save your session.")
 
     with sync_playwright() as p:
         context = p.chromium.launch_persistent_context(
@@ -40,25 +47,32 @@ def run_setup():
             viewport={"width": 1280, "height": 800},
             args=["--disable-blink-features=AutomationControlled"]
         )
-        page = context.new_page()
-        page.goto("https://www.reddit.com/login")
+        page1 = context.new_page()
+        page1.goto("https://www.reddit.com/login")
+
+        page2 = context.new_page()
+        page2.goto("https://one.forumias.com/login.php")
 
         try:
-            input("\n--> Press Enter here AFTER you have successfully logged in in the browser... ")
+            input("\n--> Press Enter here AFTER you have logged in to your account(s) in the browser... ")
         except (KeyboardInterrupt, EOFError):
             pass
 
         context.close()
 
-    print("[Setup] Profile saved! You are now ready to run autonomous posting.")
+    print("[Setup] Profile saved! You are now ready to run autonomous posting across portals.")
 
+
+# ==========================================
+# 1. REDDIT POSTER
+# ==========================================
 
 def post_to_reddit(page, task: Dict[str, Any]) -> bool:
     """Posts a drafted comment to a Reddit thread."""
     url = task["target_url"]
     comment = task["drafted_comment"]
 
-    print(f"\n[Poster] Navigating to: {url}")
+    print(f"\n[Poster] Navigating to Reddit: {url}")
     page.goto(url, wait_until="domcontentloaded", timeout=45000)
     time.sleep(random.uniform(3.0, 5.0))
 
@@ -91,7 +105,7 @@ def post_to_reddit(page, task: Dict[str, Any]) -> bool:
                 time.sleep(1.5)
                 target_box = page.locator("div[role='textbox'], faceplate-textarea-input textarea, textarea").first
         except Exception as e:
-            print(f"[Poster] Could not activate editor: {e}")
+            print(f"[Poster] Could not activate Reddit editor: {e}")
 
     if not target_box:
         print(f"[Poster] FAILED: Could not locate comment input box on {url}")
@@ -104,7 +118,6 @@ def post_to_reddit(page, task: Dict[str, Any]) -> bool:
 
     time.sleep(random.uniform(2.0, 4.0))
 
-    # Submit button
     submit_buttons = [
         "button[type='submit']:has-text('Comment')",
         "button:has-text('Comment')",
@@ -119,7 +132,7 @@ def post_to_reddit(page, task: Dict[str, Any]) -> bool:
             if btn.is_visible(timeout=2000) and btn.is_enabled():
                 btn.click()
                 clicked = True
-                print("[Poster] Comment submitted successfully!")
+                print("[Poster] Comment submitted successfully on Reddit!")
                 break
         except Exception:
             continue
@@ -130,6 +143,232 @@ def post_to_reddit(page, task: Dict[str, Any]) -> bool:
 
     time.sleep(random.uniform(4.0, 6.0))
     return True
+
+
+# ==========================================
+# 2. FORUMIAS POSTER
+# ==========================================
+
+def post_to_forumias(page, task: Dict[str, Any]) -> bool:
+    """Posts a drafted comment to a ForumIAS discussion thread."""
+    url = task["target_url"]
+    comment = task["drafted_comment"]
+
+    print(f"\n[Poster] Navigating to ForumIAS: {url}")
+    page.goto(url, wait_until="domcontentloaded", timeout=45000)
+    time.sleep(random.uniform(3.0, 5.0))
+
+    # Click comment placeholder to open editor if needed
+    try:
+        pre_box = page.locator(".write-comment-pre-placeholder, .write-comment, button:has-text('Write a comment')").first
+        if pre_box.is_visible(timeout=3000):
+            pre_box.click()
+            time.sleep(1.5)
+    except Exception:
+        pass
+
+    # Check for login modal or requirement
+    login_prompt = page.locator(".login-card, a:has-text('Login Now'), [id*='login']").first
+    try:
+        if login_prompt.is_visible(timeout=1500):
+            print("[Poster] ForumIAS session required. Please run '--setup' to log in to ForumIAS.")
+            return False
+    except Exception:
+        pass
+
+    # Find editor textarea / contenteditable
+    editor = page.locator(".note-editable, div[contenteditable='true'], textarea.form-control, textarea[placeholder*='comment' i]").first
+    try:
+        if not editor.is_visible(timeout=4000):
+            print(f"[Poster] FAILED: Could not locate reply editor on ForumIAS thread {url}")
+            return False
+    except Exception:
+        return False
+
+    print("[Poster] ForumIAS editor located. Typing reply with human latency...")
+    editor.click()
+    time.sleep(random.uniform(0.5, 1.2))
+    human_type(editor, comment)
+    time.sleep(random.uniform(2.0, 4.0))
+
+    # Click submit
+    submit_btn = page.locator("button:has-text('Post Comment'), button:has-text('Submit'), button.btn-primary:has-text('Post')").first
+    try:
+        if submit_btn.is_visible(timeout=3000) and submit_btn.is_enabled():
+            submit_btn.click()
+            print("[Poster] Reply submitted successfully on ForumIAS!")
+            time.sleep(random.uniform(4.0, 6.0))
+            return True
+        else:
+            print("[Poster] Warning: ForumIAS submit button not visible or disabled.")
+            return False
+    except Exception as e:
+        print(f"[Poster] Error submitting on ForumIAS: {e}")
+        return False
+
+
+# ==========================================
+# 3. QUORA POSTER
+# ==========================================
+
+def post_to_quora(page, task: Dict[str, Any]) -> bool:
+    """Posts a drafted answer/comment to a Quora question thread."""
+    url = task["target_url"]
+    comment = task["drafted_comment"]
+
+    print(f"\n[Poster] Navigating to Quora: {url}")
+    page.goto(url, wait_until="domcontentloaded", timeout=45000)
+    time.sleep(random.uniform(3.0, 5.0))
+
+    # Look for "Answer" button
+    answer_btn = page.locator("button:has-text('Answer'), div[role='button']:has-text('Answer')").first
+    try:
+        if answer_btn.is_visible(timeout=4000):
+            answer_btn.click()
+            time.sleep(2.0)
+    except Exception:
+        pass
+
+    editor = page.locator("div[role='textbox'], div[contenteditable='true']").first
+    try:
+        if not editor.is_visible(timeout=4000):
+            print(f"[Poster] Quora editor not active on {url}. Session login may be required.")
+            return False
+    except Exception:
+        return False
+
+    print("[Poster] Quora editor located. Typing answer with human latency...")
+    editor.click()
+    time.sleep(random.uniform(0.5, 1.2))
+    human_type(editor, comment)
+    time.sleep(random.uniform(2.0, 4.0))
+
+    post_btn = page.locator("button:has-text('Post'), button:has-text('Submit')").first
+    try:
+        if post_btn.is_visible(timeout=3000) and post_btn.is_enabled():
+            post_btn.click()
+            print("[Poster] Answer posted successfully on Quora!")
+            time.sleep(random.uniform(4.0, 6.0))
+            return True
+    except Exception as e:
+        print(f"[Poster] Error posting to Quora: {e}")
+
+    return False
+
+
+# ==========================================
+# 4. YOUTUBE POSTER
+# ==========================================
+
+def post_to_youtube(page, task: Dict[str, Any]) -> bool:
+    """Posts a comment under a YouTube editorial video."""
+    url = task["target_url"]
+    comment = task["drafted_comment"]
+
+    print(f"\n[Poster] Navigating to YouTube video: {url}")
+    page.goto(url, wait_until="domcontentloaded", timeout=45000)
+    time.sleep(random.uniform(3.0, 5.0))
+
+    # Scroll down to reveal comments
+    page.evaluate("window.scrollBy(0, 600)")
+    time.sleep(2.0)
+
+    # YouTube comment box selectors
+    placeholder = page.locator("#placeholder-area, #simplebox-placeholder").first
+    try:
+        if placeholder.is_visible(timeout=4000):
+            placeholder.click()
+            time.sleep(1.5)
+    except Exception:
+        pass
+
+    editor = page.locator("#contenteditable-root, div#contenteditable-textarea").first
+    try:
+        if not editor.is_visible(timeout=4000):
+            print(f"[Poster] YouTube comment box not available on {url}. Google login may be required.")
+            return False
+    except Exception:
+        return False
+
+    print("[Poster] YouTube comment box located. Typing with human latency...")
+    editor.click()
+    time.sleep(random.uniform(0.5, 1.2))
+    human_type(editor, comment)
+    time.sleep(random.uniform(2.0, 4.0))
+
+    submit_btn = page.locator("#submit-button button, button:has-text('Comment')").first
+    try:
+        if submit_btn.is_visible(timeout=3000) and submit_btn.is_enabled():
+            submit_btn.click()
+            print("[Poster] Comment submitted successfully on YouTube!")
+            time.sleep(random.uniform(4.0, 6.0))
+            return True
+    except Exception as e:
+        print(f"[Poster] Error submitting on YouTube: {e}")
+
+    return False
+
+
+# ==========================================
+# 5. MEDIUM POSTER
+# ==========================================
+
+def post_to_medium(page, task: Dict[str, Any]) -> bool:
+    """Posts a response to a Medium UPSC article."""
+    url = task["target_url"]
+    comment = task["drafted_comment"]
+
+    print(f"\n[Poster] Navigating to Medium: {url}")
+    page.goto(url, wait_until="domcontentloaded", timeout=45000)
+    time.sleep(random.uniform(3.0, 5.0))
+
+    # Open responses sidebar if present
+    resp_icon = page.locator("button[aria-label*='responses' i], button:has-text('Respond')").first
+    try:
+        if resp_icon.is_visible(timeout=3000):
+            resp_icon.click()
+            time.sleep(1.5)
+    except Exception:
+        pass
+
+    editor = page.locator("div[role='textbox'], textarea[placeholder*='response' i]").first
+    try:
+        if not editor.is_visible(timeout=4000):
+            print(f"[Poster] Medium response editor not open on {url}. Medium login may be required.")
+            return False
+    except Exception:
+        return False
+
+    print("[Poster] Medium editor located. Typing response with human latency...")
+    editor.click()
+    time.sleep(random.uniform(0.5, 1.2))
+    human_type(editor, comment)
+    time.sleep(random.uniform(2.0, 4.0))
+
+    respond_btn = page.locator("button:has-text('Respond')").first
+    try:
+        if respond_btn.is_visible(timeout=3000) and respond_btn.is_enabled():
+            respond_btn.click()
+            print("[Poster] Response submitted successfully on Medium!")
+            time.sleep(random.uniform(4.0, 6.0))
+            return True
+    except Exception as e:
+        print(f"[Poster] Error submitting on Medium: {e}")
+
+    return False
+
+
+# ==========================================
+# MASTER POSTER RUNNER
+# ==========================================
+
+PLATFORM_DISPATCH = {
+    "reddit": post_to_reddit,
+    "forumias": post_to_forumias,
+    "quora": post_to_quora,
+    "youtube": post_to_youtube,
+    "medium": post_to_medium,
+}
 
 
 def run_poster(max_posts: int = 5, headless: bool = False):
@@ -159,15 +398,19 @@ def run_poster(max_posts: int = 5, headless: bool = False):
                 print(f"[Poster] Reached max posts limit ({max_posts}). Stopping run.")
                 break
 
-            platform = task.get("platform", "reddit")
+            platform = task.get("platform", "reddit").lower()
             print(f"\n[Poster] Processing task {task.get('task_id')} on {platform}...")
             print(f"Title: {task.get('title')}")
 
+            handler = PLATFORM_DISPATCH.get(platform)
             success = False
-            if platform == "reddit":
-                success = post_to_reddit(page, task)
+            if handler:
+                try:
+                    success = handler(page, task)
+                except Exception as e:
+                    print(f"[Poster] Unexpected error executing handler for {platform}: {e}")
             else:
-                print(f"[Poster] Platform {platform} posting not yet configured.")
+                print(f"[Poster] Warning: No handler registered for platform '{platform}'.")
 
             if success:
                 mark_as_posted(task)
@@ -179,7 +422,7 @@ def run_poster(max_posts: int = 5, headless: bool = False):
                     print(f"[Poster] Pacing delay: waiting {wait_sec} seconds before next post...")
                     time.sleep(wait_sec)
             else:
-                print(f"[Poster] Skipping task {task.get('task_id')} due to failure.")
+                print(f"[Poster] Skipping task {task.get('task_id')} (not posted).")
 
         context.close()
 
@@ -187,8 +430,8 @@ def run_poster(max_posts: int = 5, headless: bool = False):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="SatyaDheesh Mac Posting Agent")
-    parser.add_argument("--setup", action="store_true", help="Launch browser to log in to accounts once")
+    parser = argparse.ArgumentParser(description="SatyaDheesh Multi-Portal Mac Posting Agent")
+    parser.add_argument("--setup", action="store_true", help="Launch browser to log in to community accounts once")
     parser.add_argument("--run", action="store_true", help="Run autonomous hands-free poster")
     parser.add_argument("--headless", action="store_true", help="Run browser in headless mode")
     parser.add_argument("--max", type=int, default=5, help="Maximum comments to post in this run")

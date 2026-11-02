@@ -111,7 +111,7 @@ class AuditLogger:
             lines.append("| - | *No candidate discussions met pre-screening criteria today* | - | - | - | ℹ️ None |")
         else:
             for ev in self.evaluations:
-                comm = f"`r/{ev['community']}`" if ev['platform'] == 'reddit' else ev['platform']
+                comm = f"`r/{ev['community']}`" if ev['platform'] == 'reddit' else f"`{ev['community']}`"
                 title_link = f"[{ev['title'][:55]}...]({ev['url']})" if len(ev['title']) > 55 else f"[{ev['title']}]({ev['url']})"
                 note_link = f"[{ev['matched_note_title'][:40]}...]({ev['matched_note_url']})" if ev['matched_note_title'] else "None"
                 tokens_str = ", ".join(ev['overlap_tokens'][:3])
@@ -190,7 +190,8 @@ def run_scout(limit_per_source: int = 15, max_drafts: int = 5, dry_run: bool = F
     audit.info(f"Selected top {len(eval_queue)} candidate discussions for Gemma 4 12B reasoning:")
     for idx, (p, m) in enumerate(eval_queue, 1):
         top_m = m[0]
-        audit.info(f"  [{idx}/{len(eval_queue)}] [r/{p.subreddit or p.platform}] \"{p.title[:65]}\" -> Overlap: {top_m[1]} ({top_m[0]} kw)")
+        comm_tag = f"r/{p.subreddit}" if p.platform == 'reddit' else (p.subreddit or p.platform)
+        audit.info(f"  [{idx}/{len(eval_queue)}] [{comm_tag}] \"{p.title[:65]}\" -> Overlap: {top_m[1]} ({top_m[0]} kw)")
 
     # 4. Load Gemma 4 12B Model
     audit.info("Initializing Gemma 4 12B Q4_K_M GGUF model via llama.cpp...")

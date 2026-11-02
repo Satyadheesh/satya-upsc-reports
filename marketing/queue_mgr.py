@@ -13,12 +13,14 @@ from marketing.discovery import DiscussionPost
 QUEUE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "queue"))
 PENDING_DIR = os.path.join(QUEUE_DIR, "pending")
 POSTED_DIR = os.path.join(QUEUE_DIR, "posted")
+REPORTS_DIR = os.path.join(QUEUE_DIR, "reports")
 HISTORY_FILE = os.path.join(QUEUE_DIR, "history.json")
 
 
 def _init_dirs():
     os.makedirs(PENDING_DIR, exist_ok=True)
     os.makedirs(POSTED_DIR, exist_ok=True)
+    os.makedirs(REPORTS_DIR, exist_ok=True)
 
 
 def load_history() -> set:
@@ -138,3 +140,50 @@ def mark_as_posted(task: Dict[str, Any], posted_url: Optional[str] = None) -> No
         os.remove(file_path)
 
     print(f"[Queue] Moved {task_id} to posted.")
+
+    # Record to daily digest
+    try:
+        append_to_daily_report(task)
+    except Exception as e:
+        print(f"[Queue] Failed appending to daily report: {e}")
+
+    # Subtle macOS desktop notification
+    comm = task.get("subreddit") or task.get("platform", "Community")
+    title_short = task.get("title", "")[:35]
+    notify_mac("SatyaDheesh Marketing", f"Posted to {comm}: {title_short}...")
+
+
+def append_to_daily_report(task: Dict[str, Any]) -> str:
+    """Appends an engagement record to today's daily marketing markdown report."""
+    _init_dirs()
+    today_str = time.strftime("%Y-%m-%d", time.gmtime())
+    report_file = os.path.join(REPORTS_DIR, f"{today_str}.md")
+
+    file_exists = os.path.exists(report_file)
+    with open(report_file, "a", encoding="utf-8") as f:
+        if not file_exists:
+            f.write(f"# 📊 SatyaDheesh Autonomous Marketing Report — {today_str}\n\n")
+            f.write("| Platform | Community | Discussion Title | Target URL | Matched Playbook | Time (UTC) |\n")
+            f.write("|:---|:---|:---|:---|:---|:---|\n")
+
+        platform = task.get("platform", "unknown")
+        comm = task.get("subreddit") or platform
+        title = task.get("title", "Untitled").replace("|", "\\|")
+        url = task.get("target_url", "")
+        playbook = task.get("matched_note", {}).get("title", "N/A").replace("|", "\\|")
+        posted_at = task.get("posted_at", "")
+
+        f.write(f"| `{platform}` | `{comm}` | [{title[:55]}...]({url}) | [Direct Link]({url}) | {playbook[:40]} | `{posted_at}` |\n")
+
+    return report_file
+
+
+def notify_mac(title: str, message: str) -> None:
+    """Sends a subtle native macOS notification banner."""
+    try:
+        escaped_title = title.replace('"', '\\"')
+        escaped_msg = message.replace('"', '\\"')
+        os.system(f"""osascript -e 'display notification "{escaped_msg}" with title "{escaped_title}"' 2>/dev/null""")
+    except Exception:
+        pass
+

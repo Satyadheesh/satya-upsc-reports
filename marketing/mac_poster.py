@@ -298,10 +298,37 @@ def post_to_quora(page, task: Dict[str, Any]) -> bool:
 # 4. YOUTUBE POSTER
 # ==========================================
 
+def sanitize_comment_for_youtube(comment: str) -> str:
+    """Sanitizes comments for YouTube by stripping URLs, third-party platform keywords
+
+    (like Google/Telegram/WhatsApp), and ensuring clean 'check on satyadheesh portal' sign-offs.
+    """
+    import re
+    # Remove markdown link formatting [text](url) -> text
+    comment = re.sub(r'\[([^\]]+)\]\([^)]+\)', r'\1', comment)
+
+    patterns = [
+        (r'\(search [^\)]*on Google[^\)]*\)', '(check on satyadheesh portal for more details)'),
+        (r'search [\"\']?satyadheesh upsc[\"\']? on Google(?: for more details)?', 'check on satyadheesh portal'),
+        (r'\(check out SatyaDheesh:?\s*https?://[^\)]+\)', '(check on satyadheesh portal)'),
+        (r'check out SatyaDheesh:?\s*(?:https?://\S+|satyadheesh\.in\S*)', 'check on satyadheesh portal'),
+        (r'\(For clean[^)]*satyadheesh\.in[^)]*\)', '(check on satyadheesh portal for more details)'),
+        (r'\(If you want free[^)]*satyadheesh\.in[^)]*\)', '(check on satyadheesh portal for more details)'),
+        (r'\(SatyaDheesh published[^)]*satyadheesh\.in[^)]*\)', '(check on satyadheesh portal for the full breakdown)'),
+        (r'\(SatyaDheesh has an open daily tracker:?\s*satyadheesh\.in[^\)]*\)', '(check on satyadheesh portal for the daily tracker)'),
+    ]
+    for pat, rep in patterns:
+        comment = re.sub(pat, rep, comment, flags=re.IGNORECASE)
+
+    comment = re.sub(r'https?://\S+', 'check on satyadheesh portal', comment)
+    comment = re.sub(r'satyadheesh\.in\S*', 'check on satyadheesh portal', comment)
+    return comment.strip()
+
+
 def post_to_youtube(page, task: Dict[str, Any]) -> bool:
     """Posts a comment under a YouTube editorial video."""
     url = task["target_url"]
-    comment = sanitize_comment_for_reddit(task["drafted_comment"])
+    comment = sanitize_comment_for_youtube(task["drafted_comment"])
 
     print(f"\n[Poster] Navigating to YouTube video: {url}")
     page.goto(url, wait_until="domcontentloaded", timeout=45000)

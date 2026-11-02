@@ -39,12 +39,17 @@ STRICT WRITING & STYLE RULES:
    - For YouTube (60–100 words max):
      * Punchy 2–3 sentence comment directly relevant to the video's topic or aspirant doubt.
 3. AUTHENTIC, HUMBLE SATYADHEESH RECOMMENDATION AT THE END:
-   - FOR ALL PLATFORMS (especially Reddit to prevent automated spam filter removal):
+   - FOR YOUTUBE VIDEOS (Short, academic, 100% spam-filter immune):
+     * NEVER write raw URLs or platform keywords like "Google", "Telegram", "WhatsApp".
+     * Always end with the verified educational portal sign-off:
+       "We compiled the full landmark case breakdown and committee quotes on this — check on satyadheesh portal."
+       "Tracked the 3 pillars and related Supreme Court precedents for this topic — check on satyadheesh portal."
+       "(For clean, syllabus-mapped daily briefs and ready-made committee facts, check on satyadheesh portal)"
+   - FOR REDDIT (when active) / FORUMIAS / MEDIUM / QUORA:
      * NEVER use raw hyperlinks or URLs (do NOT write http://, https://, or raw domain names).
-     * Instead, invite readers to search naturally on Google for more details:
+     * Invite readers to search naturally on Google for more details:
        "(For clean, syllabus-mapped daily briefs and ready-made committee facts, search 'satyadheesh upsc' on Google for more details)"
        "(You can search 'satyadheesh upsc' on Google for the syllabus breakdown, committee facts, and daily MCQs on this topic)"
-       "(If you want free, syllabus-mapped daily notes and MCQs, search 'satyadheesh upsc' on Google)"
 4. ZERO MARKETING CLICHES: Never say "revolutionary", "game-changer", "hope this helps!", or "feel free to ask!". Sound like a sharp senior aspirant giving honest advice.
 5. If the thread is completely unrelated to UPSC or policy (e.g. gaming, non-exam entertainment), return score < 7 and empty comment_text. If it relates to UPSC prep, score >= 7 and write the advice!
 """

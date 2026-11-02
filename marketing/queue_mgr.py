@@ -148,9 +148,28 @@ def sequence_tasks(tasks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return sequenced
 
 
+def check_and_restore_paused_tasks() -> int:
+    """Automatically restores parked drafts (e.g. Reddit) back to pending
+
+    once their scheduled pause window expires.
+    """
+    restored = 0
+    if not is_reddit_paused() and os.path.exists(PAUSED_DIR):
+        for fp in glob.glob(os.path.join(PAUSED_DIR, "*.json")):
+            try:
+                dest = os.path.join(PENDING_DIR, os.path.basename(fp))
+                os.rename(fp, dest)
+                restored += 1
+                print(f"[Queue] Automatically restored paused draft: {os.path.basename(fp)}")
+            except Exception as e:
+                print(f"[Queue] Failed restoring {fp}: {e}")
+    return restored
+
+
 def get_pending_tasks(include_paused: bool = False) -> List[Dict[str, Any]]:
     """Returns all currently pending tasks, sequenced round-robin and filtering out paused platforms."""
     _init_dirs()
+    check_and_restore_paused_tasks()
     tasks = []
     reddit_paused = is_reddit_paused()
     for filepath in sorted(glob.glob(os.path.join(PENDING_DIR, "*.json"))):

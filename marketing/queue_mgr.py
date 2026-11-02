@@ -47,6 +47,25 @@ def is_seen(post_id: str, history: Optional[set] = None) -> bool:
     return post_id in hist
 
 
+def record_seen(post_id: str) -> None:
+    """Records a single post ID as seen/evaluated."""
+    _init_dirs()
+    hist = load_history()
+    if post_id not in hist:
+        hist.add(post_id)
+        save_history(hist)
+
+
+def record_seen_batch(post_ids: List[str]) -> None:
+    """Records a batch of post IDs as seen/evaluated in a single write."""
+    if not post_ids:
+        return
+    _init_dirs()
+    hist = load_history()
+    hist.update(post_ids)
+    save_history(hist)
+
+
 def enqueue_draft(post: DiscussionPost, eval_result: Dict[str, Any]) -> str:
     """Writes a drafted comment to the pending queue."""
     _init_dirs()

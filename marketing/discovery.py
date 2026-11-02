@@ -3,6 +3,7 @@
 Discovers relevant public conversations on Reddit, Quora, and forums
 without requiring API keys, credentials, or private logins.
 """
+import html
 import re
 import time
 import urllib.request
@@ -40,10 +41,16 @@ class DiscussionPost:
 
 
 def clean_html(raw_html: str) -> str:
-    """Removes HTML tags and unescapes text."""
+    """Removes HTML tags and unescapes text, stripping Reddit RSS boilerplate."""
     if not raw_html:
         return ""
-    text = re.sub(r"<[^>]+>", " ", raw_html)
+    text = html.unescape(raw_html)
+    # Strip submitted by boilerplate before tags are removed
+    text = re.sub(r"submitted by\s+.*?/u/.*", "", text, flags=re.DOTALL | re.IGNORECASE)
+    # Strip HTML tags
+    text = re.sub(r"<[^>]+>", " ", text)
+    # Strip leftover boilerplate links
+    text = re.sub(r"\[link\]|\[comments\]", "", text, flags=re.IGNORECASE)
     return " ".join(text.split())
 
 

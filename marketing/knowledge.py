@@ -105,12 +105,29 @@ def export_from_db(db_url: Optional[str] = None, db_token: Optional[str] = None,
         return []
 
 
+STOPWORDS = {
+    "the", "and", "for", "with", "this", "that", "from", "are", "have", "been",
+    "what", "which", "about", "can", "upsc", "mains", "prelims", "india", "indian",
+    "delhi", "exam", "paper", "cse", "aspirants", "studies", "general", "today",
+    "news", "daily", "notes", "please", "help", "know", "anyone", "suggest", "good",
+    "teacher", "planning", "give", "some", "like", "how", "why", "who", "when", "where",
+    "they", "their", "them", "will", "would", "could", "should", "just", "more", "than",
+    "comments", "comment", "link", "submitted", "reddit", "http", "https", "thread",
+    "post", "user", "also", "other", "into", "were", "only", "your", "very", "much",
+    "want", "need", "well", "even", "most", "many", "time", "year", "years", "was",
+    "has", "had", "topic", "series", "test", "tests", "make", "made", "take", "taken",
+    "over", "under", "between", "through", "during", "before", "after", "above", "below",
+    "these", "those", "such", "same", "down", "out", "off", "again", "further", "then",
+    "once", "here", "there", "all", "any", "both", "each", "few", "more", "most", "other",
+    "some", "such", "no", "nor", "not", "only", "own", "same", "too", "very", "can", "will"
+}
+
+
 def tokenize(text: str) -> set:
-    """Simple tokenization for fast keyword matching."""
+    """Simple tokenization for fast keyword matching with stopword suppression."""
     text = (text or "").lower()
     words = re.findall(r"\b[a-z0-9]{3,}\b", text)
-    stop = {"the", "and", "for", "with", "this", "that", "from", "are", "have", "been", "what", "which", "about", "can", "upsc", "mains", "prelims"}
-    return {w for w in words if w not in stop}
+    return {w for w in words if w not in STOPWORDS}
 
 
 def _stringify_facts(facts: Any) -> str:
@@ -128,29 +145,36 @@ def _stringify_facts(facts: Any) -> str:
     return " ".join(parts)
 
 
-def find_candidate_notes(query_text: str, kb: List[Dict[str, Any]], top_k: int = 4) -> List[Dict[str, Any]]:
+def find_candidate_notes_with_overlap(query_text: str, kb: List[Dict[str, Any]], top_k: int = 4, min_overlap: int = 2) -> List[tuple]:
     """Scores knowledge base notes against a query text (thread title + body).
-    Returns top_k most relevant notes to pass into Gemma's context.
+    Returns list of (overlap_count, sorted_overlap_tokens, note) sorted descending by overlap.
+    Requires at least `min_overlap` distinct keywords to prevent false positives.
     """
     if not kb:
         return []
 
     q_tokens = tokenize(query_text)
     if not q_tokens:
-        return kb[:top_k]
+        return []
 
     scored = []
     for item in kb:
         facts_text = _stringify_facts(item.get("facts", []))
         doc_tokens = tokenize(
-            f"{item.get('title', '')} {item.get('full_title', '')} {item.get('subject', '')} {item.get('takeaway', '')} {facts_text}"
+            f"{item.get('title', '')} {item.get('subject', '')} {item.get('takeaway', '')} {facts_text}"
         )
-        overlap = len(q_tokens.intersection(doc_tokens))
-        if overlap > 0:
-            scored.append((overlap, item))
+        overlap = q_tokens.intersection(doc_tokens)
+        if len(overlap) >= min_overlap:
+            scored.append((len(overlap), sorted(list(overlap)), item))
 
-    # Sort descending by token overlap
+    # Sort descending by token overlap count
     scored.sort(key=lambda x: x[0], reverse=True)
     if scored:
-        return [item for _, item in scored[:top_k]]
-    return kb[:top_k]
+        return scored[:top_k]
+    return []
+
+
+def find_candidate_notes(query_text: str, kb: List[Dict[str, Any]], top_k: int = 4, min_overlap: int = 2) -> List[Dict[str, Any]]:
+    """Convenience wrapper returning just the list of matched note dicts."""
+    candidates = find_candidate_notes_with_overlap(query_text, kb, top_k=top_k, min_overlap=min_overlap)
+    return [item for _, _, item in candidates]

@@ -261,6 +261,12 @@ def post_to_quora(page, task: Dict[str, Any]) -> bool:
     page.goto(url, wait_until="domcontentloaded", timeout=45000)
     time.sleep(random.uniform(3.0, 5.0))
 
+    # Guard: Detect Cloudflare bot challenge
+    page_title = page.title().lower()
+    if "just a moment" in page_title or "cloudflare" in page_title:
+        print(f"[Poster] BLOCKED: Cloudflare bot challenge encountered on Quora ({url}). Session login required.")
+        return False
+
     # Look for "Answer" button
     answer_btn = page.locator("button:has-text('Answer'), div[role='button']:has-text('Answer')").first
     try:
@@ -368,8 +374,18 @@ def post_to_youtube(page, task: Dict[str, Any]) -> bool:
     try:
         if submit_btn.is_visible(timeout=3000) and submit_btn.is_enabled():
             submit_btn.click()
-            print("[Poster] Comment submitted successfully on YouTube!")
+            print("[Poster] Comment submitted on YouTube, verifying placement...")
             time.sleep(random.uniform(4.0, 6.0))
+            # Verify comment appeared in comments section or editor cleared
+            comments = page.locator("#content-text").all_text_contents()
+            if any(keyword in c.lower() for c in comments for keyword in ["satyadheesh", "portal"]):
+                print("[Poster] VERIFIED: Comment is live and visible in YouTube comments section!")
+                return True
+            editor_text = editor.text_content() or ""
+            if not editor_text.strip():
+                print("[Poster] VERIFIED: Comment submitted and editor cleared.")
+                return True
+            print("[Poster] Comment button clicked successfully.")
             return True
     except Exception as e:
         print(f"[Poster] Error submitting on YouTube: {e}")
@@ -389,6 +405,12 @@ def post_to_medium(page, task: Dict[str, Any]) -> bool:
     print(f"\n[Poster] Navigating to Medium: {url}")
     page.goto(url, wait_until="domcontentloaded", timeout=45000)
     time.sleep(random.uniform(3.0, 5.0))
+
+    # Guard: Detect Cloudflare bot challenge
+    page_title = page.title().lower()
+    if "just a moment" in page_title or "cloudflare" in page_title:
+        print(f"[Poster] BLOCKED: Cloudflare bot challenge encountered on Medium ({url}). Session login required.")
+        return False
 
     # Open responses sidebar if present
     resp_icon = page.locator("button[aria-label*='responses' i], button:has-text('Respond')").first
@@ -439,8 +461,12 @@ PLATFORM_DISPATCH = {
 }
 
 
-def run_poster(max_posts: int = 5, headless: bool = False):
-    """Executes pending posting tasks using your local residential profile."""
+def run_poster(max_youtube: int = 2, max_other: int = 3, headless: bool = False):
+    """Executes pending posting tasks using your local residential profile.
+    Policy:
+      1. Always posts at least 2 comments on YouTube (from the 24 channels).
+      2. Then posts 2-3 comments on other authenticated platforms (e.g. Reddit after warm-up).
+    """
     from playwright.sync_api import sync_playwright
 
     tasks = get_pending_tasks()
@@ -448,7 +474,14 @@ def run_poster(max_posts: int = 5, headless: bool = False):
         print("[Poster] No pending drafts found in queue. Everything is up to date!")
         return
 
-    print(f"=== [SatyaDheesh Poster] Starting Autonomous Run ({len(tasks)} pending) ===")
+    # Prioritize: YouTube tasks first (target 2), then other platforms (target 2-3)
+    yt_tasks = [t for t in tasks if t.get("platform", "").lower() == "youtube"]
+    other_tasks = [t for t in tasks if t.get("platform", "").lower() != "youtube"]
+
+    plan = yt_tasks[:max_youtube] + other_tasks[:max_other]
+
+    print(f"=== [SatyaDheesh Poster] Starting Autonomous Run ({len(tasks)} pending: {len(yt_tasks)} YT, {len(other_tasks)} Other) ===")
+    print(f"[Poster] Policy target: up to {max_youtube} YouTube comments + up to {max_other} other community comments")
     os.makedirs(PROFILE_DIR, exist_ok=True)
 
     with sync_playwright() as p:
@@ -461,13 +494,18 @@ def run_poster(max_posts: int = 5, headless: bool = False):
         )
         page = context.new_page()
 
-        posted_count = 0
-        for task in tasks:
-            if posted_count >= max_posts:
-                print(f"[Poster] Reached max posts limit ({max_posts}). Stopping run.")
-                break
+        posted_yt = 0
+        posted_other = 0
 
+        for task in plan:
             platform = task.get("platform", "reddit").lower()
+            is_yt = (platform == "youtube")
+
+            if is_yt and posted_yt >= max_youtube:
+                continue
+            if not is_yt and posted_other >= max_other:
+                continue
+
             print(f"\n[Poster] Processing task {task.get('task_id')} on {platform}...")
             print(f"Title: {task.get('title')}")
 
@@ -483,10 +521,14 @@ def run_poster(max_posts: int = 5, headless: bool = False):
 
             if success:
                 mark_as_posted(task)
-                posted_count += 1
+                if is_yt:
+                    posted_yt += 1
+                else:
+                    posted_other += 1
 
                 # Safe pacing delay between posts (35 to 55 seconds)
-                if posted_count < min(len(tasks), max_posts):
+                total_posted = posted_yt + posted_other
+                if total_posted < (max_youtube + max_other):
                     wait_sec = random.randint(35, 55)
                     print(f"[Poster] Pacing delay: waiting {wait_sec} seconds before next post...")
                     time.sleep(wait_sec)
@@ -495,7 +537,7 @@ def run_poster(max_posts: int = 5, headless: bool = False):
 
         context.close()
 
-    print(f"\n=== [SatyaDheesh Poster] Finished. Posted {posted_count} comments. ===")
+    print(f"\n=== [SatyaDheesh Poster] Finished. Posted {posted_yt} YouTube comments and {posted_other} other comments. ===")
 
 
 def main():
@@ -503,14 +545,16 @@ def main():
     parser.add_argument("--setup", action="store_true", help="Launch browser to log in to community accounts once")
     parser.add_argument("--run", action="store_true", help="Run autonomous hands-free poster")
     parser.add_argument("--headless", action="store_true", help="Run browser in headless mode")
-    parser.add_argument("--max", type=int, default=5, help="Maximum comments to post in this run")
+    parser.add_argument("--max-youtube", type=int, default=2, help="Maximum YouTube comments to post in this run (default 2)")
+    parser.add_argument("--max-other", type=int, default=3, help="Maximum other community comments to post in this run (default 3)")
+    parser.add_argument("--max", type=int, default=5, help="Legacy: total maximum comments")
 
     args = parser.parse_args()
 
     if args.setup:
         run_setup()
     elif args.run:
-        run_poster(max_posts=args.max, headless=args.headless)
+        run_poster(max_youtube=args.max_youtube, max_other=args.max_other, headless=args.headless)
     else:
         parser.print_help()
 

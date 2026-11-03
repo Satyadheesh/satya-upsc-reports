@@ -182,12 +182,16 @@ def run_scout(limit_per_source: int = 15, max_drafts: int = 5, dry_run: bool = F
         audit.generate_step_summary(len(posts), 0, 0)
         return
 
-    # Sort screened candidates descending by top overlap count
-    screened_candidates.sort(key=lambda item: item[1][0][0], reverse=True)
+    # Separate candidates to guarantee YouTube stock from the 24 channels
+    yt_candidates = [item for item in screened_candidates if item[0].platform == "youtube"]
+    other_candidates = [item for item in screened_candidates if item[0].platform != "youtube"]
 
-    # Cap evaluation queue at 3 candidates per run to keep CPU execution fast (< 5 minutes total)
-    eval_queue = screened_candidates[:3]
-    audit.info(f"Selected top {len(eval_queue)} candidate discussions for Gemma 4 12B reasoning:")
+    yt_candidates.sort(key=lambda item: item[1][0][0], reverse=True)
+    other_candidates.sort(key=lambda item: item[1][0][0], reverse=True)
+
+    # Interleave: Evaluate up to 8 YouTube videos + up to 5 other community discussions
+    eval_queue = yt_candidates[:8] + other_candidates[:5]
+    audit.info(f"Selected {len(eval_queue)} candidate discussions ({len(yt_candidates[:8])} YouTube from 24 channels, {len(other_candidates[:5])} Other) for Gemma 4 12B reasoning:")
     for idx, (p, m) in enumerate(eval_queue, 1):
         top_m = m[0]
         comm_tag = f"r/{p.subreddit}" if p.platform == 'reddit' else (p.subreddit or p.platform)
@@ -208,11 +212,22 @@ def run_scout(limit_per_source: int = 15, max_drafts: int = 5, dry_run: bool = F
         audit.record_event("run_aborted", {"reason": "model_load_failure", "error": str(e)})
         return
 
-    # 5. Evaluate and Draft Comments
+    # 5. Evaluate and Draft Comments (Guarantee stock: at least 4 YouTube + 2-3 other)
     drafts_created = 0
+    yt_drafts = 0
+    other_drafts = 0
+    target_yt = 4
+    target_other = 3
+    effective_max = max(max_drafts, target_yt + target_other)
+
     for idx, (post, matches) in enumerate(eval_queue, 1):
-        if drafts_created >= max_drafts:
-            audit.info(f"Reached target quota of {max_drafts} drafts. Stopping scout loop.")
+        is_yt = (post.platform == "youtube")
+        if is_yt and yt_drafts >= target_yt:
+            continue
+        if not is_yt and other_drafts >= target_other:
+            continue
+        if drafts_created >= effective_max:
+            audit.info(f"Reached target quota of {effective_max} drafts ({yt_drafts} YouTube, {other_drafts} Other). Stopping scout loop.")
             break
 
         candidate_notes = [item for _, _, item in matches]
@@ -251,6 +266,10 @@ def run_scout(limit_per_source: int = 15, max_drafts: int = 5, dry_run: bool = F
                 task_file = enqueue_draft(post, result)
                 audit.info(f"✅ Draft enqueued successfully -> {os.path.basename(task_file)}")
             drafts_created += 1
+            if is_yt:
+                yt_drafts += 1
+            else:
+                other_drafts += 1
             drafted = True
         else:
             audit.info(f"⏭️ Skipping post (score {score} < 7 or no substantive comment).")

@@ -40,9 +40,9 @@ if [ "$PENDING_COUNT" -eq 0 ]; then
     exit 0
 fi
 
-# 4. Execute headless posting (max 2 per cycle to ensure authentic pacing)
+# 4. Execute headless posting (policy: 2 YouTube comments + up to 3 other community comments)
 echo "[Daemon] Launching headless posting agent..."
-"$VENV_PYTHON" -m marketing.mac_poster --run --headless --max 2
+"$VENV_PYTHON" -m marketing.mac_poster --run --headless --max-youtube 2 --max-other 3
 
 # 5. Sync queue changes and daily reports back to GitHub
 if git status --porcelain | grep -q "queue/"; then

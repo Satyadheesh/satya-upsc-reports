@@ -1,0 +1,18 @@
+{
+  "task_id": "quora_quora_893e7690ec16",
+  "platform": "quora",
+  "post_id": "quora_893e7690ec16",
+  "target_url": "https://www.quora.com/Sociology-as-an-UPSC-optional-is-easy-subject-but-even-after-joining-coaching-I-am-facing-difficulty-to-understand-the-content-and-am-not-able-to-build-answers-for-Mains-answer-writing-This-making-me-highly-underconfident-How-can-I-tackle-this",
+  "title": "Sociology as an UPSC optional is easy subject but even after joining coaching I am facing difficulty to understand the content and am not able to build answers for Mains answer writing. This making me highly underconfident. How can I tackle this?",
+  "subreddit": "Quora:UPSC",
+  "author": null,
+  "score": 9,
+  "reason": "The user is struggling with the transition from understanding content to building Mains answers in Sociology. Note [1] and [2] directly address answer writing frameworks and optional strategy, which are the exact pain points mentioned.",
+  "matched_note": {
+    "title": "UPSC CSE Mains Answer Writing Framework: Structure, Committee Quotes & Data Points",
+    "url": "https://satyadheesh.in/en/upsc"
+  },
+  "drafted_comment": "The real issue here is trying to write 'general' answers instead of 'structured' ones. Sociology requires you to move beyond just knowing the theory to applying it through a specific framework.\n\nTo fix this, try these three steps:\n\n1. Use the 4-Anchor Formula: Every answer should have a clear Definition/Statute, 2-3 concrete dimensions, a specific Committee Quote (like 2nd ARC), and a forward-looking Way Forward.\n2. Stop overthinking the content: Focus on mapping your points to the GS syllabus. If you can link a sociological concept to a current governance issue, you win.\n3. Anchor with Data: Use hard statistics or specific committee recommendations to back your arguments. Evaluators reward named institutional facts over vague generalities.\n\nTracked the 3 pillars and related Supreme Court precedents for this topic — check on satyadheesh portal.",
+  "status": "pending",
+  "created_at": "2026-11-03 02:39:42 UTC"
+}

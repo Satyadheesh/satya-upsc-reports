@@ -1,0 +1,18 @@
+{
+  "task_id": "quora_quora_fb1a5c48a028",
+  "platform": "quora",
+  "post_id": "quora_fb1a5c48a028",
+  "target_url": "https://www.quora.com/While-studying-for-UPSC-should-one-subject-be-done-at-one-go-or-should-subjects-be-combined-and-studied",
+  "title": "While studying for UPSC, should one subject be done at one go or should subjects be combined and studied?",
+  "subreddit": "Quora:UPSC",
+  "author": null,
+  "score": 8,
+  "reason": "The user is asking about study methodology and time management between subjects. The provided notes on Optional Strategy and Prelims strategy (active recall vs. binge-reading) directly address how to structure a study plan to ensure conceptual depth and consistency.",
+  "matched_note": {
+    "title": "UPSC Optional Subject Strategy, Syllabus Overlap, Resource Selection & Time Allocation",
+    "url": "https://satyadheesh.in/en/upsc"
+  },
+  "drafted_comment": "The real issue here is avoiding 'binge-reading' where you finish one book but forget 80% of it by next week. For UPSC, a hybrid approach works best to maintain momentum.\n\n1. Use a Balanced Daily Split: During your foundation phase, try allocating about 60% of your time to your Optional and 40% to GS and Current Affairs. This prevents you from falling behind on General Studies while mastering your core subject.\n2. Prioritize Active Recall: Instead of finishing a whole subject at once, study a topic and immediately solve 5-10 syllabus-aligned MCQs. This yields much higher retention than just reading pages.\n3. Focus on Overlap: Choose subjects that share syllabus overlap to save time.\n\nTracked the 3 pillars and related Supreme Court precedents for this topic — check on satyadheesh portal.",
+  "status": "pending",
+  "created_at": "2026-11-03 05:00:11 UTC"
+}

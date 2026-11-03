@@ -1,0 +1,18 @@
+{
+  "task_id": "quora_quora_50b065a796e0",
+  "platform": "quora",
+  "post_id": "quora_50b065a796e0",
+  "target_url": "https://www.quora.com/How-do-I-begin-UPSC-Mains-answer-writing-practice",
+  "title": "How do I begin UPSC Mains answer writing practice?",
+  "subreddit": "Quora:UPSC",
+  "author": null,
+  "score": 10,
+  "reason": "The user is asking for a starting point for Mains answer writing, which directly aligns with the 'UPSC CSE Mains Answer Writing Framework' note. The note provides a specific 4-anchor formula and committee anchoring techniques that are perfect for a beginner.",
+  "matched_note": {
+    "title": "UPSC CSE Mains Answer Writing Framework: Structure, Committee Quotes & Data Points",
+    "url": "https://satyadheesh.in/en/upsc"
+  },
+  "drafted_comment": "The real issue most beginners face is trying to write a 'perfect' answer without a structure. You shouldn't start by writing full essays; start by mastering a consistent framework.\n\nHere is how you should begin:\n\n1. Use the 4-Anchor Formula: Every answer should have a Constitutional/Statutory basis, a Macro Data point, a specific Committee quote (like 2nd ARC or NITI Aayog), and a forward-looking Way Forward.\n2. Stop using vague generalities: Evaluators look for named institutional recommendations. Instead of saying 'the government should improve infrastructure,' mention a specific Law Commission or Sarkaria Commission suggestion.\n3. Practice syllabus-mapped questions: Don't write random topics. Pick one GS syllabus keyword daily and try to frame a 10-marker using the above anchors.\n\nTracked the 3 pillars and related Supreme Court precedents for this topic — check on satyadheesh portal.",
+  "status": "pending",
+  "created_at": "2026-11-03 04:56:56 UTC"
+}

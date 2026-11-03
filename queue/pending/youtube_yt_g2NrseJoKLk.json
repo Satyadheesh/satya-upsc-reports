@@ -1,0 +1,18 @@
+{
+  "task_id": "youtube_yt_g2NrseJoKLk",
+  "platform": "youtube",
+  "post_id": "yt_g2NrseJoKLk",
+  "target_url": "https://www.youtube.com/watch?v=g2NrseJoKLk",
+  "title": "Space Current Affairs 2026 | ISRO Space mission 2026 | Space Science 2026 | NASA ISRO Mission 2026",
+  "subreddit": "YouTube:RaviStudyGK",
+  "author": null,
+  "score": 9,
+  "reason": "The YouTube video is specifically about ISRO space missions and current affairs. Note [1] provides direct technical details on Gaganyaan (crew module separation, orbit details, and location) which are high-yield facts for GS3 Science & Technology.",
+  "matched_note": {
+    "title": "ISRO completes Crew Module-Service Module separation tests for Gaganyaan",
+    "url": "https://satyadheesh.in/en/upsc/note/137393"
+  },
+  "drafted_comment": "The real issue with space tech is moving beyond just 'news' to 'technical facts' for GS3. \n\n1. Focus on the Gaganyaan specifics: 3 members, 400 km orbit, and the 3-day duration before landing in Indian waters.\n2. Note the technical milestone: The Crew Module-Service Module separation tests at the Vikram Sarabhai Space Centre are critical for validating avionics survivability.\n3. Always link these missions to India's indigenous human spaceflight capabilities in your answers.\n\nTracked the 3 pillars and related Supreme Court precedents for this topic — check on satyadheesh portal.",
+  "status": "pending",
+  "created_at": "2026-11-03 04:45:46 UTC"
+}

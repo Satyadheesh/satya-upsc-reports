@@ -78,6 +78,7 @@ jobs:
           git add queue/
           if git status --porcelain | grep -q "queue/"; then
             git commit -m "marketing(queue): add drafted comments and audit log [skip ci]"
+            git pull origin marketing-agent --rebase || true
             git push origin HEAD:marketing-agent
           else
             echo "No queue changes to commit."

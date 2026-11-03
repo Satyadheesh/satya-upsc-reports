@@ -507,21 +507,21 @@ def run_poster(max_youtube: int = 2, max_other: int = 3, headless: bool = False)
         browser_args = [
             "--disable-blink-features=AutomationControlled",
         ]
-        # In daemon/headless mode, run real Chrome off-screen to preserve authenticated sessions
-        # and completely bypass Cloudflare headless bot detection without popping up windows
-        is_headless = headless
-        if headless:
-            browser_args.extend(["--window-position=-2400,-2400", "--window-size=1280,800"])
-            is_headless = False
 
         context = p.chromium.launch_persistent_context(
             user_data_dir=PROFILE_DIR,
             channel="chrome",
-            headless=is_headless,
-            user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
+            headless=headless,
+            user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
             viewport={"width": 1280, "height": 800},
-            args=browser_args
+            args=browser_args,
+            ignore_default_args=["--enable-automation"]
         )
+        context.add_init_script("""
+            Object.defineProperty(navigator, 'webdriver', {
+                get: () => undefined
+            });
+        """)
         page = context.new_page()
 
         posted_yt = 0
@@ -556,9 +556,9 @@ def run_poster(max_youtube: int = 2, max_other: int = 3, headless: bool = False)
                 else:
                     posted_other += 1
 
-                # Safe pacing delay between posts (35 to 55 seconds)
+                # Safe pacing delay between posts (35 to 55 seconds), only if more posts remain in this run
                 total_posted = posted_yt + posted_other
-                if total_posted < (max_youtube + max_other):
+                if total_posted < (max_youtube + max_other) and plan.index(task) < len(plan) - 1:
                     wait_sec = random.randint(35, 55)
                     print(f"[Poster] Pacing delay: waiting {wait_sec} seconds before next post...")
                     time.sleep(wait_sec)

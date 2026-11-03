@@ -1,0 +1,18 @@
+{
+  "task_id": "quora_quora_e72c69074e67",
+  "platform": "quora",
+  "post_id": "quora_e72c69074e67",
+  "target_url": "https://www.quora.com/How-does-a-beginner-UPSC-aspirant-start-practicing-answer-writing-for-the-Mains",
+  "title": "How does a beginner UPSC aspirant start practicing answer writing for the Mains?",
+  "subreddit": "Quora:UPSC",
+  "author": null,
+  "score": 10,
+  "reason": "The user is asking for a beginner's starting point for answer writing, which directly aligns with the 'UPSC CSE Mains Answer Writing Framework' note. The note provides a specific 4-anchor formula and committee-based anchoring that is perfect for a beginner to learn early.",
+  "matched_note": {
+    "title": "UPSC CSE Mains Answer Writing Framework: Structure, Committee Quotes & Data Points",
+    "url": "https://satyadheesh.in/en/upsc"
+  },
+  "drafted_comment": "The biggest mistake beginners make is trying to write 'perfect' answers immediately. You need a repeatable structure first. \n\nStart with these three steps:\n\n1. Use the 4-Anchor Formula: Every answer should have a clear Introduction (Definition/Article), a Body with 2-3 dimensions, a Value-Add (Data/Case Law), and a Forward-looking Way Forward.\n2. Anchor with Committees: Don't just give general opinions. Use specific names like the 2nd ARC, NITI Aayog, or Law Commission to back your points. This makes your answer stand out to the evaluator.\n3. Focus on Syllabus Mapping: Only write about what is in the syllabus. Map every news item to a specific GS category before you start drafting.\\n\nTracked the 3 pillars and related Supreme Court precedents for this topic — check on satyadheesh portal.",
+  "status": "pending",
+  "created_at": "2026-11-03 00:37:17 UTC"
+}

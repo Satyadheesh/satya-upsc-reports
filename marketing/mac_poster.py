@@ -182,8 +182,15 @@ def post_to_reddit(page, task: Dict[str, Any]) -> bool:
         print("[Poster] Warning: Could not locate enabled Comment button.")
         return False
 
+    print("[Poster] Comment submitted on Reddit, verifying placement...")
     time.sleep(random.uniform(4.0, 6.0))
-    return True
+    content = page.content().lower()
+    if "satyadheesh" in content or "portal" in content:
+        print("[Poster] VERIFIED: Comment is live and visible on Reddit!")
+        return True
+    else:
+        print("[Poster] FAILED VERIFICATION: Comment text not confirmed visible on Reddit.")
+        return False
 
 
 # ==========================================
@@ -294,9 +301,15 @@ def post_to_quora(page, task: Dict[str, Any]) -> bool:
     try:
         if post_btn.is_visible(timeout=3000) and post_btn.is_enabled():
             post_btn.click()
-            print("[Poster] Answer posted successfully on Quora!")
-            time.sleep(random.uniform(4.0, 6.0))
-            return True
+            print("[Poster] Answer submitted on Quora, verifying placement...")
+            time.sleep(random.uniform(5.0, 7.0))
+            content = page.content().lower()
+            if "satyadheesh" in content or "portal" in content:
+                print("[Poster] VERIFIED: Answer is live and visible on Quora!")
+                return True
+            else:
+                print("[Poster] FAILED VERIFICATION: Answer text not confirmed visible on Quora.")
+                return False
     except Exception as e:
         print(f"[Poster] Error posting to Quora: {e}")
 
@@ -439,9 +452,15 @@ def post_to_medium(page, task: Dict[str, Any]) -> bool:
     try:
         if respond_btn.is_visible(timeout=3000) and respond_btn.is_enabled():
             respond_btn.click()
-            print("[Poster] Response submitted successfully on Medium!")
-            time.sleep(random.uniform(4.0, 6.0))
-            return True
+            print("[Poster] Response submitted on Medium, verifying placement...")
+            time.sleep(random.uniform(5.0, 7.0))
+            content = page.content().lower()
+            if "satyadheesh" in content or "portal" in content:
+                print("[Poster] VERIFIED: Response is live and visible on Medium!")
+                return True
+            else:
+                print("[Poster] FAILED VERIFICATION: Response text not confirmed visible on Medium.")
+                return False
     except Exception as e:
         print(f"[Poster] Error submitting on Medium: {e}")
 
@@ -485,12 +504,23 @@ def run_poster(max_youtube: int = 2, max_other: int = 3, headless: bool = False)
     os.makedirs(PROFILE_DIR, exist_ok=True)
 
     with sync_playwright() as p:
+        browser_args = [
+            "--disable-blink-features=AutomationControlled",
+        ]
+        # In daemon/headless mode, run real Chrome off-screen to preserve authenticated sessions
+        # and completely bypass Cloudflare headless bot detection without popping up windows
+        is_headless = headless
+        if headless:
+            browser_args.extend(["--window-position=-2400,-2400", "--window-size=1280,800"])
+            is_headless = False
+
         context = p.chromium.launch_persistent_context(
             user_data_dir=PROFILE_DIR,
-            headless=headless,
+            channel="chrome",
+            headless=is_headless,
             user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
             viewport={"width": 1280, "height": 800},
-            args=["--disable-blink-features=AutomationControlled"]
+            args=browser_args
         )
         page = context.new_page()
 

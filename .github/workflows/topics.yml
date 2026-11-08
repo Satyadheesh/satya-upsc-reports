@@ -13,8 +13,8 @@ on:
         description: 'apply only: comma-separated slugs from the discover list, or top:N'
         default: ''
       name_limit:
-        description: 'discover only: name at most this many groups'
-        default: '200'
+        description: 'discover only: name at most this many groups (Gemma, about 1 min each)'
+        default: '150'
 
 concurrency:
   group: upsc-topics
@@ -26,7 +26,7 @@ env:
 jobs:
   topics:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 240
     permissions:
       contents: read
     steps:
@@ -34,14 +34,23 @@ jobs:
         with:
           repository: ${{ github.repository }}-core
           token: ${{ secrets.CORE_TOKEN }}
+      - name: Free disk for model weights
+        run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL && df -h /
       - uses: actions/setup-python@v5
         with:
           python-version: '3.10'
           cache: 'pip'
+      - name: Cache model weights   # Gemma 4 12B (free, on the runner), same cache as the study kit
+        uses: actions/cache@v4
+        with:
+          path: models
+          key: gguf-gemma-4-12b-it-Q4_K_M.gguf
       - name: Install
         run: |
+          pip install --upgrade pip
           pip install torch --index-url https://download.pytorch.org/whl/cpu
-          pip install libsql-client numpy sentence-transformers scikit-learn
+          pip install -r requirements.txt --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu
+          pip install numpy sentence-transformers scikit-learn
       - name: Run
         env:
           SATYA_UPSC_DB_URL: ${{ secrets.NEW_UPSC_DB_URL }}
@@ -54,6 +63,7 @@ jobs:
           TOPICS_MODE: ${{ inputs.mode || 'assign' }}
           TOPICS_PICK: ${{ inputs.pick }}
           TOPICS_NAME_LIMIT: ${{ inputs.name_limit || '200' }}
+          TOPICS_MINUTES: '200'
         run: |
           mkdir -p /tmp/diag_out
           set -o pipefail

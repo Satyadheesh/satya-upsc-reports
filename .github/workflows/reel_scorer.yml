@@ -22,7 +22,7 @@ on:
         type: boolean
         default: false
       reel_for:
-        description: 'Special request: article id to make and post a reel for (every quality check still applies: best or nothing)'
+        description: 'Special request: article id to make and post a reel for (every quality check still applies: best or nothing). "test:<id>" = render only, posts nothing'
         default: ''
       script_test:
         description: 'Article ids (comma-separated): write and review their reel scripts with Gemma, print only (slow)'
@@ -161,6 +161,7 @@ jobs:
           DRY="${{ github.event.inputs.dry_run == 'true' && '--dry-run' || '' }}"
           DISPATCH="${{ github.event.inputs.dispatch == 'true' && '--dispatch' || '' }}"
           REQ="${{ github.event.inputs.reel_for }}"
+          case "$REQ" in test:*) REQ="${REQ#test:}"; export REEL_TEST=1;; esac   # render only (reels repo skips posting)
           if [ -n "$REQ" ]; then
             case "$REQ" in *[!0-9,]*) echo "::error::bad id"; exit 1;; esac
             REEL_PIPELINE=g1 REEL_SELECT=v3 python -m tools.reel_scorer --reel-for "$REQ" 2>&1 | tee /tmp/req.txt

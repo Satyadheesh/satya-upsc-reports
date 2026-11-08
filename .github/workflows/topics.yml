@@ -1,0 +1,73 @@
+name: UPSC topic pages
+run-name: "Topics: ${{ inputs.mode || 'assign' }}"
+
+# Topic pages (tools/topics.py): discover = read-only list; apply = store chosen topics + write basics;
+# assign = add new notes to their topics (the orchestrator can start this after new notes).
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'discover | apply | assign'
+        default: 'discover'
+      pick:
+        description: 'apply only: comma-separated slugs from the discover list, or top:N'
+        default: ''
+      name_limit:
+        description: 'discover only: name at most this many groups'
+        default: '200'
+
+concurrency:
+  group: upsc-topics
+  cancel-in-progress: false
+
+env:
+  CORE_TOKEN: ${{ secrets.CORE_TOKEN }}
+
+jobs:
+  topics:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository }}-core
+          token: ${{ secrets.CORE_TOKEN }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+      - name: Install
+        run: |
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install libsql-client numpy sentence-transformers scikit-learn
+      - name: Run
+        env:
+          SATYA_UPSC_DB_URL: ${{ secrets.NEW_UPSC_DB_URL }}
+          SATYA_UPSC_DB_TOKEN: ${{ secrets.NEW_UPSC_DB_TOKEN }}
+          SATYA_DB_URL: ${{ secrets.SATYA_DB_URL }}
+          SATYA_DB_TOKEN: ${{ secrets.SATYA_DB_TOKEN }}
+          SATYA_TRANSLATION_DB_URL: ${{ secrets.NEW_TRANSLATION_DB_URL }}
+          SATYA_TRANSLATION_DB_TOKEN: ${{ secrets.NEW_TRANSLATION_DB_TOKEN }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          REVALIDATE_SECRET: ${{ secrets.REVALIDATE_SECRET }}
+          TOPICS_MODE: ${{ inputs.mode || 'assign' }}
+          TOPICS_PICK: ${{ inputs.pick }}
+          TOPICS_NAME_LIMIT: ${{ inputs.name_limit || '200' }}
+        run: |
+          mkdir -p /tmp/diag_out
+          set -o pipefail
+          PYTHONPATH=. python tools/topics.py 2>&1 | tee /tmp/topics.log
+      - name: Publish (previews branch, topics/)
+        if: always()
+        run: |
+          [ -f /tmp/topics.log ] || exit 0
+          mkdir /tmp/wt && cd /tmp/wt && git init -q
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git remote add origin "https://x-access-token:${CORE_TOKEN}@github.com/${GITHUB_REPOSITORY}-core.git"
+          if git fetch -q --depth 1 origin previews; then git checkout -q -b previews FETCH_HEAD; else git checkout -q --orphan previews; fi
+          mkdir -p topics && tail -c 900000 /tmp/topics.log > topics/latest.log
+          cp /tmp/diag_out/topics.* topics/ 2>/dev/null || true
+          git add -A && git commit -qm "topics ${GITHUB_RUN_ID}" && git push -q origin HEAD:previews

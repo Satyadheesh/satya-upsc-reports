@@ -97,7 +97,7 @@ jobs:
 
   finish:   # discover only: merge the shards, merge duplicate topics, Hindi names, ranked list (read-only)
     needs: topics
-    if: always() && inputs.mode == 'discover'
+    if: ${{ !cancelled() && inputs.mode == 'discover' }}   # partial shards are fine; a cancelled run is not
     runs-on: ubuntu-latest
     timeout-minutes: 90
     permissions:

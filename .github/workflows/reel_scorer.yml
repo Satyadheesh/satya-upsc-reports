@@ -44,7 +44,7 @@ on:
         default: ''
 
 concurrency:
-  group: ${{ github.event.inputs.luna_test != '' && github.event.inputs.luna_test != null && format('reel-luna-test-{0}-{1}-{2}-{3}-{4}', github.event.inputs.luna_effort, github.event.inputs.luna_model, github.event.inputs.edit_model, github.event.inputs.variant, github.event.inputs.luna_test) || 'reel-scorer' }}
+  group: ${{ github.event.inputs.luna_test != '' && github.event.inputs.luna_test != null && format('reel-luna-test-{0}-{1}-{2}-{3}-{4}', github.event.inputs.luna_effort, github.event.inputs.luna_model, github.event.inputs.edit_model, github.event.inputs.variant, github.event.inputs.luna_test) || startsWith(github.event.inputs.reel_for, 'test:') && format('reel-test-{0}', github.event.inputs.reel_for) || 'reel-scorer' }}
   cancel-in-progress: false
 
 env:

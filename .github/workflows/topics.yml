@@ -4,6 +4,8 @@ run-name: "Topics: ${{ inputs.mode || 'assign' }}"
 # Topic pages (tools/topics.py): discover = read-only list; apply = store chosen topics + write basics;
 # assign = add new notes to their topics (the orchestrator can start this after new notes).
 on:
+  schedule:
+    - cron: '17 21 * * *'   # 02:47 IST: assign the day's new notes to their topics
   workflow_dispatch:
     inputs:
       mode:

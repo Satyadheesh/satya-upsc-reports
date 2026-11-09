@@ -37,4 +37,5 @@ jobs:
         run: |
           case "$IDS" in *[!0-9,]*|'') exit 1;; esac
           python -m unittest tests.test_reel_grounded
+          python -m tools.reel_grounded_cases
           python -m tools.reel_grounded_replay

@@ -17,6 +17,7 @@ jobs:
       KIT_MODEL_REPO: unsloth/gemma-4-12b-it-GGUF
       KIT_MODEL_FILE: gemma-4-12b-it-Q4_K_M.gguf
       REEL_PIPELINE: grounded
+      REEL_GEMMA_CONTEXT: '4096'
       REEL_TEST_SHOW_SOURCE: '1'
       IDS: ${{ inputs.ids }}
     steps:
@@ -37,5 +38,4 @@ jobs:
         run: |
           case "$IDS" in *[!0-9,]*|'') exit 1;; esac
           python -m unittest tests.test_reel_grounded
-          python -m tools.reel_grounded_cases
-          python -m tools.reel_grounded_replay
+          timeout 300s python -m tools.reel_grounded_probe

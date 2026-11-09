@@ -36,4 +36,4 @@ jobs:
       - name: Generate scripts only
         run: |
           case "$IDS" in *[!0-9,]*|'') exit 1;; esac
-          python -m tools.reel_scorer --luna-test "$IDS"
+          python -m tools.reel_scorer --evidence-test

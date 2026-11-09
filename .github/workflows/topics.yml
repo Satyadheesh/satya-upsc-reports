@@ -12,6 +12,10 @@ on:
       pick:
         description: 'apply only: comma-separated slugs from the discover list, or top:N'
         default: ''
+      auto_apply:
+        description: 'discover only: then add the new topics that pass the rules (apply auto:10), no manual pick'
+        type: boolean
+        default: false
       name_limit:
         description: 'discover only: name at most this many groups (Gemma, about 2-3 min each)'
         default: '250'
@@ -32,7 +36,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:   # discover runs on several runners in parallel (8 Nov 2026: one runner named 55 of 227 groups)
-        shard: ${{ fromJSON((inputs.mode == 'discover' || inputs.mode == 'apply') && '[0,1,2,3,4]' || '[0]') }}   # discover and apply: 5 runners
+        shard: ${{ fromJSON((inputs.mode == 'discover' || (inputs.mode == 'apply' && !startsWith(inputs.pick, 'auto:'))) && '[0,1,2,3,4]' || '[0]') }}   # discover and apply: 5 runners
     steps:
       - uses: actions/checkout@v4
         with:
@@ -68,7 +72,7 @@ jobs:
           TOPICS_PICK: ${{ inputs.pick }}
           TOPICS_NAME_LIMIT: ${{ inputs.name_limit || '250' }}
           TOPICS_MINUTES: '200'
-          TOPICS_SHARD: ${{ (inputs.mode == 'discover' || inputs.mode == 'apply') && format('{0}/5', matrix.shard) || '' }}   # 5 runners, every 5th item each
+          TOPICS_SHARD: ${{ (inputs.mode == 'discover' || (inputs.mode == 'apply' && !startsWith(inputs.pick, 'auto:'))) && format('{0}/5', matrix.shard) || '' }}   # 5 runners, every 5th item each
         run: |
           mkdir -p /tmp/diag_out
           set -o pipefail
@@ -103,6 +107,7 @@ jobs:
     timeout-minutes: 90
     permissions:
       contents: read
+      actions: write   # auto_apply starts the apply run
     steps:
       - uses: actions/checkout@v4
         with:
@@ -155,3 +160,8 @@ jobs:
           mkdir -p topics && tail -c 900000 /tmp/topics.log > topics/latest.log
           cp /tmp/diag_out/topics.* topics/ 2>/dev/null || true
           git add -A && git commit -qm "topics ${GITHUB_RUN_ID}" && git push -q origin HEAD:previews
+      - name: Add the new topics that pass the rules (monthly, no manual pick)
+        if: inputs.auto_apply
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run topics.yml --repo "${{ github.repository }}" -f mode=apply -f pick=auto:10

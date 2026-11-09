@@ -162,10 +162,11 @@ jobs:
           DISPATCH="${{ github.event.inputs.dispatch == 'true' && '--dispatch' || '' }}"
           REQ="${{ github.event.inputs.reel_for }}"
           case "$REQ" in test:*) REQ="${REQ#test:}"; export REEL_TEST=1;; esac   # render only (reels repo skips posting)
+          PIPE=g1; case "$REQ" in e1:*) REQ="${REQ#e1:}"; PIPE=e1;; esac          # "test:e1:<id>" tries the e1 pipeline
           if [ -n "$REQ" ]; then
             case "$REQ" in *[!0-9,]*) echo "::error::bad id"; exit 1;; esac
-            REEL_PIPELINE=g1 REEL_SELECT=v3 python -m tools.reel_scorer --reel-for "$REQ" 2>&1 | tee /tmp/req.txt
-            echo "::notice title=Requested reel::$(grep -E 'Requested|G1 |fact|Gemma review|rejected|not good|Dispatch|dispatch|posted|No ' /tmp/req.txt | tail -c 3500 | sed ':a;N;$!ba;s/%/%25/g;s/\n/%0A/g')"
+            REEL_PIPELINE=$PIPE REEL_SELECT=v3 python -m tools.reel_scorer --reel-for "$REQ" 2>&1 | tee /tmp/req.txt
+            echo "::notice title=Requested reel::$(grep -E 'Requested|G1 |E1 |fact|Gemma review|rejected|not good|Dispatch|dispatch|posted|No ' /tmp/req.txt | tail -c 3500 | sed ':a;N;$!ba;s/%/%25/g;s/\n/%0A/g')"
             exit 0
           fi
           TEST="${{ github.event.inputs.script_test }}"

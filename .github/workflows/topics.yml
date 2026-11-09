@@ -32,7 +32,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:   # discover runs on several runners in parallel (8 Nov 2026: one runner named 55 of 227 groups)
-        shard: ${{ fromJSON(inputs.mode == 'discover' && '[0,1,2,3,4]' || '[0]') }}
+        shard: ${{ fromJSON((inputs.mode == 'discover' || inputs.mode == 'apply') && '[0,1,2,3,4]' || '[0]') }}   # discover and apply: 5 runners
     steps:
       - uses: actions/checkout@v4
         with:
@@ -68,7 +68,7 @@ jobs:
           TOPICS_PICK: ${{ inputs.pick }}
           TOPICS_NAME_LIMIT: ${{ inputs.name_limit || '250' }}
           TOPICS_MINUTES: '200'
-          TOPICS_SHARD: ${{ inputs.mode == 'discover' && format('{0}/5', matrix.shard) || '' }}   # 5 runners, every 5th group each
+          TOPICS_SHARD: ${{ (inputs.mode == 'discover' || inputs.mode == 'apply') && format('{0}/5', matrix.shard) || '' }}   # 5 runners, every 5th item each
         run: |
           mkdir -p /tmp/diag_out
           set -o pipefail
@@ -91,9 +91,10 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git remote add origin "https://x-access-token:${CORE_TOKEN}@github.com/${GITHUB_REPOSITORY}-core.git"
           if git fetch -q --depth 1 origin previews; then git checkout -q -b previews FETCH_HEAD; else git checkout -q --orphan previews; fi
-          mkdir -p topics && tail -c 900000 /tmp/topics.log > topics/latest.log
+          mkdir -p topics && tail -c 900000 /tmp/topics.log > "topics/${{ inputs.mode == 'apply' && format('apply_{0}.log', matrix.shard) || 'latest.log' }}"
           cp /tmp/diag_out/topics.* topics/ 2>/dev/null || true
-          git add -A && git commit -qm "topics ${GITHUB_RUN_ID}" && git push -q origin HEAD:previews
+          git add -A && git commit -qm "topics ${GITHUB_RUN_ID}"
+          for i in 1 2 3 4; do git push -q origin HEAD:previews && break; sleep $((i * 7)); git pull -q --rebase origin previews; done
 
   finish:   # discover only: merge the shards, merge duplicate topics, Hindi names, ranked list (read-only)
     needs: topics

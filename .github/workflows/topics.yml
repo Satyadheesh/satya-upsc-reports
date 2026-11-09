@@ -68,6 +68,8 @@ jobs:
           SATYA_TRANSLATION_DB_URL: ${{ secrets.NEW_TRANSLATION_DB_URL }}
           SATYA_TRANSLATION_DB_TOKEN: ${{ secrets.NEW_TRANSLATION_DB_TOKEN }}
           REVALIDATE_SECRET: ${{ secrets.REVALIDATE_SECRET }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}       # new topics (auto apply) -> Yash's admin chat
+          TELEGRAM_TEST_CHAT_ID: ${{ secrets.TELEGRAM_TEST_CHAT_ID }}
           TOPICS_MODE: ${{ inputs.mode || 'assign' }}
           TOPICS_PICK: ${{ inputs.pick }}
           TOPICS_NAME_LIMIT: ${{ inputs.name_limit || '250' }}

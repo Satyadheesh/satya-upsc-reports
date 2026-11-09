@@ -8,7 +8,7 @@ on:
 jobs:
   evaluate:
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 3
     env:
       SATYA_DB_URL: ${{ secrets.SATYA_DB_URL }}
       SATYA_DB_TOKEN: ${{ secrets.SATYA_DB_TOKEN }}
@@ -17,7 +17,6 @@ jobs:
       KIT_MODEL_REPO: unsloth/gemma-4-12b-it-GGUF
       KIT_MODEL_FILE: gemma-4-12b-it-Q4_K_M.gguf
       REEL_PIPELINE: grounded
-      REEL_GEMMA_CONTEXT: '4096'
       REEL_TEST_SHOW_SOURCE: '1'
       IDS: ${{ inputs.ids }}
     steps:
@@ -29,13 +28,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.10'
-      - uses: actions/cache@v4
-        with:
-          path: models
-          key: gguf-${{ env.KIT_MODEL_FILE }}
-      - run: pip install -q -r requirements.txt --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu
-      - name: Generate scripts only
+      - run: pip install -q libsql-client requests pytest
+      - name: Unit and DB shutdown checks
         run: |
           case "$IDS" in *[!0-9,]*|'') exit 1;; esac
-          python -m unittest tests.test_reel_grounded
-          timeout 300s python -m tools.reel_grounded_probe
+          python -m pytest -q tests/test_reel_intro.py tests/test_reel_grounded.py
+          timeout 30s python -m tools.reel_grounded_exit_check

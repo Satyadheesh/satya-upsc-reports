@@ -16,7 +16,7 @@ jobs:
       SATYA_UPSC_DB_TOKEN: ${{ secrets.NEW_UPSC_DB_TOKEN || secrets.SATYA_UPSC_DB_TOKEN }}
       KIT_MODEL_REPO: unsloth/gemma-4-12b-it-GGUF
       KIT_MODEL_FILE: gemma-4-12b-it-Q4_K_M.gguf
-      REEL_PIPELINE: g1
+      REEL_PIPELINE: grounded
       REEL_TEST_SHOW_SOURCE: '1'
       IDS: ${{ inputs.ids }}
     steps:

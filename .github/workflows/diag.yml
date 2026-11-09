@@ -17,6 +17,7 @@ jobs:
       KIT_MODEL_REPO: unsloth/gemma-4-12b-it-GGUF
       KIT_MODEL_FILE: gemma-4-12b-it-Q4_K_M.gguf
       REEL_PIPELINE: g1
+      REEL_TEST_SHOW_SOURCE: '1'
       IDS: ${{ inputs.ids }}
     steps:
       - uses: actions/checkout@v4

@@ -1,0 +1,53 @@
+name: GS2 Static GK pilot (read-only)
+
+on:
+  push:
+    branches: ['pilot/static-gk-gemma-20261112']
+
+permissions:
+  contents: read
+
+jobs:
+  pilot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      HF_HUB_DISABLE_TELEMETRY: '1'
+      HF_HUB_DISABLE_XET: '1'
+      GK_MODEL_PATH: models/gemma-4-12b-it-Q4_K_M.gguf
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: Satyadheesh/satya-upsc-reports-core
+          ref: 26f0c081ee710bc7fd135d8efb1a4b88756b6e0d
+          token: ${{ secrets.CORE_TOKEN }}
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Validate approved sources and test cases
+        run: python pilot/static-gk/run.py --check
+      - name: Install existing Gemma runtime
+        run: pip install --only-binary=llama-cpp-python 'llama-cpp-python>=0.3.35,<0.4' huggingface-hub --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu
+      - uses: actions/cache/restore@v4
+        with:
+          path: models
+          key: gguf-gemma-4-12b-it-Q4_K_M.gguf
+      - name: Fetch the same Gemma weights as study kits
+        run: |
+          if [ ! -s "$GK_MODEL_PATH" ]; then
+            hf download unsloth/gemma-4-12b-it-GGUF gemma-4-12b-it-Q4_K_M.gguf --local-dir models
+          fi
+      - name: Generate and verify the pilot notes
+        run: python -u pilot/static-gk/run.py
+      - name: Save report to private core pilot branch
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.CORE_TOKEN }}
+        run: |
+          if [ -f pilot-results.md ]; then
+            gh api --method PUT "repos/Satyadheesh/satya-upsc-reports-core/contents/pilot/static-gk/results/${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.md" \
+              --field branch=pilot/static-gk-gemma-20261112 \
+              --field "message=Save GS2 static GK pilot results (${GITHUB_RUN_ID})" \
+              --field "content=$(base64 -w0 pilot-results.md)" --jq '.content.html_url'
+          fi

@@ -1,4 +1,4 @@
-name: Book-grounded Polity pilot
+name: Book-grounded Polity quality tests
 on:
   push:
     branches: ['pilot/polity-book-20261112']
@@ -6,9 +6,14 @@ permissions:
   contents: read
 jobs:
   pilot:
+    strategy:
+      fail-fast: false
+      matrix:
+        note: [147500, 150169, 147541, 145879]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
+      NOTE_ID: ${{ matrix.note }}
       HF_HUB_DISABLE_TELEMETRY: '1'
       HF_HUB_DISABLE_XET: '1'
       GK_MODEL_PATH: models/gemma-4-12b-it-Q4_K_M.gguf
@@ -16,13 +21,13 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: Satyadheesh/satya-upsc-reports-core
-          ref: 23f39936077b7e50fcfaf2c5422a9fbbdaa6b985
+          ref: 119d5fbbe59349104155cdd3f7ca9aa403d75e5d
           token: ${{ secrets.CORE_TOKEN }}
           persist-credentials: false
       - uses: actions/setup-python@v5
         with:
           python-version: '3.10'
-      - name: Test routing and citations
+      - name: Test source routing and quality gates
         run: python pilot/static-gk/run.py --check
       - name: Install Gemma runtime
         run: pip install --only-binary=llama-cpp-python 'llama-cpp-python>=0.3.35,<0.4' huggingface-hub --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu
@@ -35,7 +40,7 @@ jobs:
           if [ ! -s "$GK_MODEL_PATH" ]; then
             hf download unsloth/gemma-4-12b-it-GGUF gemma-4-12b-it-Q4_K_M.gguf --local-dir models
           fi
-      - name: Generate and review learning boxes
+      - name: Generate and review learning box
         run: python -u pilot/static-gk/run.py
       - name: Save report privately
         if: always()
@@ -43,8 +48,14 @@ jobs:
           GH_TOKEN: ${{ secrets.CORE_TOKEN }}
         run: |
           if [ -f pilot-results.md ]; then
-            gh api --method PUT "repos/Satyadheesh/satya-upsc-reports-core/contents/pilot/static-gk/results/${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.md" \
-              --field branch=pilot/polity-book-20261112 \
-              --field "message=Save Polity book pilot results (${GITHUB_RUN_ID})" \
-              --field "content=$(base64 -w0 pilot-results.md)" --jq '.content.html_url'
+            for attempt in 1 2 3 4 5; do
+              if gh api --method PUT "repos/Satyadheesh/satya-upsc-reports-core/contents/pilot/static-gk/results/${GITHUB_RUN_ID}-${NOTE_ID}.md" \
+                --field branch=pilot/polity-book-20261112 \
+                --field "message=Save Polity pilot result ${GITHUB_RUN_ID} ${NOTE_ID}" \
+                --field "content=$(base64 -w0 pilot-results.md)" --jq '.content.html_url'; then
+                exit 0
+              fi
+              sleep "$((attempt * 3))"
+            done
+            exit 1
           fi

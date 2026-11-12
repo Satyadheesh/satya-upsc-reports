@@ -11,7 +11,7 @@ jobs:
       matrix:
         note: [147500, 150169, 147541, 145879]
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 35
     env:
       NOTE_ID: ${{ matrix.note }}
       HF_HUB_DISABLE_TELEMETRY: '1'
@@ -21,12 +21,16 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: Satyadheesh/satya-upsc-reports-core
-          ref: f963f901f64ab5e924a918aa80f4f4b5b5b43938
+          ref: b4488becaabba0a46ef8c0d4491b127a2d96bbfc
           token: ${{ secrets.CORE_TOKEN }}
           persist-credentials: false
       - uses: actions/setup-python@v5
         with:
           python-version: '3.10'
+      - name: Check PDF extraction and retrieval accuracy
+        run: |
+          command -v pdftotext || (sudo apt-get update && sudo apt-get install -y poppler-utils)
+          python pilot/static-gk/retrieval.py
       - name: Test source routing and quality gates
         run: python pilot/static-gk/run.py --check
       - name: Install Gemma runtime

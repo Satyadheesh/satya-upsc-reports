@@ -163,7 +163,8 @@ jobs:
         env:
           PYTHONPATH: ${{ github.workspace }}/code/.ci:${{ github.workspace }}/code
         run: |
-          cd code && python -m static_gk.enrich --db ../data/static_gk/library/static_gk.sqlite --ids "${{ matrix.ids }}" --out ../out/enrich.jsonl
+          cd code && python -m static_gk.enrich --db ../data/static_gk/library/static_gk.sqlite --ids "${{ matrix.ids }}" --out ../out/enrich.jsonl \
+            --mode "$(python3 -c "import json,os;print(json.loads(os.environ['CFG']).get('enrich_mode','strict'))")"
       - name: Save results privately
         if: always()
         working-directory: data

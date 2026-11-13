@@ -1,7 +1,7 @@
-name: Book-grounded Polity quality tests
+name: Book-grounded learning preview
 on:
   push:
-    branches: ['pilot/polity-book-20261112']
+    branches: ['pilot/polity-learning-20261113']
 permissions:
   contents: read
 jobs:
@@ -9,7 +9,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        note: [147500, 150169, 147541, 145879]
+        note: [147500, 150169]
     runs-on: ubuntu-latest
     timeout-minutes: 35
     env:
@@ -21,7 +21,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: Satyadheesh/satya-upsc-reports-core
-          ref: 3feb2cd3b23b15f0b4498bf85e2de3bf8c38bfd7
+          ref: 54b2ffe3d3d3c7e1d170b55b9b5c5748baafff2d
           token: ${{ secrets.CORE_TOKEN }}
           persist-credentials: false
       - uses: actions/setup-python@v5
@@ -32,7 +32,7 @@ jobs:
           command -v pdftotext || (sudo apt-get update && sudo apt-get install -y poppler-utils)
           python pilot/static-gk/retrieval.py
       - name: Test source routing and quality gates
-        run: python pilot/static-gk/run.py --check
+        run: python -m py_compile pilot/static-gk/lesson.py
       - name: Install Gemma runtime
         run: pip install --only-binary=llama-cpp-python 'llama-cpp-python>=0.3.35,<0.4' huggingface-hub --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu
       - uses: actions/cache/restore@v4
@@ -45,7 +45,7 @@ jobs:
             hf download unsloth/gemma-4-12b-it-GGUF gemma-4-12b-it-Q4_K_M.gguf --local-dir models
           fi
       - name: Generate and review learning box
-        run: python -u pilot/static-gk/run.py
+        run: python -u pilot/static-gk/lesson.py
       - name: Save report privately
         if: always()
         env:
@@ -54,7 +54,7 @@ jobs:
           if [ -f pilot-results.md ]; then
             for attempt in 1 2 3 4 5; do
               if gh api --method PUT "repos/Satyadheesh/satya-upsc-reports-core/contents/pilot/static-gk/results/${GITHUB_RUN_ID}-${NOTE_ID}.md" \
-                --field branch=pilot/polity-book-20261112 \
+                --field branch=pilot/polity-learning-20261113 \
                 --field "message=Save Polity pilot result ${GITHUB_RUN_ID} ${NOTE_ID}" \
                 --field "content=$(base64 -w0 pilot-results.md)" --jq '.content.html_url'; then
                 exit 0

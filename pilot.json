@@ -1,0 +1,2 @@
+{"run": "t1", "extract": true, "book": "lxk6", "shards": 2, "chapters": "16,24", "deadline_min": 22,
+ "enrich": true, "enrich_days": 10, "enrich_subjects": "polity,governance", "enrich_limit": 8, "enrich_shards": 2}

@@ -9,7 +9,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        note: [147500, 150169]
+        note: [147500]
     runs-on: ubuntu-latest
     timeout-minutes: 35
     env:
@@ -21,7 +21,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: Satyadheesh/satya-upsc-reports-core
-          ref: 54b2ffe3d3d3c7e1d170b55b9b5c5748baafff2d
+          ref: 9f944a52dea0dc76cd25a972cf11bc804ce54099
           token: ${{ secrets.CORE_TOKEN }}
           persist-credentials: false
       - uses: actions/setup-python@v5

@@ -21,7 +21,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: Satyadheesh/satya-upsc-reports-core
-          ref: efe2358a50989f43e57402100426095db84befe7
+          ref: 5e4905daacc5fe2fa7e8fee6ec5c055e3c0008df
           token: ${{ secrets.CORE_TOKEN }}
           persist-credentials: false
       - uses: actions/setup-python@v5

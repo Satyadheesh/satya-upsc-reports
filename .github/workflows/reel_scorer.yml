@@ -163,6 +163,8 @@ jobs:
           REQ="${{ github.event.inputs.reel_for }}"
           case "$REQ" in test:*) REQ="${REQ#test:}"; export REEL_TEST=1;; esac   # render only (reels repo skips posting)
           PIPE=g1; case "$REQ" in e1:*) REQ="${REQ#e1:}"; PIPE=e1;; esac          # "test:e1:<id>" tries the e1 pipeline
+          case "$REQ" in sb:*) REQ="${REQ#sb:}"; PIPE=sb;; esac                    # "test:sb:<id>" the storyboard pipeline
+          [ "$REEL_PIPELINE" = sb ] && [ "$PIPE" = g1 ] && PIPE=sb                  # live pipeline sb: requests use it too
           if [ -n "$REQ" ]; then
             case "$REQ" in *[!0-9,]*) echo "::error::bad id"; exit 1;; esac
             REEL_PIPELINE=$PIPE REEL_SELECT=v3 python -m tools.reel_scorer --reel-for "$REQ" 2>&1 | tee /tmp/req.txt

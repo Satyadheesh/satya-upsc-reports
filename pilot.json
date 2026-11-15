@@ -1,1 +1,1 @@
-{"run": "concepts1", "extract": false, "enrich": false, "concepts": true, "shards": 8, "link_mode": "checked"}
+{"run": "concepts2", "extract": false, "enrich": false, "concepts": true, "shards": 10, "group_min": 170, "qa_min": 0, "link_mode": "checked"}

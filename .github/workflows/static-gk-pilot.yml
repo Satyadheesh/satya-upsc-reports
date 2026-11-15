@@ -253,8 +253,10 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}/code/.ci:${{ github.workspace }}/code
         run: |
           N=$(python3 -c "import json,os;print(json.loads(os.environ['CFG']).get('shards',8))")
-          python -m static_gk.concepts group --shard ${{ matrix.shard }} --of "$N" --out ../out --deadline-min 95
-          python -m static_gk.concepts qa --shard ${{ matrix.shard }} --of "$N" --out ../out --deadline-min 70
+          GD=$(python3 -c "import json,os;print(json.loads(os.environ['CFG']).get('group_min',95))")
+          QD=$(python3 -c "import json,os;print(json.loads(os.environ['CFG']).get('qa_min',70))")
+          python -m static_gk.concepts group --shard ${{ matrix.shard }} --of "$N" --out ../out --deadline-min "$GD"
+          [ "$QD" = "0" ] || python -m static_gk.concepts qa --shard ${{ matrix.shard }} --of "$N" --out ../out --deadline-min "$QD"
       - name: Save privately
         if: always()
         working-directory: data

@@ -45,6 +45,8 @@ jobs:
           SAT_TOKEN: ${{ secrets.DISPATCH_TOKEN }}
           HINDI_TOKEN: ${{ secrets.HINDI_DISPATCH_TOKEN }}
           REVALIDATE_SECRET: ${{ secrets.REVALIDATE_SECRET }}   # calls the site's timeline-follow notification job
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}     # pipeline health messages to the admin chat
+          TELEGRAM_TEST_CHAT_ID: ${{ secrets.TELEGRAM_TEST_CHAT_ID }}
         run: |
           python tools/orchestrator.py \
             ${{ github.event.inputs.event != '' && format('--event "{0}"', github.event.inputs.event) || '' }} \

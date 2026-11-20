@@ -1,0 +1,313 @@
+name: Static GK v3 (private preview)
+run-name: "Static GK v3 ${{ github.sha }}"
+on:
+  push:
+    branches: ['pilot/static-gk-v2']
+    paths: ['pilot3.json']
+permissions:
+  contents: read
+concurrency:
+  group: static-gk-v3-${{ github.sha }}
+  cancel-in-progress: false
+env:
+  CORE: Satyadheesh/satya-upsc-reports-core
+  CODE_REF: pilot/static-gk-v2
+  DATA_REF: pilot/static-gk-v2-data
+  SATYA_DB_URL: ${{ secrets.SATYA_DB_URL }}
+  SATYA_DB_TOKEN: ${{ secrets.SATYA_DB_TOKEN }}
+  SATYA_UPSC_DB_URL: ${{ secrets.NEW_UPSC_DB_URL }}
+  SATYA_UPSC_DB_TOKEN: ${{ secrets.NEW_UPSC_DB_TOKEN }}
+  KIT_MODEL_REPO: unsloth/gemma-4-12b-it-GGUF
+  KIT_MODEL_FILE: gemma-4-12b-it-Q4_K_M.gguf
+  GK_MODEL_PATH: models/gemma-4-12b-it-Q4_K_M.gguf
+  HF_HUB_DISABLE_TELEMETRY: '1'
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      cfg: ${{ steps.p.outputs.cfg }}
+      shards: ${{ steps.p.outputs.shards }}
+      ids: ${{ steps.p.outputs.ids }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: p
+        run: |
+          python3 - <<'PY'
+          import json, os
+          c = json.load(open("pilot3.json"))
+          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+              f.write("cfg=" + json.dumps(c) + "\n")
+              f.write("shards=" + json.dumps(list(range(int(c.get("shards", 1))))) + "\n")
+              f.write("ids=" + json.dumps(c.get("ids") or ["0"]) + "\n")
+          PY
+
+  probe:
+    needs: plan
+    if: ${{ fromJson(needs.plan.outputs.cfg).probe }}
+    runs-on: ubuntu-latest
+    env:
+      CFG: ${{ needs.plan.outputs.cfg }}
+      PYTHONPATH: ${{ github.workspace }}/code/.ci:${{ github.workspace }}/code
+      GK_DATA_DIR: ${{ github.workspace }}/data
+    steps:
+      - uses: actions/checkout@v4
+        with: {repository: '${{ env.CORE }}', ref: '${{ env.CODE_REF }}', token: '${{ secrets.CORE_TOKEN }}', path: code, persist-credentials: false}
+      - uses: actions/checkout@v4
+        with: {repository: '${{ env.CORE }}', ref: '${{ env.DATA_REF }}', token: '${{ secrets.CORE_TOKEN }}', path: data}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.10'}
+      - run: (command -v pdftotext || (sudo apt-get update -q && sudo apt-get install -y -q poppler-utils)) && pip install -q pypdf
+      - name: Fetch and section the official book (counts only)
+        working-directory: code
+        run: mkdir -p ../out && python -m static_gk.probe "$(python3 -c "import json,os;print(json.loads(os.environ['CFG']).get('book','ncert11'))")" --out ../out/probe.json
+      - name: Save privately
+        if: always()
+        working-directory: data
+        run: |
+          RUN=$(python3 -c "import json,os;print(json.loads(os.environ['CFG'])['run'])")
+          for i in 1 2 3 4 5 6 7 8; do
+            git fetch -q origin "$DATA_REF" && git reset -q --hard "origin/$DATA_REF"
+            mkdir -p "static_gk/probe/$RUN"
+            cp ../out/probe.json "static_gk/probe/$RUN/probe.json"
+            git add static_gk
+            git -c user.name=raam-07 -c user.email=282972983+raam-07@users.noreply.github.com commit -q -m "Static GK v3: probe" || exit 0
+            git push -q origin "HEAD:$DATA_REF" && exit 0
+            sleep $((i * 7))
+          done
+          exit 1
+
+  extract:
+    needs: [plan, probe]
+    if: ${{ always() && fromJson(needs.plan.outputs.cfg).extract && (needs.probe.result == 'success' || needs.probe.result == 'skipped') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ${{ fromJson(needs.plan.outputs.shards) }}
+    env:
+      CFG: ${{ needs.plan.outputs.cfg }}
+      PYTHONPATH: ${{ github.workspace }}/code/.ci:${{ github.workspace }}/code
+      GK_DATA_DIR: ${{ github.workspace }}/data
+    steps:
+      - uses: actions/checkout@v4
+        with: {repository: '${{ env.CORE }}', ref: '${{ env.CODE_REF }}', token: '${{ secrets.CORE_TOKEN }}', path: code, persist-credentials: false}
+      - uses: actions/checkout@v4
+        with: {repository: '${{ env.CORE }}', ref: '${{ env.DATA_REF }}', token: '${{ secrets.CORE_TOKEN }}', path: data}
+      - name: Free disk for model weights
+        run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.10'}
+      - uses: actions/cache/restore@v4
+        with: {path: code/models, key: 'gguf-${{ env.KIT_MODEL_FILE }}'}
+      - name: Install
+        run: |
+          command -v pdftotext || (sudo apt-get update -q && sudo apt-get install -y -q poppler-utils)
+          pip install -q --only-binary=llama-cpp-python 'llama-cpp-python>=0.3.35,<0.3.37' huggingface-hub pypdf libsql-client --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu
+      - name: Extract and verify facts (counts only)
+        working-directory: code
+        run: |
+          export GK_RUN=$(python3 -c "import json,os;print(json.loads(os.environ['CFG'])['run'])")
+          C() { python3 -c "import json,os;print(json.loads(os.environ['CFG']).get('$1','$2'))"; }
+          python -m static_gk.extract --book "$(C book ncert11)" --shard ${{ matrix.shard }} --of "$(C shards 1)" \
+            --deadline-min "$(C extract_min 200)" --out ../out --skip ../data/static_gk/runs/*/sections-*.jsonl
+      - name: Save privately
+        if: always()
+        working-directory: data
+        run: |
+          RUN=$(python3 -c "import json,os;print(json.loads(os.environ['CFG'])['run'])")
+          for i in 1 2 3 4 5 6 7 8; do
+            git fetch -q origin "$DATA_REF" && git reset -q --hard "origin/$DATA_REF"
+            mkdir -p "static_gk/runs/$RUN"
+            [ -s ../out/sections.jsonl ] && cp ../out/sections.jsonl "static_gk/runs/$RUN/sections-${{ matrix.shard }}-${{ github.run_id }}.jsonl" || true
+            [ -s ../out/facts.jsonl ] && cp ../out/facts.jsonl "static_gk/runs/$RUN/facts-${{ matrix.shard }}-${{ github.run_id }}.jsonl" || true
+            git add static_gk
+            git -c user.name=raam-07 -c user.email=282972983+raam-07@users.noreply.github.com commit -q -m "Static GK v3: extract shard ${{ matrix.shard }}" || exit 0
+            git push -q origin "HEAD:$DATA_REF" && exit 0
+            sleep $((i * 7))
+          done
+          exit 1
+
+  group:
+    needs: [plan, extract]
+    if: ${{ always() && fromJson(needs.plan.outputs.cfg).group && (needs.extract.result == 'success' || needs.extract.result == 'skipped') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 200
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ${{ fromJson(needs.plan.outputs.shards) }}
+    env:
+      CFG: ${{ needs.plan.outputs.cfg }}
+      PYTHONPATH: ${{ github.workspace }}/code/.ci:${{ github.workspace }}/code
+      GK_DATA_DIR: ${{ github.workspace }}/data
+    steps:
+      - uses: actions/checkout@v4
+        with: {repository: '${{ env.CORE }}', ref: '${{ env.CODE_REF }}', token: '${{ secrets.CORE_TOKEN }}', path: code, persist-credentials: false}
+      - uses: actions/checkout@v4
+        with: {repository: '${{ env.CORE }}', ref: '${{ env.DATA_REF }}', token: '${{ secrets.CORE_TOKEN }}', path: data}
+      - name: Free disk for model weights
+        run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.10'}
+      - uses: actions/cache/restore@v4
+        with: {path: code/models, key: 'gguf-${{ env.KIT_MODEL_FILE }}'}
+      - name: Install
+        run: |
+          command -v pdftotext || (sudo apt-get update -q && sudo apt-get install -y -q poppler-utils)
+          pip install -q --only-binary=llama-cpp-python 'llama-cpp-python>=0.3.35,<0.3.37' huggingface-hub pypdf libsql-client --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu
+      - name: Group new facts into concepts (counts only)
+        working-directory: code
+        run: |
+          N=$(python3 -c "import json,os;print(json.loads(os.environ['CFG']).get('shards',8))")
+          python -m static_gk.concepts group --shard ${{ matrix.shard }} --of "$N" --out ../out --deadline-min 120
+      - name: Save privately
+        if: always()
+        working-directory: data
+        run: |
+          RUN=$(python3 -c "import json,os;print(json.loads(os.environ['CFG'])['run'])")
+          for i in 1 2 3 4 5 6 7 8; do
+            git fetch -q origin "$DATA_REF" && git reset -q --hard "origin/$DATA_REF"
+            mkdir -p "static_gk/concepts/$RUN"
+            [ -s ../out/group.jsonl ] && cp ../out/group.jsonl "static_gk/concepts/$RUN/group-${{ matrix.shard }}-${{ github.run_id }}.jsonl" || true
+            git add static_gk
+            git -c user.name=raam-07 -c user.email=282972983+raam-07@users.noreply.github.com commit -q -m "Static GK v3: group shard ${{ matrix.shard }}" || exit 0
+            git push -q origin "HEAD:$DATA_REF" && exit 0
+            sleep $((i * 7))
+          done
+          exit 1
+
+  checks:
+    needs: [plan, group]
+    if: ${{ always() && fromJson(needs.plan.outputs.cfg).checks && (needs.group.result == 'success' || needs.group.result == 'skipped') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ${{ fromJson(needs.plan.outputs.shards) }}
+    env:
+      CFG: ${{ needs.plan.outputs.cfg }}
+      PYTHONPATH: ${{ github.workspace }}/code/.ci:${{ github.workspace }}/code
+      GK_DATA_DIR: ${{ github.workspace }}/data
+    steps:
+      - uses: actions/checkout@v4
+        with: {repository: '${{ env.CORE }}', ref: '${{ env.CODE_REF }}', token: '${{ secrets.CORE_TOKEN }}', path: code, persist-credentials: false}
+      - uses: actions/checkout@v4
+        with: {repository: '${{ env.CORE }}', ref: '${{ env.DATA_REF }}', token: '${{ secrets.CORE_TOKEN }}', path: data}
+      - name: Free disk for model weights
+        run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.10'}
+      - uses: actions/cache/restore@v4
+        with: {path: code/models, key: 'gguf-${{ env.KIT_MODEL_FILE }}'}
+      - name: Install
+        run: |
+          command -v pdftotext || (sudo apt-get update -q && sudo apt-get install -y -q poppler-utils)
+          pip install -q --only-binary=llama-cpp-python 'llama-cpp-python>=0.3.35,<0.3.37' huggingface-hub pypdf libsql-client --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu
+      - name: Official backing, rule/recommendation tags, heading fit (counts only)
+        working-directory: code
+        run: |
+          C() { python3 -c "import json,os;print(json.loads(os.environ['CFG']).get('$1','$2'))"; }
+          python -m static_gk.checks --shard ${{ matrix.shard }} --of "$(C shards 1)" --out ../out --deadline-min "$(C checks_min 230)"
+      - name: Save privately
+        if: always()
+        working-directory: data
+        run: |
+          RUN=$(python3 -c "import json,os;print(json.loads(os.environ['CFG'])['run'])")
+          for i in 1 2 3 4 5 6 7 8; do
+            git fetch -q origin "$DATA_REF" && git reset -q --hard "origin/$DATA_REF"
+            mkdir -p "static_gk/checks/$RUN"
+            [ -s ../out/checks.jsonl ] && cp ../out/checks.jsonl "static_gk/checks/$RUN/checks-${{ matrix.shard }}-${{ github.run_id }}.jsonl" || true
+            git add static_gk
+            git -c user.name=raam-07 -c user.email=282972983+raam-07@users.noreply.github.com commit -q -m "Static GK v3: checks shard ${{ matrix.shard }}" || exit 0
+            git push -q origin "HEAD:$DATA_REF" && exit 0
+            sleep $((i * 7))
+          done
+          exit 1
+
+  library:
+    needs: [plan, checks]
+    if: ${{ always() && fromJson(needs.plan.outputs.cfg).library && (needs.checks.result == 'success' || needs.checks.result == 'skipped') }}
+    runs-on: ubuntu-latest
+    env:
+      CFG: ${{ needs.plan.outputs.cfg }}
+      PYTHONPATH: ${{ github.workspace }}/code/.ci:${{ github.workspace }}/code
+      GK_DATA_DIR: ${{ github.workspace }}/data
+    steps:
+      - uses: actions/checkout@v4
+        with: {repository: '${{ env.CORE }}', ref: '${{ env.CODE_REF }}', token: '${{ secrets.CORE_TOKEN }}', path: code, persist-credentials: false}
+      - uses: actions/checkout@v4
+        with: {repository: '${{ env.CORE }}', ref: '${{ env.DATA_REF }}', token: '${{ secrets.CORE_TOKEN }}', path: data}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.10'}
+      - run: pip install -q libsql-client
+      - name: Build the v3 library (rule v3)
+        working-directory: code
+        run: |
+          mkdir -p ../data/static_gk/library3
+          python -m static_gk.load --facts '../data/static_gk/runs/*/facts-*.jsonl' --out ../data/static_gk/library3/static_gk.sqlite
+          python -m static_gk.concepts build --db ../data/static_gk/library3/static_gk.sqlite --checks '../data/static_gk/checks/*/checks-*.jsonl'
+      - name: Save privately
+        if: always()
+        working-directory: data
+        run: |
+          RUN=$(python3 -c "import json,os;print(json.loads(os.environ['CFG'])['run'])")
+          for i in 1 2 3 4 5 6 7 8; do
+            git fetch -q origin "$DATA_REF" && git reset -q --hard "origin/$DATA_REF"
+            mkdir -p "static_gk/library3"
+
+            git add static_gk
+            git -c user.name=raam-07 -c user.email=282972983+raam-07@users.noreply.github.com commit -q -m "Static GK v3: library" || exit 0
+            git push -q origin "HEAD:$DATA_REF" && exit 0
+            sleep $((i * 7))
+          done
+          exit 1
+
+  link:
+    needs: [plan, library]
+    if: ${{ always() && fromJson(needs.plan.outputs.cfg).link && (needs.library.result == 'success' || needs.library.result == 'skipped') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    strategy:
+      fail-fast: false
+      matrix:
+        ids: ${{ fromJson(needs.plan.outputs.ids) }}
+    env:
+      CFG: ${{ needs.plan.outputs.cfg }}
+      PYTHONPATH: ${{ github.workspace }}/code/.ci:${{ github.workspace }}/code
+      GK_DATA_DIR: ${{ github.workspace }}/data
+    steps:
+      - uses: actions/checkout@v4
+        with: {repository: '${{ env.CORE }}', ref: '${{ env.CODE_REF }}', token: '${{ secrets.CORE_TOKEN }}', path: code, persist-credentials: false}
+      - uses: actions/checkout@v4
+        with: {repository: '${{ env.CORE }}', ref: '${{ env.DATA_REF }}', token: '${{ secrets.CORE_TOKEN }}', path: data}
+      - name: Free disk for model weights
+        run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.10'}
+      - uses: actions/cache/restore@v4
+        with: {path: code/models, key: 'gguf-${{ env.KIT_MODEL_FILE }}'}
+      - name: Install
+        run: |
+          command -v pdftotext || (sudo apt-get update -q && sudo apt-get install -y -q poppler-utils)
+          pip install -q --only-binary=llama-cpp-python 'llama-cpp-python>=0.3.35,<0.3.37' huggingface-hub pypdf libsql-client --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu
+      - name: Concept panels for the test notes (read-only; counts only)
+        working-directory: code
+        run: python -m static_gk.link --db ../data/static_gk/library3/static_gk.sqlite --ids "${{ matrix.ids }}" --out ../out/link.jsonl --mode strict
+      - name: Save privately
+        if: always()
+        working-directory: data
+        run: |
+          RUN=$(python3 -c "import json,os;print(json.loads(os.environ['CFG'])['run'])")
+          for i in 1 2 3 4 5 6 7 8; do
+            git fetch -q origin "$DATA_REF" && git reset -q --hard "origin/$DATA_REF"
+            mkdir -p "static_gk/preview/$RUN"
+            [ -s ../out/link.jsonl ] && cp ../out/link.jsonl "static_gk/preview/$RUN/link-${{ strategy.job-index }}-${{ github.run_id }}.jsonl" || true
+            git add static_gk
+            git -c user.name=raam-07 -c user.email=282972983+raam-07@users.noreply.github.com commit -q -m "Static GK v3: panels" || exit 0
+            git push -q origin "HEAD:$DATA_REF" && exit 0
+            sleep $((i * 7))
+          done
+          exit 1

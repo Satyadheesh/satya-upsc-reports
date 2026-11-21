@@ -19,7 +19,7 @@ env:
   CORE: Satyadheesh/satya-upsc-reports-core
   CODE_REF: static-gk-live
   DATA_REF: pilot/static-gk-v2-data
-  PANEL_VERSION: v9
+  PANEL_VERSION: v10
   SATYA_DB_URL: ${{ secrets.SATYA_DB_URL }}
   SATYA_DB_TOKEN: ${{ secrets.SATYA_DB_TOKEN }}
   SATYA_UPSC_DB_URL: ${{ secrets.NEW_UPSC_DB_URL }}

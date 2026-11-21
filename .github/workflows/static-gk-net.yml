@@ -15,8 +15,8 @@ jobs:
         with: {repository: 'Satyadheesh/satya-upsc-reports-core', ref: 'pilot/static-gk-v2-data', token: '${{ secrets.CORE_TOKEN }}', path: data}
       - name: Which official sources answer from here; fetch the matching PDFs privately
         run: |
-          mkdir -p data/static_gk/net
-          python3 - <<'PY' > data/static_gk/net/result.txt 2>&1
+          mkdir -p out
+          python3 - <<'PY' > out/result.txt 2>&1 || true
           import json, re, time, urllib.request, urllib.parse, os
           cfg = json.load(open("net.json"))
           def get(u, n=60_000_000):
@@ -41,8 +41,19 @@ jobs:
                           name = re.sub(r"[^A-Za-z0-9._-]", "_", l.rsplit("/", 1)[-1])[-80:]
                           print(f"      fetched {s2} {len(b2)} {t2}s", flush=True)
                           if b2[:4] == b"%PDF":
-                              os.makedirs("data/static_gk/net/pdf", exist_ok=True)
-                              open("data/static_gk/net/pdf/" + name, "wb").write(b2)
+                              os.makedirs("out/pdf", exist_ok=True)
+                              open("out/pdf/" + name, "wb").write(b2)
           PY
-          cd data && git add static_gk/net && git -c user.name=raam-07 -c user.email=282972983+raam-07@users.noreply.github.com commit -q -m "Static GK: official source reachability" && \
-          for i in 1 2 3 4 5; do git push -q origin HEAD:pilot/static-gk-v2-data && break; git fetch -q origin pilot/static-gk-v2-data && git rebase -q origin/pilot/static-gk-v2-data; sleep 5; done
+      - name: Save privately
+        if: always()
+        working-directory: data
+        run: |
+          for i in 1 2 3 4 5 6 7 8; do
+            git fetch -q origin pilot/static-gk-v2-data && git reset -q --hard origin/pilot/static-gk-v2-data
+            mkdir -p static_gk/net && cp -r ../out/* static_gk/net/ || true
+            git add static_gk/net
+            git -c user.name=raam-07 -c user.email=282972983+raam-07@users.noreply.github.com commit -q -m "Static GK: official source reachability" || exit 0
+            git push -q origin HEAD:pilot/static-gk-v2-data && exit 0
+            sleep $((i * 5))
+          done
+          exit 1

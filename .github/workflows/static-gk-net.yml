@@ -1,0 +1,33 @@
+name: Static GK source reachability (private)
+on:
+  push:
+    branches: ['pilot/static-gk-v2']
+    paths: ['net.json']
+permissions:
+  contents: read
+jobs:
+  net:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Which official sources answer from here (status, size, time only)
+        run: |
+          python3 - <<'PY'
+          import json, re, time, urllib.request
+          cfg = json.load(open("net.json"))
+          def get(u, n=400000):
+              t = time.time()
+              try:
+                  r = urllib.request.urlopen(urllib.request.Request(u, headers={"User-Agent": "Mozilla/5.0"}), timeout=40)
+                  b = r.read(n)
+                  return r.status, len(b), round(time.time() - t, 1), b
+              except Exception as e:
+                  return str(e)[:60], 0, round(time.time() - t, 1), b""
+          for u in cfg["urls"]:
+              s, n, t, b = get(u)
+              print(f"{s} {n} {t}s {u}")
+              if cfg.get("links") and b[:1] == b"<":
+                  for l in sorted(set(re.findall(rb'href="([^"]+\.pdf)"', b)))[:15]:
+                      print("   pdf:", l.decode(errors="replace")[:160])
+          PY

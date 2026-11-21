@@ -1,0 +1,38 @@
+name: Archive news articles
+
+# Monthly backup of the news articles (main DB + Hindi + timeline links) to Satyadheesh/satyadheesh-archive releases
+# news-YYYY-MM. Reads the databases only.
+on:
+  workflow_dispatch:
+    inputs:
+      month:
+        description: "Month (YYYY-MM), 'all', or empty for last month + this month"
+        default: ''
+  schedule:
+    - cron: '17 20 1,28 * *'   # 01:47 IST on the 1st (closes last month) and the 28th
+
+env:
+  CORE_TOKEN: ${{ secrets.CORE_TOKEN }}
+  PYTHONPATH: ${{ github.workspace }}/.ci
+
+jobs:
+  archive:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository }}-core
+          token: ${{ secrets.CORE_TOKEN }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - run: pip install libsql-client requests
+      - name: Archive
+        env:
+          SATYA_DB_URL: ${{ secrets.SATYA_DB_URL }}
+          SATYA_DB_TOKEN: ${{ secrets.SATYA_DB_TOKEN }}
+          SATYA_TRANSLATION_DB_URL: ${{ secrets.NEW_TRANSLATION_DB_URL }}
+          SATYA_TRANSLATION_DB_TOKEN: ${{ secrets.NEW_TRANSLATION_DB_TOKEN }}
+          ARCHIVE_TOKEN: ${{ secrets.ARCHIVE_TOKEN }}
+        run: PYTHONPATH=.:$PYTHONPATH python tools/archive_news.py "${{ github.event.inputs.month }}"

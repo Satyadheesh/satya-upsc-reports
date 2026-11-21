@@ -111,7 +111,7 @@ jobs:
           export GK_RUN=$(python3 -c "import json,os;print(json.loads(os.environ['CFG'])['run'])")
           C() { python3 -c "import json,os;print(json.loads(os.environ['CFG']).get('$1','$2'))"; }
           python -m static_gk.extract --book "$(C book ncert11)" --shard ${{ matrix.shard }} --of "$(C shards 1)" \
-            --deadline-min "$(C extract_min 200)" --out ../out --skip ../data/static_gk/runs/*/sections-*.jsonl
+            --deadline-min "$(C extract_min 200)" --out ../out --skip ../data/static_gk/runs/*/sections-*.jsonl $(C extract_args '')
       - name: Save privately
         if: always()
         working-directory: data

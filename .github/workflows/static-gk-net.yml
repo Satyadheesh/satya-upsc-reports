@@ -8,26 +8,41 @@ permissions:
 jobs:
   net:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-      - name: Which official sources answer from here (status, size, time only)
+      - uses: actions/checkout@v4
+        with: {repository: 'Satyadheesh/satya-upsc-reports-core', ref: 'pilot/static-gk-v2-data', token: '${{ secrets.CORE_TOKEN }}', path: data}
+      - name: Which official sources answer from here; fetch the matching PDFs privately
         run: |
-          python3 - <<'PY'
-          import json, re, time, urllib.request
+          mkdir -p data/static_gk/net
+          python3 - <<'PY' > data/static_gk/net/result.txt 2>&1
+          import json, re, time, urllib.request, urllib.parse, os
           cfg = json.load(open("net.json"))
-          def get(u, n=400000):
+          def get(u, n=60_000_000):
               t = time.time()
               try:
-                  r = urllib.request.urlopen(urllib.request.Request(u, headers={"User-Agent": "Mozilla/5.0"}), timeout=40)
+                  r = urllib.request.urlopen(urllib.request.Request(u, headers={"User-Agent": "Mozilla/5.0"}), timeout=60)
                   b = r.read(n)
-                  return r.status, len(b), round(time.time() - t, 1), b
+                  return r.status, b, round(time.time() - t, 1), r.headers.get("content-type", "")
               except Exception as e:
-                  return str(e)[:60], 0, round(time.time() - t, 1), b""
+                  return str(e)[:80], b"", round(time.time() - t, 1), ""
+          want = re.compile(cfg.get("pdf_match", "constitution|coi"), re.I)
           for u in cfg["urls"]:
-              s, n, t, b = get(u)
-              print(f"{s} {n} {t}s {u}")
-              if cfg.get("links") and b[:1] == b"<":
-                  for l in sorted(set(re.findall(rb'href="([^"]+\.pdf)"', b)))[:15]:
-                      print("   pdf:", l.decode(errors="replace")[:160])
+              s, b, t, ct = get(u)
+              print(f"{s} {len(b)} {t}s {ct[:30]} {u}", flush=True)
+              if b[:15].lstrip().startswith(b"<"):
+                  links = sorted(set(re.findall(rb'href="([^"]+\.pdf)"', b, re.I)))
+                  for l in links[:40]:
+                      l = urllib.parse.urljoin(u, l.decode(errors="replace"))
+                      print("   pdf:", l[:200])
+                      if want.search(l):
+                          s2, b2, t2, _ = get(l)
+                          name = re.sub(r"[^A-Za-z0-9._-]", "_", l.rsplit("/", 1)[-1])[-80:]
+                          print(f"      fetched {s2} {len(b2)} {t2}s", flush=True)
+                          if b2[:4] == b"%PDF":
+                              os.makedirs("data/static_gk/net/pdf", exist_ok=True)
+                              open("data/static_gk/net/pdf/" + name, "wb").write(b2)
           PY
+          cd data && git add static_gk/net && git -c user.name=raam-07 -c user.email=282972983+raam-07@users.noreply.github.com commit -q -m "Static GK: official source reachability" && \
+          for i in 1 2 3 4 5; do git push -q origin HEAD:pilot/static-gk-v2-data && break; git fetch -q origin pilot/static-gk-v2-data && git rebase -q origin/pilot/static-gk-v2-data; sleep 5; done

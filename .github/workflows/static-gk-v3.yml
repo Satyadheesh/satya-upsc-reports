@@ -210,7 +210,7 @@ jobs:
         working-directory: code
         run: |
           C() { python3 -c "import json,os;print(json.loads(os.environ['CFG']).get('$1','$2'))"; }
-          python -m static_gk.checks --shard ${{ matrix.shard }} --of "$(C shards 1)" --out ../out --deadline-min "$(C checks_min 230)"
+          python -m static_gk.checks --shard ${{ matrix.shard }} --of "$(C shards 1)" --out ../out --deadline-min "$(C checks_min 230)" $(C checks_args '')
       - name: Save privately
         if: always()
         working-directory: data

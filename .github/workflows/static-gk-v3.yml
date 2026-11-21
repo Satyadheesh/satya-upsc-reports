@@ -269,9 +269,10 @@ jobs:
     needs: [plan, library]
     if: ${{ always() && fromJson(needs.plan.outputs.cfg).link && (needs.library.result == 'success' || needs.library.result == 'skipped') }}
     runs-on: ubuntu-latest
-    timeout-minutes: 150
+    timeout-minutes: 180
     strategy:
       fail-fast: false
+      max-parallel: 20
       matrix:
         ids: ${{ fromJson(needs.plan.outputs.ids) }}
     env:
@@ -295,7 +296,10 @@ jobs:
           pip install -q --only-binary=llama-cpp-python 'llama-cpp-python>=0.3.35,<0.3.37' huggingface-hub pypdf libsql-client --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu
       - name: Concept panels for the test notes (read-only; counts only)
         working-directory: code
-        run: python -m static_gk.link --db ../data/static_gk/library3/static_gk.sqlite --ids "${{ matrix.ids }}" --out ../out/link.jsonl --mode strict
+        run: |
+          OD=$(python3 -c "import json,os;print(json.loads(os.environ['CFG']).get('ondemand',''))")
+          python -m static_gk.link --db ../data/static_gk/library3/static_gk.sqlite --ids "${{ matrix.ids }}" --out ../out/link.jsonl --mode strict \
+            ${OD:+--ondemand "$OD" --checks-out ../out/checks.jsonl}
       - name: Save privately
         if: always()
         working-directory: data
@@ -305,6 +309,7 @@ jobs:
             git fetch -q origin "$DATA_REF" && git reset -q --hard "origin/$DATA_REF"
             mkdir -p "static_gk/preview/$RUN"
             [ -s ../out/link.jsonl ] && cp ../out/link.jsonl "static_gk/preview/$RUN/link-${{ strategy.job-index }}-${{ github.run_id }}.jsonl" || true
+            mkdir -p "static_gk/checks/$RUN" && [ -s ../out/checks.jsonl ] && cp ../out/checks.jsonl "static_gk/checks/$RUN/checks-link${{ strategy.job-index }}-${{ github.run_id }}.jsonl" || true
             git add static_gk
             git -c user.name=raam-07 -c user.email=282972983+raam-07@users.noreply.github.com commit -q -m "Static GK v3: panels" || exit 0
             git push -q origin "HEAD:$DATA_REF" && exit 0

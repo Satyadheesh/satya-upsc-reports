@@ -1,0 +1,123 @@
+name: Static GK daily panels
+run-name: "Static GK daily panels"
+# 22 Nov 2026: background panels for fresh Polity/Governance notes, built with the same strict checks as the
+# private previews (link.py, Gemma on these runners only). Rows land in static_panels as 'review'; the site shows a
+# panel only after its row is switched to 'live'.
+on:
+  schedule:
+    - cron: '23 1,7,13,19 * * *'
+  workflow_dispatch:
+    inputs:
+      days: {description: 'look back (days)', default: '2'}
+      limit: {description: 'max notes', default: '60'}
+permissions:
+  contents: read
+concurrency:
+  group: static-gk-daily
+  cancel-in-progress: false
+env:
+  CORE: Satyadheesh/satya-upsc-reports-core
+  CODE_REF: static-gk-live
+  DATA_REF: pilot/static-gk-v2-data
+  PANEL_VERSION: v9
+  SATYA_DB_URL: ${{ secrets.SATYA_DB_URL }}
+  SATYA_DB_TOKEN: ${{ secrets.SATYA_DB_TOKEN }}
+  SATYA_UPSC_DB_URL: ${{ secrets.NEW_UPSC_DB_URL }}
+  SATYA_UPSC_DB_TOKEN: ${{ secrets.NEW_UPSC_DB_TOKEN }}
+  KIT_MODEL_REPO: unsloth/gemma-4-12b-it-GGUF
+  KIT_MODEL_FILE: gemma-4-12b-it-Q4_K_M.gguf
+  GK_MODEL_PATH: models/gemma-4-12b-it-Q4_K_M.gguf
+  HF_HUB_DISABLE_TELEMETRY: '1'
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      ids: ${{ steps.p.outputs.ids }}
+      n: ${{ steps.p.outputs.n }}
+    env:
+      PYTHONPATH: ${{ github.workspace }}/code/.ci:${{ github.workspace }}/code
+    steps:
+      - uses: actions/checkout@v4
+        with: {repository: '${{ env.CORE }}', ref: '${{ env.CODE_REF }}', token: '${{ secrets.CORE_TOKEN }}', path: code, persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.10'}
+      - run: pip install -q libsql-client
+      - id: p
+        working-directory: code
+        run: python -m static_gk.daily plan --version "$PANEL_VERSION" --days "${{ inputs.days || '2' }}" --limit "${{ inputs.limit || '60' }}" --shards 8 --out "$GITHUB_OUTPUT"
+
+  link:
+    needs: plan
+    if: ${{ needs.plan.outputs.n != '0' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      max-parallel: 8
+      matrix:
+        ids: ${{ fromJson(needs.plan.outputs.ids) }}
+    env:
+      PYTHONPATH: ${{ github.workspace }}/code/.ci:${{ github.workspace }}/code
+      GK_DATA_DIR: ${{ github.workspace }}/data
+    steps:
+      - uses: actions/checkout@v4
+        with: {repository: '${{ env.CORE }}', ref: '${{ env.CODE_REF }}', token: '${{ secrets.CORE_TOKEN }}', path: code, persist-credentials: false}
+      - uses: actions/checkout@v4
+        with: {repository: '${{ env.CORE }}', ref: '${{ env.DATA_REF }}', token: '${{ secrets.CORE_TOKEN }}', path: data}
+      - name: Free disk for model weights
+        run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.10'}
+      - uses: actions/cache/restore@v4
+        with: {path: code/models, key: 'gguf-${{ env.KIT_MODEL_FILE }}'}
+      - name: Install
+        run: |
+          command -v pdftotext || (sudo apt-get update -q && sudo apt-get install -y -q poppler-utils)
+          pip install -q --only-binary=llama-cpp-python 'llama-cpp-python>=0.3.35,<0.3.37' huggingface-hub pypdf libsql-client --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu
+      - name: Panels (read-only on the notes)
+        working-directory: code
+        run: |
+          python -m static_gk.link --db ../data/static_gk/library3/static_gk.sqlite --ids "${{ matrix.ids }}" --out ../out/link.jsonl --mode strict \
+            --ondemand "../data/static_gk/checks/*/checks-*.jsonl" --checks-out ../out/checks.jsonl
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: {name: 'link-${{ strategy.job-index }}', path: out/link.jsonl, if-no-files-found: ignore, retention-days: 7}
+      - name: Keep the new checks and panels privately
+        if: always()
+        working-directory: data
+        run: |
+          D=$(date -u +%Y-%m-%d)
+          for i in 1 2 3 4 5 6 7 8; do
+            git fetch -q origin "$DATA_REF" && git reset -q --hard "origin/$DATA_REF"
+            mkdir -p "static_gk/daily/$D" static_gk/checks/daily
+            [ -s ../out/link.jsonl ] && cp ../out/link.jsonl "static_gk/daily/$D/link-${{ strategy.job-index }}-${{ github.run_id }}.jsonl" || true
+            [ -s ../out/checks.jsonl ] && cp ../out/checks.jsonl "static_gk/checks/daily/checks-${{ strategy.job-index }}-${{ github.run_id }}.jsonl" || true
+            git add static_gk
+            git -c user.name=raam-07 -c user.email=282972983+raam-07@users.noreply.github.com commit -q -m "Static GK daily panels" || exit 0
+            git push -q origin "HEAD:$DATA_REF" && exit 0
+            sleep $((i * 7))
+          done
+          exit 1
+
+  publish:
+    needs: [plan, link]
+    if: ${{ always() && needs.plan.outputs.n != '0' && needs.plan.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PYTHONPATH: ${{ github.workspace }}/code/.ci:${{ github.workspace }}/code
+    steps:
+      - uses: actions/checkout@v4
+        with: {repository: '${{ env.CORE }}', ref: '${{ env.CODE_REF }}', token: '${{ secrets.CORE_TOKEN }}', path: code, persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.10'}
+      - run: pip install -q libsql-client
+      - uses: actions/download-artifact@v4
+        with: {path: in, pattern: 'link-*'}
+      - name: Save as 'review' rows (not shown on the site)
+        working-directory: code
+        run: |
+          python -m static_gk.daily publish --glob "../in/*/link.jsonl" --version "$PANEL_VERSION"
+          python -m static_gk.daily status

@@ -246,9 +246,11 @@ jobs:
       - name: Build the v3 library (rule v3)
         working-directory: code
         run: |
-          mkdir -p ../data/static_gk/library3
-          python -m static_gk.load --facts '../data/static_gk/runs/*/facts-*.jsonl' --out ../data/static_gk/library3/static_gk.sqlite
-          python -m static_gk.concepts build --db ../data/static_gk/library3/static_gk.sqlite --checks '../data/static_gk/checks/*/checks-*.jsonl'
+          # built outside the data checkout: the save step resets that checkout to the remote before adding (until
+          # 21 Nov this wiped the new library, so every library job since 21 Nov 01:05 UTC saved nothing)
+          mkdir -p ../out
+          python -m static_gk.load --facts '../data/static_gk/runs/*/facts-*.jsonl' --out ../out/static_gk.sqlite
+          python -m static_gk.concepts build --db ../out/static_gk.sqlite --checks '../data/static_gk/checks/*/checks-*.jsonl'
       - name: Save privately
         if: always()
         working-directory: data
@@ -257,7 +259,7 @@ jobs:
           for i in 1 2 3 4 5 6 7 8; do
             git fetch -q origin "$DATA_REF" && git reset -q --hard "origin/$DATA_REF"
             mkdir -p "static_gk/library3"
-
+            cp ../out/static_gk.sqlite static_gk/library3/static_gk.sqlite
             git add static_gk
             git -c user.name=raam-07 -c user.email=282972983+raam-07@users.noreply.github.com commit -q -m "Static GK v3: library" || exit 0
             git push -q origin "HEAD:$DATA_REF" && exit 0

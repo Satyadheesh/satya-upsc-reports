@@ -32,7 +32,7 @@ jobs:
         with: {repository: '${{ env.CORE }}', ref: 'static-gk-subjects', token: '${{ secrets.CORE_TOKEN }}', path: code, persist-credentials: false}
       - uses: actions/checkout@v4
         with: {repository: '${{ env.CORE }}', ref: 'static-gk-books', token: '${{ secrets.CORE_TOKEN }}', path: books, persist-credentials: false, sparse-checkout: '${{ inputs.dir }}'}
-      - run: sudo apt-get update -q && sudo apt-get install -y -q tesseract-ocr poppler-utils
+      - run: sudo apt-get update -q && sudo apt-get install -y -q tesseract-ocr poppler-utils && pip3 install -q pillow numpy
       - name: OCR
         working-directory: code
         run: |

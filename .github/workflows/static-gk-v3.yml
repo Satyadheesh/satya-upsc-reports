@@ -52,7 +52,7 @@ jobs:
       GK_DATA_DIR: ${{ github.workspace }}/data
     steps:
       - uses: actions/checkout@v4
-        with: {repository: '${{ env.CORE }}', ref: '${{ env.CODE_REF }}', token: '${{ secrets.CORE_TOKEN }}', path: code, persist-credentials: false}
+        with: {repository: '${{ env.CORE }}', ref: '${{ fromJson(needs.plan.outputs.cfg).code_ref || env.CODE_REF }}', token: '${{ secrets.CORE_TOKEN }}', path: code, persist-credentials: false}
       - uses: actions/checkout@v4
         with: {repository: '${{ env.CORE }}', ref: '${{ env.DATA_REF }}', token: '${{ secrets.CORE_TOKEN }}', path: data}
       - uses: actions/setup-python@v5
@@ -92,7 +92,7 @@ jobs:
       GK_DATA_DIR: ${{ github.workspace }}/data
     steps:
       - uses: actions/checkout@v4
-        with: {repository: '${{ env.CORE }}', ref: '${{ env.CODE_REF }}', token: '${{ secrets.CORE_TOKEN }}', path: code, persist-credentials: false}
+        with: {repository: '${{ env.CORE }}', ref: '${{ fromJson(needs.plan.outputs.cfg).code_ref || env.CODE_REF }}', token: '${{ secrets.CORE_TOKEN }}', path: code, persist-credentials: false}
       - uses: actions/checkout@v4
         with: {repository: '${{ env.CORE }}', ref: '${{ env.DATA_REF }}', token: '${{ secrets.CORE_TOKEN }}', path: data}
       - name: Free disk for model weights
@@ -144,7 +144,7 @@ jobs:
       GK_DATA_DIR: ${{ github.workspace }}/data
     steps:
       - uses: actions/checkout@v4
-        with: {repository: '${{ env.CORE }}', ref: '${{ env.CODE_REF }}', token: '${{ secrets.CORE_TOKEN }}', path: code, persist-credentials: false}
+        with: {repository: '${{ env.CORE }}', ref: '${{ fromJson(needs.plan.outputs.cfg).code_ref || env.CODE_REF }}', token: '${{ secrets.CORE_TOKEN }}', path: code, persist-credentials: false}
       - uses: actions/checkout@v4
         with: {repository: '${{ env.CORE }}', ref: '${{ env.DATA_REF }}', token: '${{ secrets.CORE_TOKEN }}', path: data}
       - name: Free disk for model weights
@@ -193,7 +193,7 @@ jobs:
       GK_DATA_DIR: ${{ github.workspace }}/data
     steps:
       - uses: actions/checkout@v4
-        with: {repository: '${{ env.CORE }}', ref: '${{ env.CODE_REF }}', token: '${{ secrets.CORE_TOKEN }}', path: code, persist-credentials: false}
+        with: {repository: '${{ env.CORE }}', ref: '${{ fromJson(needs.plan.outputs.cfg).code_ref || env.CODE_REF }}', token: '${{ secrets.CORE_TOKEN }}', path: code, persist-credentials: false}
       - uses: actions/checkout@v4
         with: {repository: '${{ env.CORE }}', ref: '${{ env.DATA_REF }}', token: '${{ secrets.CORE_TOKEN }}', path: data}
       - name: Free disk for model weights
@@ -237,7 +237,7 @@ jobs:
       GK_DATA_DIR: ${{ github.workspace }}/data
     steps:
       - uses: actions/checkout@v4
-        with: {repository: '${{ env.CORE }}', ref: '${{ env.CODE_REF }}', token: '${{ secrets.CORE_TOKEN }}', path: code, persist-credentials: false}
+        with: {repository: '${{ env.CORE }}', ref: '${{ fromJson(needs.plan.outputs.cfg).code_ref || env.CODE_REF }}', token: '${{ secrets.CORE_TOKEN }}', path: code, persist-credentials: false}
       - uses: actions/checkout@v4
         with: {repository: '${{ env.CORE }}', ref: '${{ env.DATA_REF }}', token: '${{ secrets.CORE_TOKEN }}', path: data}
       - uses: actions/setup-python@v5
@@ -282,7 +282,7 @@ jobs:
       GK_DATA_DIR: ${{ github.workspace }}/data
     steps:
       - uses: actions/checkout@v4
-        with: {repository: '${{ env.CORE }}', ref: '${{ env.CODE_REF }}', token: '${{ secrets.CORE_TOKEN }}', path: code, persist-credentials: false}
+        with: {repository: '${{ env.CORE }}', ref: '${{ fromJson(needs.plan.outputs.cfg).code_ref || env.CODE_REF }}', token: '${{ secrets.CORE_TOKEN }}', path: code, persist-credentials: false}
       - uses: actions/checkout@v4
         with: {repository: '${{ env.CORE }}', ref: '${{ env.DATA_REF }}', token: '${{ secrets.CORE_TOKEN }}', path: data}
       - name: Free disk for model weights
@@ -332,7 +332,7 @@ jobs:
       GK_CTX: '6144'
     steps:
       - uses: actions/checkout@v4
-        with: {repository: '${{ env.CORE }}', ref: '${{ env.CODE_REF }}', token: '${{ secrets.CORE_TOKEN }}', path: code, persist-credentials: false}
+        with: {repository: '${{ env.CORE }}', ref: '${{ fromJson(needs.plan.outputs.cfg).code_ref || env.CODE_REF }}', token: '${{ secrets.CORE_TOKEN }}', path: code, persist-credentials: false}
       - uses: actions/checkout@v4
         with: {repository: '${{ env.CORE }}', ref: '${{ env.DATA_REF }}', token: '${{ secrets.CORE_TOKEN }}', path: data}
       - name: Free disk for model weights
@@ -383,7 +383,7 @@ jobs:
       GK_DATA_DIR: ${{ github.workspace }}/data
     steps:
       - uses: actions/checkout@v4
-        with: {repository: '${{ env.CORE }}', ref: '${{ env.CODE_REF }}', token: '${{ secrets.CORE_TOKEN }}', path: code, persist-credentials: false}
+        with: {repository: '${{ env.CORE }}', ref: '${{ fromJson(needs.plan.outputs.cfg).code_ref || env.CODE_REF }}', token: '${{ secrets.CORE_TOKEN }}', path: code, persist-credentials: false}
       - uses: actions/checkout@v4
         with: {repository: '${{ env.CORE }}', ref: '${{ env.DATA_REF }}', token: '${{ secrets.CORE_TOKEN }}', path: data}
       - name: Free disk for model weights

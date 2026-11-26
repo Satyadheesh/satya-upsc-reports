@@ -1,0 +1,63 @@
+name: Static GK book OCR
+# 27 Nov 2026: OCR of scanned books (core branch static-gk-books) into page text for the panels (private data branch).
+on:
+  workflow_dispatch:
+    inputs:
+      book: {description: 'book id', default: 'shankar10'}
+      dir: {description: 'folder in static-gk-books', default: 'shankar'}
+permissions:
+  contents: read
+env:
+  CORE: Satyadheesh/satya-upsc-reports-core
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      parts: ${{ steps.p.outputs.parts }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {repository: '${{ env.CORE }}', ref: 'static-gk-books', token: '${{ secrets.CORE_TOKEN }}', path: books, persist-credentials: false, sparse-checkout: '${{ inputs.dir }}'}
+      - id: p
+        run: echo "parts=$(cd books/${{ inputs.dir }} && ls *.pdf | python3 -c 'import sys,json;print(json.dumps([l.strip() for l in sys.stdin if l.strip()]))')" >> "$GITHUB_OUTPUT"
+  ocr:
+    needs: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        part: ${{ fromJson(needs.plan.outputs.parts) }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {repository: '${{ env.CORE }}', ref: 'static-gk-subjects', token: '${{ secrets.CORE_TOKEN }}', path: code, persist-credentials: false}
+      - uses: actions/checkout@v4
+        with: {repository: '${{ env.CORE }}', ref: 'static-gk-books', token: '${{ secrets.CORE_TOKEN }}', path: books, persist-credentials: false, sparse-checkout: '${{ inputs.dir }}'}
+      - run: sudo apt-get update -q && sudo apt-get install -y -q tesseract-ocr poppler-utils
+      - name: OCR
+        working-directory: code
+        run: |
+          P="${{ matrix.part }}"; FIRST=$(echo "$P" | sed -E 's/^part-([0-9]+)-.*/\1/')
+          python3 -m static_gk.ocr --pdf "../books/${{ inputs.dir }}/$P" --first-page "$FIRST" --book "${{ inputs.book }}" --out "../out/ocr-$P.jsonl"
+      - uses: actions/upload-artifact@v4
+        with: {name: 'ocr-${{ matrix.part }}', path: out/*.jsonl, retention-days: 7}
+  save:
+    needs: ocr
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: {repository: '${{ env.CORE }}', ref: 'pilot/static-gk-v2-data', token: '${{ secrets.CORE_TOKEN }}', path: data}
+      - uses: actions/download-artifact@v4
+        with: {path: in, pattern: 'ocr-*'}
+      - name: Save the page text privately
+        working-directory: data
+        run: |
+          for i in 1 2 3 4 5 6 7 8; do
+            git fetch -q origin pilot/static-gk-v2-data && git reset -q --hard origin/pilot/static-gk-v2-data
+            mkdir -p static_gk/books/gs
+            cat ../in/*/*.jsonl | python3 -c "import sys,json,gzip;rs=sorted((json.loads(l) for l in sys.stdin if l.strip()),key=lambda r:r['page']);json.dump(rs,gzip.open('static_gk/books/gs/${{ inputs.book }}_ocr.json.gz','wt'),ensure_ascii=False);print(len(rs),'pages',round(sum(r['q'] for r in rs)/max(1,len(rs)),3),'mean quality')"
+            git add static_gk/books/gs
+            git -c user.name=raam-07 -c user.email=282972983+raam-07@users.noreply.github.com commit -q -m "Static GK: OCR page text ${{ inputs.book }}" || exit 0
+            git push -q origin HEAD:pilot/static-gk-v2-data && exit 0
+            sleep $((i * 7))
+          done
+          exit 1
